@@ -41,6 +41,21 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 ## State (2026-08-26)
 
+**2026-09-02 — A COMPONENT DEATH IS NOW A SEAM, NOT A DEAD TAKE (H1).** Until today, if the thing
+UNDER a live input fell over mid-take — the encoder reporting failure, the worker that owns it
+dying, the fallback recorder erroring — that input was over: one toast saying "saved up to this
+point only", and a file that quietly stopped while the take went on believing it was recording it.
+The device was never the problem: a dead encoder does not switch the camera off. So the take now
+closes that segment and opens the next one on the same live device, and carries on. Measured on the
+deployed build with the failure induced on purpose: the hole is 20-96 ms on a screen, 74-111 ms on a
+mic, everything else records straight through, and the take says so while it is still running, again
+in the editor, and in its own report card — which refuses to grade a take with a hole in it green.
+It is bounded on purpose: four restarts per input, and past that the input is given up and named the
+way a dead device is named, so a permanently broken encoder costs a handful of files instead of an
+hour of rubble. Two older faults fell out of building it: a paused take's loudness measurement was
+being degraded by the pause itself, and the report card had been convicting the first half of any
+multi-part input of "ending early" on every paused and every stepped take.
+
 **2026-09-01 — EVERY TAKE NOW GRADES ITSELF (S1).** "Perfect record, unlimited length" was an
 argument; it is a verdict now. At stop, every take reads its own black box across ten dimensions
 and writes one line: GREEN (everything measured and in band), RED (one thing failed, and the line

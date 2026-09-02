@@ -197,6 +197,38 @@ describe('MixLoudnessAccumulator', () => {
     expect(got.windowRms.length).toBe(frames / WINDOW)
   })
 
+  /**
+   * H1 — A CONTAINED AUDIO SEGMENT IS FINISHED, NOT SLOW.
+   *
+   * Without `retire`, the closed segment stays a registered contributor at its
+   * last sample and the fold cannot advance past it: the ring fills with the
+   * successor's audio, overflows, and the whole take's loudness is marked
+   * degraded by a channel that did exactly what it was told.
+   */
+  it('a retired segment stops holding the fold and keeps its contribution', () => {
+    const frames = RATE * 6
+    const a = makeSignal(frames, 1)
+    const acc = new MixLoudnessAccumulator({ sampleRate: RATE, capacitySec: 1 })
+    acc.register('seg1')
+    // Segment 1 delivers half a second, then its encoder dies and it is closed.
+    feed(acc, 'seg1', a.subarray(0, RATE / 2), a.subarray(0, RATE / 2), 1024)
+    acc.retire('seg1')
+    // Segment 2 opens on the same device and runs the rest of the take.
+    feed(acc, 'seg2', a.subarray(RATE / 2), a.subarray(RATE / 2), 1024, RATE / 2)
+    const got = acc.finish()
+    expect(got.degraded).toBe(false)
+    // Both segments are still named as contributors — the sum covers both.
+    expect(got.channelIds.sort()).toEqual(['seg1', 'seg2'])
+    expect(got.frames).toBe(frames)
+    expect(got.peak).toBeCloseTo(reference(a, a).peak, 6)
+  })
+
+  it('retiring an unknown id is a no-op', () => {
+    const acc = new MixLoudnessAccumulator({ sampleRate: RATE })
+    acc.retire('never-existed')
+    expect(acc.channelIds).toEqual([])
+  })
+
   it('reports zeros for a take that never delivered PCM', () => {
     const acc = new MixLoudnessAccumulator({ sampleRate: RATE })
     acc.register('a')

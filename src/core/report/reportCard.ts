@@ -248,7 +248,23 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   {
     const missing = recording.missing ?? []
     const shortfall = Math.max(SHORT_CHANNEL_MS, take * SHORT_CHANNEL_RATIO)
-    const shortAll = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
+    /**
+     * H1 — SHORTFALL IS A QUESTION ABOUT A KIND, NOT ABOUT A FILE.
+     *
+     * A kind has been allowed to be several non-overlapping segments since
+     * 08-23 (pause/resume, O16's resolution step, and now a contained encoder
+     * death), and this line used to grade every one of them separately: the
+     * first segment of a screen that ran the whole take ended "23 s before the
+     * take did" and the card said so, about a channel with no gap in it. Judge
+     * the kind by its LAST segment, which is the one that answers "did this
+     * input last".
+     */
+    const lastEndByKind = new Map<ChannelKind, ChannelRecording>()
+    for (const c of recording.channels) {
+      const prev = lastEndByKind.get(c.kind)
+      if (!prev || channelEnd(c) > channelEnd(prev)) lastEndByKind.set(c.kind, c)
+    }
+    const shortAll = [...lastEndByKind.values()].filter((c) => take - channelEnd(c) > shortfall)
     /**
      * H4 — THE LOSS LEDGER CONVICTS HERE.
      *
@@ -268,7 +284,23 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     // fact, and the second one is the one that says WHY.
     const missingOnly = missing.filter((k) => !lost.some((l) => l.kind === k))
     const short = shortAll.filter((c) => !lost.some((l) => l.kind === c.kind))
-    const kinds = [...missingOnly, ...short.map((c) => c.kind), ...lost.map((l) => l.kind)]
+    /**
+     * H1 — A CONTAINED COMPONENT DEATH IS NOT A CLEAN TAKE.
+     *
+     * The kind ran the whole length and every consumer composes its segments
+     * as one lane, so nothing else on this card can see the hole. It is tens of
+     * milliseconds and the alternative was losing the rest of the channel — but
+     * it IS missing material, and a report card that grades it green is the
+     * same failure H4 found: ten of ten dimensions on a take that recorded
+     * nothing from its camera.
+     */
+    const seams = recording.seams ?? []
+    const kinds = [
+      ...missingOnly,
+      ...short.map((c) => c.kind),
+      ...lost.map((l) => l.kind),
+      ...seams.map((sm) => sm.kind).filter((k) => !lost.some((l) => l.kind === k)),
+    ]
     if (kinds.length) {
       dims.push({
         id: 'channels',
@@ -285,6 +317,11 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
             l.reason === 'never-delivered'
               ? `${LABEL[l.kind]} stayed connected for the whole take and delivered no frames`
               : `${LABEL[l.kind]} died at ${dur(l.atMs)} and the take ran ${dur(l.lostMs)} without it`,
+          ),
+          ...seams.map(
+            (sm) =>
+              `${LABEL[sm.kind]} survived a ${sm.cause} at ${dur(sm.atMs)} — ` +
+              `${sm.gapMs} ms missing there, the rest of the take recorded`,
           ),
         ]),
       })

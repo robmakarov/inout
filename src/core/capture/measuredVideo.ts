@@ -111,8 +111,19 @@ export async function startMeasuredVideoCapture(opts: {
    * Fired ONCE if capture dies mid-take. Without it the take keeps "recording"
    * while every later frame is lost — the file just stops partway with no
    * signal, which is the failure mode channel-error exists for.
+   *
+   * H1 — THE CAUSE IS PART OF THE REPORT, because the two are not the same
+   * failure and the caller acts on the difference. 'encoder-error' arrives as a
+   * posted `{event:'fatal'}` from a worker that is still alive and has already
+   * flushed what it had; 'worker-death' arrives as `worker.onerror` from one
+   * that can never report anything again. Both are contained the same way; the
+   * seam ledger records which it was.
    */
-  onFatal?: (err: Error) => void
+  onFatal?: (err: Error, cause: 'encoder-error' | 'worker-death') => void
+  /** H1 harness (`?killenc=`), passed straight through to the worker. */
+  killEncoderInMs?: number
+  /** H1 harness (`?killworker=`), passed straight through to the worker. */
+  killWorkerInMs?: number
 }): Promise<MeasuredVideoHandle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('measured video: MediaStreamTrackProcessor unavailable')
@@ -136,7 +147,7 @@ export async function startMeasuredVideoCapture(opts: {
     if ('event' in reply) {
       if (!fatalReported) {
         fatalReported = true
-        opts.onFatal?.(new Error(reply.error))
+        opts.onFatal?.(new Error(reply.error), 'encoder-error')
       }
       return
     }
@@ -147,7 +158,7 @@ export async function startMeasuredVideoCapture(opts: {
   worker.onerror = (ev) => {
     if (!fatalReported) {
       fatalReported = true
-      opts.onFatal?.(new Error(ev.message || 'raw video worker error'))
+      opts.onFatal?.(new Error(ev.message || 'raw video worker error'), 'worker-death')
     }
   }
 
@@ -164,6 +175,8 @@ export async function startMeasuredVideoCapture(opts: {
     height: opts.height,
     fps: opts.fps,
     videoBitrate: opts.videoBitrate,
+    killEncoderInMs: opts.killEncoderInMs,
+    killWorkerInMs: opts.killWorkerInMs,
   })
   const startReply = await withDeadline(started, START_TIMEOUT_MS, 'raw video start').catch(
     (err: Error) => {

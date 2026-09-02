@@ -59,6 +59,8 @@ export class MixLoudnessAccumulator {
   /** Absolute frame index of the oldest not-yet-folded frame. */
   private base = 0
   private readonly delivered = new Map<string, number>()
+  /** Closed segments: still contributors, no longer holders of the fold (H1). */
+  private readonly retired = new Set<string>()
   /** First session frame each channel delivered — sets the window grid origin. */
   private readonly firstFrame = new Map<string, number>()
   /**
@@ -96,6 +98,20 @@ export class MixLoudnessAccumulator {
   /** Declare a channel before it delivers: the fold waits for every registrant. */
   register(channelId: string): void {
     if (!this.delivered.has(channelId)) this.delivered.set(channelId, 0)
+  }
+
+  /**
+   * H1 — STOP WAITING FOR A CHANNEL THAT IS FINISHED.
+   *
+   * The fold advances only to the least-delivered registered channel, so a
+   * segment that has been CLOSED mid-take (a contained encoder death, and
+   * F6's pause before it) would hold the whole fold at its last sample until
+   * the ring overflowed and `degraded` was set — the take's loudness silently
+   * downgraded by a channel that did exactly what it was told. Its samples
+   * stay summed; only the waiting stops. Idempotent, and unknown ids are fine.
+   */
+  retire(channelId: string): void {
+    if (this.delivered.has(channelId)) this.retired.add(channelId)
   }
 
   get channelIds(): string[] {
@@ -147,7 +163,10 @@ export class MixLoudnessAccumulator {
     this.delivered.set(channelId, Math.max(this.delivered.get(channelId) ?? 0, startFrame + n))
     if (!this.gridReady) return
     let min = Infinity
-    for (const d of this.delivered.values()) if (d < min) min = d
+    for (const [id, d] of this.delivered) {
+      if (this.retired.has(id)) continue
+      if (d < min) min = d
+    }
     if (Number.isFinite(min)) this.foldTo(min)
   }
 

@@ -14,6 +14,8 @@ import {
   stepVerdict,
   type SegmentGeometry,
 } from './resolutionStep'
+import { containVerdict, exhaustedWhy, type ContainCause } from './segmentContain'
+import { faultDelayMs } from './faultInject'
 import {
   budgetVerdict,
   describePlan,
@@ -465,6 +467,20 @@ class Session implements CaptureSession {
   private readonly losses = new Map<ChannelKind, { atMs: number; reason: 'ended' | 'never-delivered' }>()
   /** H4 harness (`?die=`): cancels the scheduled synthetic track deaths. */
   private cancelDeaths: (() => void) | null = null
+  /**
+   * H1 — THE SEAM LEDGER. One entry per contained component death: the segment
+   * that died, the one that replaced it, and the hole between them. Stamped on
+   * the session clock here and rebased with the channels at stop, exactly as
+   * `losses` is, so `Recording.seams` reads on the same timeline as the files.
+   */
+  private readonly seams: { kind: ChannelKind; atMs: number; gapMs: number; cause: ContainCause }[] =
+    []
+  /** H1 — contains spent per kind, against segmentContain's MAX_PER_CHANNEL. */
+  private readonly containsTaken = new Map<ChannelKind, number>()
+  /** H1 — when each kind was last contained, against the cooldown. */
+  private readonly lastContainAtMs = new Map<ChannelKind, number>()
+  /** H1 — kinds mid-contain. One reopen at a time per kind, like resStepping. */
+  private readonly containing = new Set<ChannelKind>()
   /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
   private loudness: MixLoudnessAccumulator | null = null
   private stopPromise: Promise<Recording> | null = null
@@ -876,7 +892,12 @@ class Session implements CaptureSession {
       recorder.addEventListener('error', (ev) => {
         const message = (ev as unknown as { error?: DOMException }).error?.message ?? 'recorder error'
         console.error('[capture] recorder error on', rt.kind, message)
-        this.emit({ type: 'channel-error', kind: rt.kind, message })
+        // H1 — the fallback lane gets the same containment as the measured
+        // ones. Before this, a MediaRecorder that errored mid-take produced a
+        // toast and a channel that was over; the device it was reading is
+        // untouched by its own recorder failing.
+        if (this.stateInternal === 'recording') void this.containSegment(rt, 'recorder-error')
+        else this.emit({ type: 'channel-error', kind: rt.kind, message })
       })
     }
 
@@ -1645,13 +1666,21 @@ class Session implements CaptureSession {
         height,
         fps: fps > 0 ? fps : 30,
         videoBitrate: videoBitsFor(ch.kind, this.config.screen),
-        onFatal: (err) => {
+        // H1 harness: only ever a number when a URL flag named this kind, and
+        // only on the segment whose window the named instant falls inside.
+        killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
+        killWorkerInMs: faultDelayMs(ch.kind, 'killworker', performance.now() - this.epoch) ?? undefined,
+        /**
+         * H1 — THE SEGMENT IS CONTAINED, NOT MOURNED. This used to be one
+         * toast and a channel that quietly stopped writing while the take ran
+         * on for another forty minutes. The track is still live — nothing
+         * about a dead encoder killed the camera — so close this segment and
+         * open the next one on it.
+         */
+        onFatal: (err, cause) => {
           if (this.stateInternal !== 'recording') return
-          this.emit({
-            type: 'channel-error',
-            kind: ch.kind,
-            message: `${ch.kind} recording failed mid-take (${err.message}) — video saved up to this point only`,
-          })
+          console.error(`[capture] ${ch.kind} ${cause}: ${err.message}`)
+          void this.containSegment(ch, cause)
         },
       })
       ch.measured = handle
@@ -1700,13 +1729,13 @@ class Session implements CaptureSession {
         writer,
         label: ch.kind,
         audioCtx: ch.audioCtx ?? undefined,
+        // H1 harness. An audio channel has no worker, so only `?killenc=`.
+        killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
+        /** H1 — contained exactly as a video encoder death is (see there). */
         onFatal: (err) => {
           if (this.stateInternal !== 'recording') return
-          this.emit({
-            type: 'channel-error',
-            kind: ch.kind,
-            message: `${ch.kind} recording failed mid-take (${err.message}) — audio saved up to this point only`,
-          })
+          console.error(`[capture] ${ch.kind} encoder-error: ${err.message}`)
+          void this.containSegment(ch, 'encoder-error')
         },
         onPcm: (left, right, startFrame, startOffsetMs, sampleRate) => {
           // The accumulator is created by whichever channel delivers first;
@@ -2280,6 +2309,132 @@ class Session implements CaptureSession {
     }
   }
 
+  /**
+   * H1 — A COMPONENT DEATH IS A SEAM, NOT A DEAD TAKE.
+   *
+   * The encoder failed, or the worker died, or the recorder errored. Until this
+   * method the answer was one toast — "saved up to this point only" — and a
+   * channel that stopped writing while the take went on believing it was
+   * recording. The answer now is O16's move with a different trigger: close the
+   * segment, keep the DEVICE (which is still perfectly alive — nothing about a
+   * dead encoder killed the camera), open segment N+1 on the same track, and
+   * write down the hole.
+   *
+   * WHY THIS IS SAFE TO GENERALISE FROM O16, WHICH ONLY EVER STEPPED THE SCREEN:
+   * `core/types.ts` has said since 08-23 that a kind may appear as several
+   * non-overlapping segments, every consumer resolves by id and window, and
+   * `armChannel` is already kind-agnostic — it is the same call the progressive
+   * acquirer makes at arm time and the same one `resumeChannel` makes mid-take.
+   * The one thing that was NOT kind-agnostic is the loudness fold, which waits
+   * on every registered audio contributor and would have been held at a closed
+   * segment's last sample for the rest of the take; `retire` is that fix.
+   *
+   * THE DRAIN IS NOT OPTIONAL, and it is P0-tail-raw's reason again: an encoder
+   * still flushing when its successor opens loses whatever it had not caught up
+   * on. A dying encoder is exactly the one most likely to be behind, so the
+   * budget is waited out here even though the seam pays for it.
+   *
+   * WHAT IT REFUSES: `segmentContain.containVerdict`. A channel whose encoder
+   * dies on every open would otherwise spin, and an hour of that is a take made
+   * of rubble. Past the budget the channel is given up the way a dead device is
+   * given up — device released, H4's ledger stamped, the take running on with
+   * everything else — which is still containment, with the loser named.
+   */
+  private async containSegment(ch: ChannelRuntime, cause: ContainCause): Promise<void> {
+    const kind = ch.kind
+    if (this.stateInternal !== 'recording' || this.cancelled) return
+    // Already closed by a track end, a pause, a stop or an earlier contain of
+    // the same failure — two entry points can report one death (a worker that
+    // dies after posting a fatal reports through both), and the second must not
+    // spend a budget or open a third segment.
+    if (ch.ended) return
+    if (this.containing.has(kind)) return
+    // The user's own off-switch is never a failure (the same fence onTrackEnded
+    // keeps), and neither is a paused take.
+    if (this.suspended.has(kind)) return
+
+    const taken = this.containsTaken.get(kind) ?? 0
+    const verdict = containVerdict({
+      kind,
+      cause,
+      nowMs: performance.now(),
+      lastContainAtMs: this.lastContainAtMs.get(kind) ?? null,
+      containsTaken: taken,
+    })
+    if (!verdict) {
+      console.warn(`[capture] ${exhaustedWhy(kind, cause)}`)
+      this.emit({
+        type: 'channel-error',
+        kind,
+        message: `${kind} recording failed repeatedly (${cause}) — the take continues without it`,
+      })
+      // The same teardown a dead device gets: preview dropped, device released
+      // (the camera light going out is the honest signal that nothing is being
+      // recorded from it), H4's ledger stamped with the instant, auto-stop if
+      // this was the last channel standing.
+      this.stopChannelNow(kind)
+      return
+    }
+
+    this.containing.add(kind)
+    const t0 = performance.now()
+    try {
+      const { stream, track, media } = ch
+      this.closeSegment(ch)
+      // closeSegment hands the track to pausedTracks so a resume() can reopen
+      // it. There is no pause here and resume() must not find it.
+      this.pausedTracks.delete(kind)
+      // A closed AUDIO segment is a finished contributor, not a slow one: leave
+      // it registered and the fold stalls at its last sample for the whole take.
+      if (media === 'audio' && this.loudness) this.loudness.retire(ch.id)
+      await withTimeout(ch.stopped, STOP_BUDGET_MS, 'segment drain').catch((err) =>
+        console.warn('[capture] contain: the dead segment did not drain in budget', err),
+      )
+      if (this.stateInternal !== 'recording' || this.cancelled) return
+      if (track.readyState !== 'live') {
+        // The DEVICE went too. That is H4's story and it is already told: the
+        // track's own 'ended' listener stamps the ledger. Nothing to reopen.
+        console.warn(`[capture] contain: ${kind}'s track ended with its encoder — not reopening`)
+        return
+      }
+      const rt = await this.armChannel({ kind, media, stream, track })
+      if (this.stateInternal !== 'recording' || this.cancelled) {
+        this.discardRuntime(rt)
+        return
+      }
+      this.activateChannel(rt, performance.now())
+      // The measured lanes settle their true first-sample offset asynchronously;
+      // the seam is not measurable until they have.
+      await rt.measuredStarting?.catch(() => undefined)
+      this.containsTaken.set(kind, taken + 1)
+      this.lastContainAtMs.set(kind, performance.now())
+      const closedAt = (ch.startOffsetMs ?? 0) + (ch.durationMs ?? 0)
+      const openedAt = rt.startOffsetMs ?? performance.now() - this.epoch
+      const gapMs = Math.max(0, Math.round(openedAt - closedAt))
+      this.seams.push({ kind, atMs: Math.max(0, closedAt), gapMs, cause })
+      this.writeManifest()
+      this.emit({ type: 'channel-contained', kind, cause, gapMs })
+      console.warn(
+        `[capture] contained ${kind} ${cause}: segment ${taken + 1} closed at ` +
+          `+${Math.round(closedAt)}ms, segment ${taken + 2} open at +${Math.round(openedAt)}ms — ` +
+          `${gapMs}ms seam, reopened in ${(performance.now() - t0).toFixed(0)}ms. The take continues.`,
+      )
+    } catch (err) {
+      // The reopen itself failed. The old segment is already closed, so the
+      // channel is over — say it the way a dead device is said rather than
+      // leaving a kind that silently stopped halfway.
+      console.error('[capture] contain failed — the channel is over', kind, err)
+      this.emit({
+        type: 'channel-error',
+        kind,
+        message: `${kind} could not be restarted after ${cause} — saved up to this point only`,
+      })
+      if (this.stateInternal === 'recording') this.noteLoss(kind, 'ended')
+    } finally {
+      this.containing.delete(kind)
+    }
+  }
+
   private autoStop(): void {
     if (this.stopPromise || this.cancelled) return
     this.emit({ type: 'auto-stopped' })
@@ -2814,6 +2969,29 @@ class Session implements CaptureSession {
               .join(' · '),
         )
       }
+    }
+
+    /**
+     * H1 — THE SEAMS, ON THE TAKE'S OWN TIMELINE. Same shift as the losses
+     * above and for the same reason: these instants were stamped against the
+     * session epoch and the channels have just been rebased so the earliest
+     * one sits at t=0. A seam that names an instant the timeline does not have
+     * is worse than no seam at all.
+     */
+    if (this.seams.length) {
+      const shift = Number.isFinite(minOffset) ? minOffset : 0
+      recording.seams = this.seams.map((sm) => ({
+        kind: sm.kind,
+        atMs: Math.max(0, Math.round(sm.atMs - shift)),
+        gapMs: sm.gapMs,
+        cause: sm.cause,
+      }))
+      console.warn(
+        '[capture] H1 seams — ' +
+          recording.seams
+            .map((sm) => `${sm.kind} ${sm.cause} at ${sm.atMs}ms (${sm.gapMs}ms gap)`)
+            .join(' · '),
+      )
     }
 
     // Capture-time loudness (O2): only valid when the stats cover EXACTLY the

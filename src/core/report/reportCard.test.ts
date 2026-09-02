@@ -212,6 +212,64 @@ describe('the take report card', () => {
     expect(card.line).toContain('screen froze mid-take')
   })
 
+  /**
+   * H1 — A KIND MADE OF SEVERAL SEGMENTS.
+   *
+   * Allowed since 08-23 (pause/resume, O16's resolution step, a contained
+   * component death) and graded wrongly until H1: every segment was measured
+   * against the take's length on its own, so segment 1 of a screen that ran
+   * the whole take was convicted of ending early.
+   */
+  it('a channel in two abutting segments is NOT short — the kind lasted', () => {
+    const take = cleanTake()
+    take.channels = [
+      { ...take.channels[0], id: 'c_screen_1', startOffsetMs: 0, durationMs: 6_000 },
+      { ...take.channels[0], id: 'c_screen_2', startOffsetMs: 6_060, durationMs: 5_940 },
+      take.channels[1],
+    ]
+    const ch0 = buildReportCard(take, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'channels',
+    )!
+    expect(ch0.status).toBe('pass')
+  })
+
+  it('but the LAST segment ending early still convicts the kind', () => {
+    const take = cleanTake()
+    take.channels = [
+      { ...take.channels[0], id: 'c_screen_1', startOffsetMs: 0, durationMs: 3_000 },
+      { ...take.channels[0], id: 'c_screen_2', startOffsetMs: 3_060, durationMs: 900 },
+      take.channels[1],
+    ]
+    const ch0 = buildReportCard(take, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'channels',
+    )!
+    expect(ch0.status).toBe('fail')
+    expect(ch0.detail).toContain('screen ended 8.0s before the take did')
+  })
+
+  it('a contained component death is certified, not graded green (H1)', () => {
+    const take = cleanTake()
+    take.channels = [
+      { ...take.channels[0], id: 'c_screen_1', startOffsetMs: 0, durationMs: 6_000 },
+      { ...take.channels[0], id: 'c_screen_2', startOffsetMs: 6_062, durationMs: 5_938 },
+      take.channels[1],
+    ]
+    take.seams = [{ kind: 'screen', atMs: 6_000, gapMs: 62, cause: 'worker-death' }]
+    const card = buildReportCard(take, { wedgeJournal: [] })
+    const ch0 = card.dimensions.find((d) => d.id === 'channels')!
+    expect(ch0.status).toBe('fail')
+    expect(ch0.detail).toContain('screen survived a worker-death at 6.0s')
+    expect(ch0.detail).toContain('62 ms missing there')
+  })
+
+  it('a take with no seams says nothing about them', () => {
+    const ch0 = buildReportCard(cleanTake(), { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'channels',
+    )!
+    expect(ch0.status).toBe('pass')
+    expect(ch0.detail).not.toContain('survived')
+  })
+
   it('a take that degraded to keep up fails the rate, naming what it gave up', () => {
     const take = cleanTake()
     take.stopStats = { ...take.stopStats, degradedWhy: 'the rate ladder stepped: backpressure' }

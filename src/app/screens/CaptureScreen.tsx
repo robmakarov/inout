@@ -32,6 +32,7 @@ import {
   CHANNEL_KINDS,
   CHANNEL_META,
   CONFIG_KEY,
+  containedChannelMessage,
   deadChannelMessage,
   endedChannelMessage,
   isKindSupported,
@@ -212,6 +213,8 @@ export function CaptureScreen() {
   const [stalled, setStalled] = useState<ChannelKind[]>([])
   /** H4: connected, healthy by the browser's word, delivering nothing. */
   const [deadChannels, setDeadChannels] = useState<ChannelKind[]>([])
+  /** H1 — kinds whose encoder, worker or recorder died and was contained. */
+  const [contained, setContained] = useState<ChannelKind[]>([])
   /** H4: died mid-take (unplugged, Bluetooth dropped, "Stop sharing"). */
   const [endedMidTake, setEndedMidTake] = useState<ChannelKind[]>([])
   /**
@@ -253,6 +256,7 @@ export function CaptureScreen() {
     // the next one and report a camera that is now fine.
     setStalled([])
     setDeadChannels([])
+    setContained([])
     setEndedMidTake([])
   }, [session])
   /** Live gesture. The ref is the truth — a flick can move and release inside
@@ -434,6 +438,13 @@ export function CaptureScreen() {
         // instruction ("re-share your whole screen") cannot fix this one.
         case 'channel-dead':
           setDeadChannels((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
+          break
+        // H1: the component under a LIVE channel died and the channel was
+        // reopened on the same device. It stays said for the rest of the take —
+        // the seam does not un-happen, and the user was almost certainly
+        // looking at something else when it did.
+        case 'channel-contained':
+          setContained((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
           break
         case 'composite-geometry':
           // F13: what the compositor is ACTUALLY writing, which is the only
@@ -889,7 +900,11 @@ export function CaptureScreen() {
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
-      {recording && (stalled.length > 0 || deadChannels.length > 0 || endedMidTake.length > 0) && (
+      {recording &&
+        (stalled.length > 0 ||
+          deadChannels.length > 0 ||
+          endedMidTake.length > 0 ||
+          contained.length > 0) && (
         <div className="capture__stalled" role="alert">
           {stalled.length > 0 && (
             <div>
@@ -899,6 +914,7 @@ export function CaptureScreen() {
           )}
           {deadChannels.length > 0 && <div>{deadChannelMessage(deadChannels, caps)}</div>}
           {endedMidTake.length > 0 && <div>{endedChannelMessage(endedMidTake, caps)}</div>}
+          {contained.length > 0 && <div>{containedChannelMessage(contained, caps)}</div>}
         </div>
       )}
 

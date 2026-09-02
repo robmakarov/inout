@@ -325,14 +325,21 @@ async function verifyExport(s, budgetMs = 600_000) {
       // A file that exists is not a file that is finished — wait until it stops
       // growing, so the size reported is the export and not a snapshot of one.
       let last = -1
-      for (let i = 0; i < 300 && last !== f.bytes; i++) {
+      let settled = false
+      for (let i = 0; i < 300; i++) {
         last = f.bytes
         await sleep(2000)
         const again = await s.evalJson(sizeOfExpr(f.name))
         if (again?.bytes) f.bytes = again.bytes
+        if (last === f.bytes) {
+          settled = true
+          break
+        }
       }
       out.file = f
-      out.settled = last === f.bytes
+      // False means the export was still growing when the budget ran out, so
+      // the size below is a snapshot rather than the file. Say which.
+      out.settled = settled
       return out
     }
     await sleep(2000)

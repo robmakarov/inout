@@ -77,6 +77,19 @@ export interface RawVideoStartMsg {
   height: number
   fps: number
   videoBitrate: number
+  /**
+   * H1 HARNESS (`?killenc=`). Milliseconds from now until this encoder is made
+   * to report failure through the very callback a real one uses. Absent on
+   * every take nobody typed the flag into, which is every take.
+   */
+  killEncoderInMs?: number
+  /**
+   * H1 HARNESS (`?killworker=`). Milliseconds until this worker dies: it stops
+   * encoding and then throws where nothing can catch it, which is the one thing
+   * that reaches `worker.onerror` on the main thread. A DIFFERENT entry point
+   * from killEncoderInMs, and H1's two gates are exactly those two entry points.
+   */
+  killWorkerInMs?: number
 }
 
 export interface RawVideoFrameMsg {
@@ -415,6 +428,8 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
   })
   encoder.configure(config)
 
+  armInducedFaults(msg)
+
   keepAliveTimer = setInterval(() => {
     if (stopped || fatal || encoderPending || !lastFrame || firstFrameAtMs === null) return
     const nowMain = nowOnMainClock()
@@ -521,6 +536,37 @@ function adoptFrameSize(frame: VideoFrame): void {
       encoderPending = false
     }
   })()
+}
+
+/**
+ * H1 harness. Nothing here runs unless a URL flag put a number in the start
+ * message, and the session only ever puts one there for the kind that was
+ * named. Both timers are one-shot and neither is cleared on stop: a take that
+ * ends before its kill instant is a take whose worker is already terminated.
+ */
+function armInducedFaults(msg: RawVideoStartMsg): void {
+  if (msg.killEncoderInMs !== undefined && msg.killEncoderInMs > 0) {
+    setTimeout(() => {
+      if (stopped || fatal) return
+      // The exact path `new VideoEncoder({ error: fail })` takes, and the one a
+      // muxer write that throws lands on: `fail` posts {event:'fatal'} and every
+      // later frame is dropped at the top of onFrame.
+      fail(new Error('induced encoder error (?killenc)'))
+    }, msg.killEncoderInMs)
+  }
+  if (msg.killWorkerInMs !== undefined && msg.killWorkerInMs > 0) {
+    setTimeout(() => {
+      if (stopped) return
+      // Stop producing FIRST, so the file really does end here — a worker death
+      // that only reported itself would be testing the message and not the
+      // containment. `fatal` is set directly rather than through fail(), which
+      // would post {event:'fatal'} and make this the OTHER gate.
+      fatal = 'induced worker death (?killworker)'
+      // Uncaught, on the worker's own turn of the event loop: the only thing
+      // that fires `worker.onerror` on the main thread.
+      throw new Error('induced worker death (?killworker)')
+    }, msg.killWorkerInMs)
+  }
 }
 
 function onFrame(msg: RawVideoFrameMsg): void {

@@ -20,7 +20,12 @@ import { editsRepo, recordingsRepo } from '@core/store'
 import { useAppStore } from '@app/state/store'
 import { loadExportJobs } from '@app/lib/exportJobs'
 import { detectCapabilities } from '@core/capabilities'
-import { lostChannelsMessages, missingChannelsMessage, takeLosses } from '@app/lib/channels'
+import {
+  lostChannelsMessages,
+  missingChannelsMessage,
+  seamMessages,
+  takeLosses,
+} from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
@@ -325,6 +330,21 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         ? lostChannelsMessages(recording.lost, detectCapabilities()).map((l) => (
             <div key={`${l.kind}-lost`} className="editor__missing" role="alert">
               {l.message}
+            </div>
+          ))
+        : null}
+      {/* H1 — WHERE THIS TAKE SURVIVED A COMPONENT DEATH. Same class as the
+          loss lines above and not behind test mode for the same reason: the
+          ledger is written only when an encoder, a worker or a recorder
+          actually fell over mid-take, so it cannot fire on a healthy take. It
+          is also the only place the hole is visible at all — every consumer
+          composes a kind's segments into one continuous lane, which is the
+          behaviour that keeps the take usable and the behaviour that hides
+          what it cost. */}
+      {recording.seams?.length
+        ? seamMessages(recording.seams, detectCapabilities()).map((sm, i) => (
+            <div key={`${sm.kind}-seam-${i}`} className="editor__missing" role="alert">
+              {sm.message}
             </div>
           ))
         : null}

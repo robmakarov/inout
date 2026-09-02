@@ -64,6 +64,17 @@ phase: MVP validation (2026-07-16)
   even at zero, because a channel with no counter is indistinguishable from one nobody counted.
   rec_78ogcw052vdn grades RED naming tab audio and its six bursts; a clean take grades GREEN.
 
+- MEMORY IS FLAT AT HOUR SCALE, AND IT IS NOT THE TAKE-LENGTH CEILING — DISK IS (H3, 2026-09-01).
+  Two soaks of a max60 take, 60 and 90 minutes, both holding 60 fps end to end: RSS slope after
+  warm-up +0.03 and -0.73 MB/min, JS heap +0.04/+0.05, DOM nodes 395 constant, Chrome processes 8
+  constant, and the 90-minute take's own report card is GREEN on all ten dimensions. No leak, so
+  nothing was filed. What runs out instead is space: the take writes ~66 MB/min, about 8.8 hours
+  at 35 GB free, so B5's disk guard is what ends a long take and S1's storage dimension is what
+  watches it. READ THE SLOPE FROM THE HALF-MEANS, not from a regression line — RSS oscillates
+  ±90 MB while macOS reclaims, and the same hour that reads +0.03 MB/min overall reads
+  +3.45 MB/min over its second half alone. One command: `node scripts/memory-slope.mjs`
+  (HEAVY, 60 min, headed). Playbook: docs/MEMORY_SLOPE.md.
+
 - A CRASH COSTS 2.1 SECONDS, AND IT DOES NOT GROW WITH THE TAKE (H2, 2026-09-01). Five real
   `kill -9`s on Chrome's whole process group, one max60 take each on prod, the take verified still
   recording at the kill: the salvaged take ends 1.01 / 2.12 / 1.95 / 1.47 / 1.79 s behind the crash
@@ -73,7 +84,12 @@ phase: MVP validation (2026-07-16)
   keyframe on a 2 s GOP, audio is WebM on ~1 s clusters — and a take stopped PROPERLY still ends
   0.22-0.24 s behind its stop click, so only about a second and a half of that is the crash. The
   composite is deliberately not salvaged, so a crashed take is its raw channels, and S1's card reads
-  INCOMPLETE on one because seven of its ten dimensions died with the page. One command:
+  INCOMPLETE on one because seven of its ten dimensions died with the page. THE ONE PLACE "kill it
+  anywhere" IS NOT YET TRUE IS THE START: a crash at 2.8-4.2 s loses the WHOLE take (the pending
+  manifest lives in localStorage, which Chrome commits asynchronously), and at 5.4 s the take
+  salvages as audio only (no video fragment has closed yet). From 7.5 s on everything comes back.
+  Both floors have a cheap additive fix and both are BACKLOG P1, not shipped — they change what a
+  user sees after a crash. One command:
   `node scripts/crash-bound.mjs --control=300000 --killAt=60000,300000,720000,1200000,1860000`
   (HEAVY, ~80 min, headed). Playbook: docs/CRASH_BOUND.md. The production salvage path also has its
   first tests (`src/core/capture/recovery.test.ts`); until now the only coverage was the
@@ -805,6 +821,25 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   the same fallback a late join takes — and has no source-liveness tick while paused. NOT BUILT:
   retake (dropping the tail segment and re-recording), which is not a capture feature at all but a
   resume of a FINISHED recording, touching recovery, editsRepo and editor state.
+- A COMPONENT DEATH IS A SEAM, NOT A DEAD TAKE (H1, 2026-09-02, ON BY DEFAULT). An encoder that
+  reports failure, a worker that dies, or a MediaRecorder that errors mid-take no longer ends the
+  channel: `session.containSegment` closes the segment, drains it, and opens segment N+1 on the SAME
+  live track — F6's move with a different trigger, and the third task to reuse it after O16. Every
+  kind, audio included. What it replaced was ONE toast ("saved up to this point only") and a channel
+  that silently stopped writing while the take ran on. Measured on prod: video seams 20-96 ms (O16's
+  band is 69), audio 74-111 ms (F6's own pause seams are 99-218). `Recording.seams` carries kind ·
+  instant · gap · cause ('encoder-error' | 'worker-death' | 'recorder-error'), rebased at stop like
+  H4's `lost`, and it is said in the live band, in the editor and in the report card's `channels`.
+  BOUNDED: `capture/segmentContain.ts` — 1.5 s cooldown, 4 contains PER CHANNEL — and past the budget
+  the channel is given up through H4's ledger, so a permanently sick encoder costs a bounded number
+  of files rather than an hour of rubble. A healthy take is untouched: no seam, one segment per kind,
+  GREEN 10/10. `?killenc=<kind>:<ms>` and `?killworker=<kind>:<ms>` induce the two failures (the
+  second through an uncaught worker throw, the only thing that reaches `worker.onerror`);
+  `node scripts/contain-check.mjs` is the four-cell gate in one command.
+  TWO LIVE DEFECTS FIXED UNDERNEATH: the loudness fold stalled on any CLOSED audio segment and marked
+  the take degraded (F6's pause had it too — `MixLoudnessAccumulator.retire`), and the report card
+  measured SEGMENTS against the take's length, so segment 1 of a multi-segment kind was convicted of
+  ending early on every paused and every stepped take.
 - A RAW CHANNEL RECORDS THROUGH WEBCODECS BY DEFAULT (X6, built 2026-08-26; FLIPPED the same day on
   Robert's field ruling — "yes now it okay, with ?rawcodec=webcodecs i mean", after days of takes on the
   flag). The deciding numbers: the black-boxed take pair measured audio-clock starvation 1.6 % of

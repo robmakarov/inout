@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { takeLosses } from './channels'
+import { containedChannelMessage, seamMessages, takeLosses } from './channels'
 import { detectCapabilities } from '@core/capabilities'
 
 /**
@@ -83,5 +83,50 @@ describe('what a take says it lost', () => {
     expect(
       takeLosses([{ kind: 'screen', media: 'video', durationMs: 1000, diagnostics: { silentTailMs: 99_000 } }], caps),
     ).toEqual([])
+  })
+})
+
+/**
+ * H1 — THE TWO SENTENCES A CONTAINED COMPONENT DEATH GETS.
+ *
+ * Wording is Robert's on H4's precedent; what is pinned here is what the
+ * sentences must NOT say. Neither may tell the user the channel is over or
+ * hand them an instruction: the device is live, the take is recording, and the
+ * only true statement is that a fraction of a second is gone.
+ */
+describe('H1 — contained component death', () => {
+  it('says the channel restarted itself and is STILL recording', () => {
+    const m = containedChannelMessage(['camera'], caps)
+    expect(m).toContain('Camera')
+    expect(m).toContain('restarted itself')
+    expect(m).toContain('still recording')
+    // The dead-channel sentence's instruction would be wrong here.
+    expect(m).not.toContain('Check the lid')
+  })
+
+  it('folds several kinds into one line', () => {
+    expect(containedChannelMessage(['camera', 'mic'], caps)).toContain('were interrupted')
+  })
+
+  it('after the take, names the instant and the hole', () => {
+    const [line] = seamMessages(
+      [{ kind: 'screen', atMs: 66_000, gapMs: 62, cause: 'encoder-error' }],
+      caps,
+    )
+    expect(line.message).toContain('1:06')
+    expect(line.message).toContain('62 ms')
+    expect(line.message).toContain('the rest of the take is there')
+  })
+
+  it('one line per seam — a channel contained twice says so twice', () => {
+    expect(
+      seamMessages(
+        [
+          { kind: 'screen', atMs: 6_000, gapMs: 60, cause: 'encoder-error' },
+          { kind: 'screen', atMs: 40_000, gapMs: 71, cause: 'worker-death' },
+        ],
+        caps,
+      ),
+    ).toHaveLength(2)
   })
 })

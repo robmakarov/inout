@@ -384,19 +384,35 @@ it is built combine-ready:
           hidden tab clamps setInterval to 1 Hz, so `?synthetic=1`'s canvas source delivers
           ~2 fps and no rate test through it means anything. It needs a VISIBLE window:
           Robert watching one loaded sub-max take go down and come back, or a headed rig.
-  5b. NEXT ON THIS LANE: H1, all that is left of the unkillable-take pack (item 6 below — H2 and H4
-          are done, H3 is running overnight). E1 leaves READY;
+  5b. NEXT ON THIS LANE: F16b (item 7 below). THE UNKILLABLE-TAKE PACK IS CLOSED except H3's
+          overnight curve — H1 merged 2026-09-02, H2 and H4 done, H3 running. E1 leaves READY;
           M1 stays Robert-gated and now also carries E1's rawVideo.worker.ts lift.
-  6. H1 is what is LEFT of the unkillable-take pack [medium · spec below] a component death is a
-          seam, not a dead take. H2, H3 and H4 are off this line:
+  6. THE UNKILLABLE-TAKE PACK — all four in, H3 excepted:
+     H1   segment containment             DONE + MERGED 2026-09-02 (handoff under the task). A
+          component death is a seam: an encoder that failed, a worker that died or a recorder that
+          errored closes the segment and opens the next one on the SAME live device, and the hole is
+          certified in `Recording.seams`. Seams measured on prod: video 20-96 ms (inside O16's 69 ms
+          band), audio 74-111 ms (inside F6's 99-218). Nothing engages on a healthy take — GREEN
+          10/10, one segment per kind. `node scripts/contain-check.mjs` re-runs all four gate cells
+          in one command; `?killenc=` and `?killworker=` are the induced-death knobs.
+          FOR ANY LATER TASK: `segmentContain.ts` bounds the retries (1.5 s cooldown, 4 per CHANNEL)
+          and past the budget the channel is given up through H4's ledger, so containment can never
+          become an unbounded loop. Two live defects fixed on the way — the loudness fold stalling on
+          a closed audio segment (F6's pause had it too), and the report card grading SEGMENTS
+          instead of kinds (every paused and every stepped take was mis-graded).
+          STILL OWED: the WORDING of the two new sentences is Robert's, on H4's precedent.
      H2   the crash-loss bound            DONE 2026-09-01 — 2.1 s, and it does NOT grow with the
           take (1.01 s at 60 s, 1.79 s at 31 min, five real SIGKILLs). Manifest and every channel
           survived every kill; the salvaged take exports. `node scripts/crash-bound.mjs` re-runs
           it in one command; docs/CRASH_BOUND.md is the playbook. Handoff under the task. It also
           gave the production salvage path its first tests, and left one P1 observation in
           BACKLOG about audio under a starved main thread — which is A1/H4's, not H2's.
-     H3   memory slope at hour scale      RUNNING overnight 2026-09-01 (Robert: "go h3, you are
-          working over night"). `scripts/memory-slope.mjs`, 60 min soak, sampled per minute.
+     H3   memory slope at hour scale      DONE overnight 2026-09-01 — FLAT, and the premise is
+          refuted. Two soaks (60 and 90 min) hold 60 fps end to end with RSS slope +0.03 and
+          -0.73 MB/min, heap +0.05, DOM nodes constant; the 90-minute take's card is GREEN
+          10/10. Memory is NOT the take-length ceiling — DISK is, at ~66 MB/min (about 8.8 h at
+          35 GB free), so B5's guard is what ends a long take. `node scripts/memory-slope.mjs`
+          re-runs it; docs/MEMORY_SLOPE.md is the playbook. Handoff under the task.
      H4   a device that dies mid-take     DONE 2026-09-01 (handoff under the task). It absorbed B4,
           and B4's own question is answered: the stalled chip never fired for a dead camera and
           never could — `track.muted` stays false for a sensor that is off, so the 2026-08-25
@@ -1079,6 +1095,74 @@ works, certifying what was lost and when. The take survives everything short of 
 GATES: induced encoder kill mid-take → take completes, seam inside F6 bands, loss certified ·
 induced worker death likewise · nothing engages on a healthy take · oracle v2+v1 green.
 
+HANDOFF 2026-09-02 (task/H1, own worktree). DONE, all four gates, measured on the deployed build.
+THE MOVE WAS ALREADY IN THE REPO AND THAT IS THE FINDING — for the third time on this line. F6 built
+close-the-segment-keep-the-device for pause/resume, O16 reused it verbatim for a resolution step, and
+a component death is that same move with a different trigger. So H1 is one generalised
+`containSegment` in session.ts plus a DECISION module, and no new file surgery: `armChannel` was
+already kind-agnostic (it is the call the progressive acquirer and `resumeChannel` both make),
+`core/types.ts` has said since 08-23 that a kind may be several non-overlapping segments, and every
+consumer resolves by id and window.
+WHAT IT REPLACED. `onFatal` emitted ONE toast — "video saved up to this point only" — and then
+nothing: the channel's file stopped while the take ran on believing it was recording, no ledger, no
+reopen, and the report card graded the stump as a full channel. The device was never the problem. A
+dead encoder does not turn the camera off, so the track is still live and segment N+1 opens on it.
+THREE ENTRY POINTS, all contained the same way and told apart in the certification because they are
+genuinely different code: `{event:'fatal'}` posted by a worker that is still alive (encoder-error),
+`worker.onerror` from one that is gone (worker-death), and MediaRecorder's own `error` on the
+fallback lane (recorder-error). EVERY KIND, not only the screen O16 stepped — an audio encoder dies
+exactly like a video one and that half was contained by nothing.
+WHAT IT REFUSES, because an encoder that dies on open would otherwise spin and an hour of that is a
+take made of rubble: `segmentContain.ts`, pure and unit-tested like O16's `stepVerdict` — 1.5 s
+cooldown, 4 contains PER CHANNEL (a sick camera must not spend the screen's budget). Past the budget
+the channel is given up the way a dead device is given up: preview dropped, device released, H4's
+ledger stamped with the instant, the take running on with everything else.
+TWO THINGS HAD TO BE FIXED UNDERNEATH, and both were live defects before this task:
+  · THE LOUDNESS FOLD waits on every registered contributor, so a CLOSED audio segment would have
+    held it at its last sample for the rest of the take, overflowed the ring and marked the take's
+    loudness `degraded` — a channel punished for doing what it was told. `retire` keeps the
+    contribution and stops the waiting. F6's pause had the same hole.
+  · THE REPORT CARD graded SEGMENTS against the take's length, so segment 1 of a screen that ran the
+    whole take was convicted of "ending 23 s before the take did". It now judges a kind by its LAST
+    segment. That was already wrong for every paused and every stepped take.
+GATES, all on prod (234a36d), `node scripts/contain-check.mjs` — one command, exit 0 only on all four
+cells, headed real Chrome for crash-bound's reason (headless has no GPU here and never opens the
+VideoEncoder this task kills):
+  · NOTHING ENGAGES ON A HEALTHY TAKE — plain `?synthetic=1`, 16.1 s: no seam, no loss, ONE segment
+    per kind, no live band, `GREEN — 10 of 10 dimensions measured and inside band`.
+  · INDUCED ENCODER KILL — `?killenc=screen:6000`: two screen segments (84+6001 ms / 429 KB then
+    6105+10051 ms / 3.28 MB), seam 20 ms at 6085 ms certified `encoder-error`, camera and mic full
+    length, screen NOT in the loss ledger because it came back, band live while recording, report
+    card RED on channels.
+  · INDUCED WORKER DEATH — `?killworker=screen:6000`, the other entry point: seam 22 ms at 6075 ms
+    certified `worker-death`, everything else as above.
+  · INDUCED AUDIO ENCODER KILL — `?killenc=mic:6000`: mic in two segments, seam 111 ms, screen and
+    camera full length.
+  SEAMS ACROSS EVERY RUN: video 20 / 22 / 23 / 67 / 96 ms, audio 74 / 80 / 94 / 102 / 111 ms — inside
+  O16's 69 ms for video and inside F6's own 99-218 ms for audio. ONE OUTLIER, 2602 ms, on the first
+  cell of a run where the dying encoder was 96 frames behind: the seam IS the drain of the segment
+  that died, so a backlogged encoder pays for its backlog. Bounded by STOP_BUDGET_MS either way.
+  · TYPECHECK CLEAN · 944 TESTS (23 new) · ORACLE v2 PASS sync 36.1/50.6 ms instant 54.5 smartcut
+    55.9 · ORACLE v1 PASS sync 43.3/56.1 ms instant 41.6 · LONG CELL (mandatory, G4) PASS at 120 s:
+    instant maxAbs 70.3 ms, smartcut 74.6 ms — BELOW the recorded 94.2/94.2/95.3/100.5 baseline, so
+    the flip did not move it up, which is what that rule catches.
+THE KNOBS ARE THE ONLY WAY THIS COULD BE TESTED AT ALL — a hardware encoder does not fall over on
+request. `?killenc=<kind>:<ms>` drives the encoder's own error callback, `?killworker=<kind>:<ms>`
+kills the worker through an uncaught throw, which is the one thing that reaches `worker.onerror`.
+Two flags because they are two entry points and this task's first two gates are exactly those two.
+Documented in docs/FLAGS.md. Deliberately NOT gated on `?synthetic=1`: inducing this on a REAL screen
+share is where the drain costs something.
+WHAT THE TAKE CARRIES NOW: `Recording.seams` — kind, instant, gap, cause — rebased at stop on the
+same timeline as the channels, exactly as H4's `lost` is. Said in the same three places H4 chose: the
+live band, the editor, and the S1 report card (folded into `channels`, not added as a dimension).
+STILL OWED: the WORDING of the two new sentences is Robert's, on H4's precedent. Proposals shipped:
+live — "Screen was interrupted and restarted itself — a fraction of a second is missing there. The
+take is still recording."; after — "Screen stopped recording for 20 ms at 0:06 and restarted itself —
+the rest of the take is there." Only the words are open.
+ONE DEFECT FOUND AND NOT FIXED, filed P1: a channel whose measured stop misses the 5 s budget is
+DELETED rather than "kept with what reached disk" — seen once in four cells, mechanism read straight
+out of `doStop`, and it predates H1 entirely. BACKLOG has the evidence.
+
 ## H2 the crash-loss bound — kill it anywhere, lose seconds [light-medium · mostly measurement]
 Salvage exists; its bound at max60 hour scale has never been stated. SIGKILL the tab at sampled
 instants of a >=30-min max60 take → the salvaged take loses < N s; state N and what prices it
@@ -1124,6 +1208,15 @@ GATE EVIDENCE: 5 usable kill points · worst 2116 ms < 5000 · typecheck clean, 
 · oracle 1/1 PASS sync 59.8/59.8 ms, instant 58.2 ms, smartcut 59.8 ms. No oracle:long: this
 task changed no product code at all — a rig, a doc and a test file — so no flip touches the
 instant or smart-cut paths.
+THE FLOOR, PROBED AFTER THE GATES WERE MET, and it is the one place "kill it anywhere" is not
+yet true: eight single-kill cells at 2-20 s. At 2.8 / 3.3 / 4.2 s NOTHING is recoverable — the
+pending manifest is not on disk, because writeManifest puts it in localStorage and Chrome commits
+localStorage asynchronously, so the kill takes the only pointer to the blobs with it (takeCount 0,
+no files). At 5.4 s the manifest is there and the take salvages as AUDIO ONLY: ~1 s WebM clusters
+already have material, no video fragment has closed. From 7.5 s on everything comes back (0.44 s,
+1.13 s, 1.63 s at 7.5 / 8.3 / 10.3 s) and the 2.1 s bound holds to 31 minutes. TWO CHEAP ADDITIVE
+FIXES — the manifest through the durable writer or IndexedDB, and an early first video fragment —
+are BACKLOG P1 and NOT shipped: both change what a user sees after a crash, which is Robert's.
 THE LOAD IS PART OF THE ANSWER, and the first matrix is the reason this one is trustworthy. Run
 at a synthetic 2560x1440@60 source, three of five takes were dead or dying before the kill
 arrived (screen delivery 44 -> 26 -> 10 -> 0.2 fps, both audio channels ending tens of seconds
@@ -1137,6 +1230,40 @@ Nothing measures memory past minutes. One cell: synthetic max60 soak, 60 min, me
 minute. Band: slope ~0 after warmup — this is the 8 GB machine's take-length ceiling in disguise.
 GATES: the curve in the handoff · a leak found becomes its own task, not a widened band · the
 cell is one command afterwards.
+
+HANDOFF 2026-09-01 (task/H3, same worktree as H2, overnight — Robert: "go h3, you are working
+over night"). DONE, all three gates, and THE TASK'S OWN PREMISE IS REFUTED.
+THE CURVE IS FLAT. Two soaks, 60 min and 90 min, synthetic max60 takes (1920x1080@60, four
+channels), sampled once a minute, stopped properly, graded by the product's own card:
+  RSS slope after warm-up   +0.03 MB/min (r2 0.00)   ·   -0.73 MB/min (r2 0.12)
+  RSS by halves             427 -> 417 MB (-10)      ·   625 -> 606 MB (-20)
+  JS heap slope             +0.04 (r2 0.18)          ·   +0.05 (r2 0.38)
+  DOM nodes                 395 constant             ·   395 constant
+  Chrome processes          8 constant               ·   8 constant
+  delivered fps             58.2-60.1                ·   59.2-60.1
+  written                   4.1 GB                   ·   5.9 GB
+  card                      RED (one rate step)      ·   GREEN, 10 of 10
+Band was declared before the run (RSS < 5 MB/min, heap < 1 MB/min, 5-minute warm-up) and held.
+NO LEAK FOUND, so nothing here becomes its own task. Curve and playbook: docs/MEMORY_SLOPE.md.
+MEMORY IS NOT THE TAKE-LENGTH CEILING — DISK IS, and that is the correction this task makes to
+its own spec. The take writes ~66 MB/min, so free space runs out in about 8.8 hours at 35 GB
+free while memory sits where it started. B5's guard is what will end a long take, not RAM, and
+S1's storage dimension already watches it.
+READ THE SLOPE FROM THE HALVES, NOT FROM THE LINE, and this cost a detour worth recording: RSS
+oscillates +-90 MB while macOS reclaims, and the 60-minute cell reads +0.03 MB/min over the hour
+(r2 0.000) but +3.45 MB/min over its SECOND HALF ALONE (r2 0.30). That is not a leak starting,
+it is the oscillation aliased by a 28-point window — the half-means say -10 MB. Same for the
+per-process split: the renderer reads +0.60 MB/min at 60 min and +0.10 at 90, and a trend that
+SHRINKS as the lever arm grows is noise. The rig now reports slope, r2, per-process-type
+breakdown AND half-means, because only the last of those survives the oscillation.
+THE INSTRUMENT: `scripts/memory-slope.mjs`, one command, on H2's `scripts/lib/chrome.mjs`. It
+samples RSS PER CHROME PROCESS off the OS grouped by Chrome's own `--type=`, not
+`performance.memory` — decoded frames, encoder buffers and GPU-backed VideoFrames live outside
+the JS heap, which is how R2's GPU-process kill stayed invisible to every in-page counter for
+three sessions. It also samples what the take is DOING (delivered fps, bytes written) and stops
+the moment the take is no longer recording, because a dead take makes a beautifully flat curve.
+GATE EVIDENCE: two curves in docs/MEMORY_SLOPE.md · take survived both · both slopes in band ·
+typecheck clean, 910 tests · oracle 1/1 PASS. No product code changed, so no oracle:long.
 
 ## H4 a device that dies mid-take is survived and said [light · ABSORBS B4]
 B4 widened: not only "recorded nothing from the start" — a BT mic that dies at minute 40, a
