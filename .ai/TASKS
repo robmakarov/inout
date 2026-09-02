@@ -485,9 +485,40 @@ it is built combine-ready:
           BACKLOG P2: press record within a second of the app loading and the first ~6 seconds of
           a take have NO PICTURE ON DISK AT ALL — a Chrome process's first VideoEncoder is still
           initialising, so there is nothing encoded to write and no fragment policy can help.
+ 14. H6   the first six seconds have no picture [light-medium · PROMOTED from BACKLOG 2026-09-02
+          ("i dont like backlogs") · evidence: H2b's own cells] press record within ~1 s of app
+          load and a crash in the first ~6 s loses ALL picture even with H2b's floors on — the
+          process's first VideoEncoder pays a multi-second init and the warm probe is still
+          running, so no chunk exists to write. THE TENSION IS THE FROZEN RULE: "hold the press
+          until warm" breaks instant record start, so the fix must warm EARLIER (raw encoders at
+          mount — prearm.ts territory) or write what exists sooner; measure, don't pick.
+          GATES: `crash-bound.mjs --killAt=2000..5000 --settleBeforeRecordMs=0` recovers picture
+          at every instant · record-press latency unchanged (instant-start pinned by test) ·
+          no idle device access (warm uses no camera/mic/screen) · oracle green.
+ 15. B10  the size probe stalls the editor's first seconds [light · PROMOTED 2026-09-02 · evidence:
+          F16b's gate 5 hunt] `[quality] size probe` encodes 300 frames on the MAIN thread for
+          ~11 s at editor open; every measured drag stall (35-201 ms) was inside that window.
+          Fix by measurement: worker, fewer frames, or probe only the visible step.
+          GATES: `editor-drag-cost.mjs` with the wait REMOVED shows no stall > 30 ms · the probe's
+          sizes unchanged (B1b's bands hold) · oracle green.
+ 16. G6   the instrument flakes pack [medium · PROMOTED 2026-09-02 · one session, instrument lane]
+          Four gates that lie under load plus two one-command answers, all filed and unowned:
+          (a) v1 oracle export-throughput coin flip (P1) · (b) fidelity render lane reads RED from
+          machine load with no retry/quiet-machine guard (P1, oracle.mjs already has the pattern) ·
+          (c) the spur gate moves 25 dB with load (P1) · (d) the 120 s cell dies on CDP a third of
+          the time (P2) · (e) `?slow=` is DEAD CODE sold as working by CLAUDE.md and docs/FLAGS.md
+          — wire it or delete it from code AND both docs (P2) · (f) run `npm run exp -- bits` on a
+          screen-only max take to decide whether the screen encoder is starved or static content
+          legitimately compresses to 28 % of its request (720p PiP outwrote the 3024x1964 screen).
+          GATES: each of a-d fails loud or retries instead of flipping, proven by the runs that
+          caught them · e resolved both directions consistently · f's verdict on the ledger.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
-ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
+ready-at-launch; runs whenever Robert is at the machine with the device) · F19 R-CONT (continue
+the take from the playhead — Robert asked it onto the UI 2026-08-30, the button exists and points
+here; real capture work: re-arm, new segment, splice at a timeline instant — full brief in
+BACKLOG "Roadmap" section) · F20 R-RIPPLE (the timeline closes up over a cut — needs a piecewise
+axis and per-segment lane strips; brief in BACKLOG). X1/X2/X3 ARE NOT AVAILABLE — all
 three were DONE 2026-08-26 (handoffs under their tasks); this line was stale when the priority
 order was written and cost a session a look. NO LIGHT PARALLEL-SAFE FILLER IS LEFT: B8 is done and
 B4 is absorbed by H4, which is DONE. B9 is not one — it is a default-path flip.
