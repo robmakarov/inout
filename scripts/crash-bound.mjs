@@ -45,7 +45,7 @@
  *
  * QA only: changes no product code, and the product cannot tell it from a user.
  */
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -348,6 +348,99 @@ async function verifyExport(s, budgetMs = 600_000) {
 }
 
 // ---------------------------------------------------------------------------
+// WHERE THE MANIFEST IS, READ WITHOUT ASKING THE APP  (H2b)
+// ---------------------------------------------------------------------------
+// The manifest has two homes now: the localStorage one that shipped, and the
+// IndexedDB one H2b added because localStorage has no commit. Both are read
+// here with the page's scripts DISABLED, which is the whole point of this
+// rig — a crash state described by the app that survived it proves nothing.
+
+/** The durable copy, via CDP. `IndexedDB.requestData` hands back a RemoteObject,
+ *  and a STRING's value comes through whole — which is why the row is the same
+ *  JSON string localStorage holds rather than a structured-cloned object. */
+async function readDurableViaCdp(s, origin) {
+  try {
+    await s.send('IndexedDB.enable')
+  } catch {
+    return null
+  }
+  // Chrome moved this domain from securityOrigin to storageKey; accept either,
+  // rather than pinning the rig to one Chrome.
+  for (const scope of [{ storageKey: `${origin}/` }, { securityOrigin: origin }]) {
+    try {
+      const res = await s.send('IndexedDB.requestData', {
+        ...scope,
+        databaseName: 'inout-pending',
+        objectStoreName: 'pending',
+        indexName: '',
+        skipCount: 0,
+        pageSize: 10,
+      })
+      const raw = (res?.objectStoreDataEntries ?? [])[0]?.value?.value
+      if (typeof raw === 'string') return JSON.parse(raw)
+    } catch {
+      /* try the other scope */
+    }
+  }
+  return null
+}
+
+/**
+ * THE SAME ROW, READ OFF THE PLATTER WITH NO BROWSER INVOLVED.
+ *
+ * The independent check: Chrome's IndexedDB is LevelDB in the profile
+ * directory, and a manifest that reached it is sitting in those files as ASCII.
+ * If CDP and this disagree, CDP is describing a cache and this is describing
+ * the disk — which is the distinction the whole task turns on.
+ */
+function readDurableFromProfile(profile, origin) {
+  const host = new URL(origin).host
+  const base = join(profile, 'Default', 'IndexedDB')
+  let dirs = []
+  try {
+    dirs = readdirSync(base).filter((d) => d.includes(host) && d.endsWith('.leveldb'))
+  } catch {
+    return null
+  }
+  for (const d of dirs) {
+    let files = []
+    try {
+      files = readdirSync(join(base, d))
+    } catch {
+      continue
+    }
+    for (const f of files) {
+      const full = join(base, d, f)
+      let text
+      try {
+        if (statSync(full).size > 64 * 1024 * 1024) continue
+        text = readFileSync(full, 'latin1')
+      } catch {
+        continue
+      }
+      const at = text.lastIndexOf('{"v":1,"recordingId"')
+      if (at < 0) continue
+      // Balance the braces rather than guessing where the value ends.
+      let depth = 0
+      for (let i = at; i < text.length; i++) {
+        if (text[i] === '{') depth++
+        else if (text[i] === '}') {
+          depth--
+          if (depth === 0) {
+            try {
+              return JSON.parse(text.slice(at, i + 1))
+            } catch {
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // the two cells
 // ---------------------------------------------------------------------------
 
@@ -373,6 +466,9 @@ async function runControl(ms) {
     // un-normalized offsets the crash cells read off disk afterwards.
     await sleep(Math.min(ms, 6000))
     out.pending = await s.evalJson(`localStorage.getItem('inout.pending')`)
+    // H2b: the same manifest, from the home that has a commit — read while the
+    // take is alive, which is the only moment a control can see it.
+    out.pendingDurable = await readDurableViaCdp(s, new URL(opts.url).origin)
     await sleep(Math.max(0, ms - 6000))
     const stopWall = await s.evaluate(`(() => { const b = ${STOP_BTN}; if (!b) return null; b.click(); return Date.now() })()`)
     if (!stopWall) throw new Error('no stop button to press')
@@ -464,8 +560,16 @@ async function runKillPoint(killAtMs) {
       .catch((e) => ({ error: String(e) }))
     const entries = Array.isArray(ls?.entries) ? ls.entries : []
     const pendingRaw = entries.find((e) => e[0] === 'inout.pending')?.[1] ?? null
-    out.pendingSurvived = pendingRaw !== null
-    out.pending = pendingRaw ? JSON.parse(pendingRaw) : null
+    const durableCdp = await readDurableViaCdp(s2, origin)
+    const durableDisk = readDurableFromProfile(profile, origin)
+    out.pendingHomes = {
+      localStorage: pendingRaw !== null,
+      indexedDbViaCdp: durableCdp !== null,
+      indexedDbOnDisk: durableDisk !== null,
+    }
+    // ANY home is a survival: salvage reads whichever one is there.
+    out.pendingSurvived = pendingRaw !== null || durableCdp !== null || durableDisk !== null
+    out.pending = pendingRaw ? JSON.parse(pendingRaw) : (durableCdp ?? durableDisk)
 
     // ---- and now let the product salvage it ------------------------------
     await s2.send('Emulation.setScriptExecutionDisabled', { value: false })
@@ -533,6 +637,7 @@ for (const killAt of opts.killAt) {
         ? `ERROR ${r.error}`
         : `salvaged=${r.salvaged} manifest=${r.pendingSurvived} · elapsed ${(r.elapsedMs / 1000).toFixed(1)} s · ` +
           `worst channel trail ${r.worstChannelLossMs} ms (video ${r.channels?.worstVideoMs} / audio ${r.channels?.worstAudioMs})` +
+          ` · manifest ${Object.entries(r.pendingHomes ?? {}).filter(([, v]) => v).map(([k]) => k).join('+') || 'NOWHERE'}` +
           (r.channels?.channelsLost ? ` · ${r.channels.channelsLost} CHANNEL(S) LOST WHOLE` : '')),
   )
 }
@@ -566,11 +671,32 @@ report.bound = {
   everyChannelSalvaged: report.points.length > 0 && report.points.every((p) => p.channels?.channelsLost === 0),
   manifestAlwaysSurvived: report.points.length > 0 && report.points.every((p) => p.pendingSurvived),
 }
+/**
+ * H2b — PICTURE, NOT ONLY SOUND, FROM A YOUNG TAKE.
+ *
+ * H2's floor probe salvaged a 5.4 s take as AUDIO ONLY: no video fragment had
+ * closed. This asks every kill point for a VIDEO channel with material in it,
+ * and it is the gate the early first fragment exists to pass. Reported per
+ * point so a failure names the instant rather than the run.
+ */
+report.picture = report.points
+  .filter((p) => !p.error && p.stillRecordingAtKill)
+  .map((p) => ({
+    killAtMs: p.killAtMs,
+    videoChannels: (p.take?.recording?.channels ?? []).filter((c) => c.media === 'video').length,
+    videoMs: Math.max(
+      0,
+      ...(p.take?.recording?.channels ?? [])
+        .filter((c) => c.media === 'video')
+        .map((c) => c.durationMs ?? 0),
+    ),
+  }))
 report.gates = {
   fivePoints: usable.length >= 5,
   everyKillSalvaged: report.bound.allSalvaged && report.bound.everyChannelSalvaged,
   manifestSurvived: report.bound.manifestAlwaysSurvived,
   worstUnder5s: report.bound.worstMs !== null && report.bound.worstMs < 5000,
+  pictureAtEveryKill: report.picture.length > 0 && report.picture.every((p) => p.videoMs > 0),
 }
 
 const outPath = opts.out ?? join(tmpdir(), `crash-bound-${Date.now()}.json`)

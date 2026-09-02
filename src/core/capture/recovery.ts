@@ -8,6 +8,7 @@
 import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { ChannelKind, ChannelRecording, MediaKind, Recording } from '../types'
 import { blobStore, recordingsRepo } from '@core/store'
+import { crashFloorEnabled } from './crashFloor'
 
 const PENDING_KEY = 'inout.pending'
 const DISMISSED_KEY = 'inout.dismissed'
@@ -30,12 +31,159 @@ export interface PendingManifest {
   channels: PendingChannel[]
 }
 
+/**
+ * H2b(a) — THE SECOND HOME OF THE MANIFEST, AND THE ONE THAT SURVIVES.
+ *
+ * localStorage has no commit. Chrome's storage service batches it, and H2's
+ * floor probe measured what that costs: `kill -9` at 2.8 / 3.3 / 4.2 s into a
+ * take and the manifest was simply NOT ON DISK — no Recording, no blobs,
+ * takeCount 0, because the only pointer to files that were already written was
+ * still in a buffer inside a process that had just been killed.
+ *
+ * An IndexedDB transaction has a real commit, and `durability: 'strict'` makes
+ * it a flush rather than a promise to flush later. The localStorage write STAYS
+ * and this is written beside it, additively: it is the shipped path, it is what
+ * `?crashfloor=0` falls back to, and it costs nothing to keep. Whichever of the
+ * two survives the crash, salvage finds one.
+ *
+ * ITS OWN DATABASE, NEVER A VERSION BUMP OF `inout` (see the note on
+ * DB_VERSION in recordingsRepo.ts): a version bump is blocked forever by any
+ * old tab still holding the previous version, and that jams every later open —
+ * boot recovery included, which is this file. A database nobody has ever
+ * opened has no old holders on any profile.
+ */
+const PENDING_DB_NAME = 'inout-pending'
+const PENDING_DB_VERSION = 1
+const PENDING_STORE = 'pending'
+/** One row, always: the manifest is a singleton and a second one would be a bug. */
+const PENDING_ROW = 'current'
+
+let pendingDbPromise: Promise<IDBDatabase> | null = null
+
+function openPendingDb(): Promise<IDBDatabase> {
+  // A FAILED OPEN IS NOT CACHED. Holding on to the rejection would turn one
+  // bad moment — storage pressure, a profile mid-eviction — into a manifest
+  // that is never durable again for the life of the page.
+  pendingDbPromise ??= newPendingDb().catch((err) => {
+    pendingDbPromise = null
+    throw err
+  })
+  return pendingDbPromise
+}
+
+function newPendingDb(): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(PENDING_DB_NAME, PENDING_DB_VERSION)
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(PENDING_STORE)) {
+        // OUT-OF-LINE KEY, AND THE ROW IS THE SAME JSON STRING localStorage
+        // HOLDS. Two reasons, both about being readable from outside the app:
+        // the two homes then hold identical bytes, and CDP's IndexedDB.requestData
+        // hands back a string's VALUE while an object comes back as a preview —
+        // which is what lets the crash rig read this off disk with the page's
+        // scripts disabled, the one look at the crash state that is not the
+        // app's own account of it.
+        req.result.createObjectStore(PENDING_STORE)
+      }
+    }
+    req.onsuccess = () => {
+      req.result.onclose = () => {
+        pendingDbPromise = null
+      }
+      req.result.onversionchange = () => {
+        req.result.close()
+        pendingDbPromise = null
+      }
+      resolve(req.result)
+    }
+    req.onerror = () => reject(req.error ?? new Error('pending manifest: failed to open IndexedDB'))
+  })
+}
+
+/**
+ * SERIALIZED, because these are fire-and-forget from a synchronous caller.
+ * writeManifest() is called several times during arming and once more 2.5 s in;
+ * two unordered transactions could land out of order and leave the manifest
+ * describing fewer channels than the take has. One chain, in call order.
+ */
+let durableChain: Promise<unknown> = Promise.resolve()
+
+function queueDurable<T>(fn: () => Promise<T>): Promise<T | null> {
+  const next = durableChain.then(fn, fn).catch(() => null)
+  durableChain = next
+  return next as Promise<T | null>
+}
+
+function durableTx(
+  db: IDBDatabase,
+  fn: (s: IDBObjectStore) => void,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    // STRICT, and it is the whole point: the default ('relaxed') lets the
+    // commit event fire before the bytes are flushed, which is the property
+    // localStorage was already lost to.
+    const tx = db.transaction(PENDING_STORE, 'readwrite', { durability: 'strict' })
+    fn(tx.objectStore(PENDING_STORE))
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('pending manifest: transaction failed'))
+    tx.onabort = () => reject(tx.error ?? new Error('pending manifest: transaction aborted'))
+  })
+}
+
+function writeDurableManifest(m: PendingManifest): Promise<null | void> {
+  const json = JSON.stringify(m)
+  return queueDurable(async () => {
+    const db = await openPendingDb()
+    await durableTx(db, (s) => s.put(json, PENDING_ROW))
+  })
+}
+
+/** Awaited by salvage: the one-shot must hold for this copy too. */
+export function clearDurableManifest(recordingId?: string): Promise<null | void> {
+  return queueDurable(async () => {
+    const db = await openPendingDb()
+    if (recordingId) {
+      const row = await readDurableRow(db)
+      if (row && row.recordingId !== recordingId) return
+    }
+    await durableTx(db, (s) => s.delete(PENDING_ROW))
+  })
+}
+
+function readDurableRow(db: IDBDatabase): Promise<PendingManifest | null> {
+  return new Promise<PendingManifest | null>((resolve, reject) => {
+    const req = db
+      .transaction(PENDING_STORE, 'readonly')
+      .objectStore(PENDING_STORE)
+      .get(PENDING_ROW) as IDBRequest<string | undefined>
+    req.onsuccess = () => {
+      if (typeof req.result !== 'string') return resolve(null)
+      try {
+        const m = JSON.parse(req.result) as PendingManifest
+        resolve(m && m.v === 1 && Array.isArray(m.channels) ? m : null)
+      } catch {
+        resolve(null)
+      }
+    }
+    req.onerror = () => reject(req.error ?? new Error('pending manifest: read failed'))
+  })
+}
+
+export async function readDurableManifest(): Promise<PendingManifest | null> {
+  try {
+    return await readDurableRow(await openPendingDb())
+  } catch {
+    return null
+  }
+}
+
 export function writePendingManifest(m: PendingManifest): void {
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify(m))
   } catch {
     /* storage unavailable — recovery degrades, recording continues */
   }
+  if (crashFloorEnabled()) void writeDurableManifest(m)
 }
 
 export function clearPendingManifest(recordingId?: string): void {
@@ -48,6 +196,7 @@ export function clearPendingManifest(recordingId?: string): void {
   } catch {
     /* ignore */
   }
+  if (crashFloorEnabled()) void clearDurableManifest(recordingId)
 }
 
 function readPendingManifest(): PendingManifest | null {
@@ -69,9 +218,17 @@ function readPendingManifest(): PendingManifest | null {
  * Recording row is written at STOP and this manifest is what stands in for it
  * until then. Deleting them would turn a recoverable take into a lost one.
  */
-export function pendingBlobKeys(): string[] {
-  const m = readPendingManifest()
-  return m ? m.channels.map((c) => c.blobKey) : []
+export async function pendingBlobKeys(): Promise<string[]> {
+  const keys = new Set<string>()
+  for (const c of readPendingManifest()?.channels ?? []) keys.add(c.blobKey)
+  // BOTH COPIES, because either one may be the survivor (H2b): a crash inside
+  // the first seconds leaves the durable manifest and no localStorage one, and
+  // sweeping by the copy that did not survive would delete exactly the blobs
+  // the next boot is about to salvage.
+  if (crashFloorEnabled()) {
+    for (const c of (await readDurableManifest())?.channels ?? []) keys.add(c.blobKey)
+  }
+  return [...keys]
 }
 
 export function markRecordingDismissed(id: string): void {
@@ -90,7 +247,12 @@ function isRecordingDismissed(id: string): boolean {
   }
 }
 
-async function probeDurationMs(blobKey: string): Promise<number> {
+/**
+ * HOW LONG THE FILE ON DISK ACTUALLY IS. Salvage's own question, and since H5
+ * the stop path's too: a channel whose stop reply missed the budget knows its
+ * bytes only from the platter, and its length only from here.
+ */
+export async function probeDurationMs(blobKey: string): Promise<number> {
   const blob = await blobStore.read(blobKey)
   if (!blob.size) return 0
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
@@ -103,10 +265,14 @@ async function probeDurationMs(blobKey: string): Promise<number> {
 
 /** Rebuild a Recording from an interrupted session's surviving blobs. */
 export async function salvagePendingRecording(): Promise<Recording | null> {
-  const m = readPendingManifest()
+  const m = readPendingManifest() ?? (crashFloorEnabled() ? await readDurableManifest() : null)
   if (!m) return null
-  // One-shot: a salvage that throws must not brick every subsequent boot.
+  // One-shot: a salvage that throws must not brick every subsequent boot. The
+  // durable copy is AWAITED for exactly that reason — a fire-and-forget delete
+  // that loses its race with a throw two lines down would brick every boot in
+  // the one place this rule exists to protect.
   clearPendingManifest()
+  if (crashFloorEnabled()) await clearDurableManifest()
   // The live composite of the interrupted take is DELIBERATELY not salvaged
   // (a crash-truncated composite has an unknown tail and must never be
   // packet-copied — 2026-08-23), which used to mean its blob was simply

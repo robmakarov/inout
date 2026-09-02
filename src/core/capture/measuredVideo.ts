@@ -124,6 +124,12 @@ export async function startMeasuredVideoCapture(opts: {
   killEncoderInMs?: number
   /** H1 harness (`?killworker=`), passed straight through to the worker. */
   killWorkerInMs?: number
+  /**
+   * H2b(b): close the first fragment at this many seconds of media time rather
+   * than at the GOP, so a take killed in its first seconds salvages with
+   * picture instead of audio only. Absent = the shipped cadence.
+   */
+  earlyFragmentSec?: number
 }): Promise<MeasuredVideoHandle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('measured video: MediaStreamTrackProcessor unavailable')
@@ -177,6 +183,7 @@ export async function startMeasuredVideoCapture(opts: {
     videoBitrate: opts.videoBitrate,
     killEncoderInMs: opts.killEncoderInMs,
     killWorkerInMs: opts.killWorkerInMs,
+    earlyFragmentSec: opts.earlyFragmentSec,
   })
   const startReply = await withDeadline(started, START_TIMEOUT_MS, 'raw video start').catch(
     (err: Error) => {

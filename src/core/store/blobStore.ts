@@ -396,6 +396,27 @@ export const blobStore = {
     }
   },
 
+  /**
+   * WHAT IS ACTUALLY ON DISK UNDER THIS KEY, and 0 for nothing at all.
+   *
+   * H5: the stop path used to judge a channel by the byte count in its STOP
+   * REPLY, so a reply that missed the 5 s budget read as "this channel wrote
+   * nothing" and the megabytes it had already flushed were deleted. `getFile()`
+   * reads the size off the entry, not the contents, so asking the disk costs
+   * a stat rather than a read.
+   */
+  async size(key: string): Promise<number> {
+    const dir = await blobsDir()
+    try {
+      const file = await dir.getFileHandle(assertKey(key))
+      return (await file.getFile()).size
+    } catch {
+      // Missing, unreadable, or locked by a writer that has not finished dying.
+      // None of the three is "empty", but all three are "nothing to keep yet".
+      return 0
+    }
+  },
+
   /** Flat listing of stored keys (scratch sweeps, orphan scans). */
   async listKeys(): Promise<string[]> {
     const dir = (await blobsDir()) as FileSystemDirectoryHandle & AsyncIterableDirectory

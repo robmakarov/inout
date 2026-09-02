@@ -90,6 +90,21 @@ export interface RawVideoStartMsg {
    * from killEncoderInMs, and H1's two gates are exactly those two entry points.
    */
   killWorkerInMs?: number
+  /**
+   * H2b(b) — WHERE THE FIRST FRAGMENT CLOSES, in seconds of media time.
+   *
+   * A fragmented MP4 only finalizes a fragment when the current one is longer
+   * than the muxer's minimum AND a keyframe arrives, so against a 2 s GOP the
+   * first ~2 s of every take live in memory and die with the tab. H2's floor
+   * probe measured the consequence: a `kill -9` at 5.4 s salvaged AUDIO ONLY,
+   * because audio's ~1 s WebM clusters already had material and no video
+   * fragment had closed.
+   *
+   * One extra keyframe here closes the first fragment early, and the GOP after
+   * it is the 2 s it always was. Absent = the shipped cadence, unchanged
+   * (`?crashfloor=0`).
+   */
+  earlyFragmentSec?: number
 }
 
 export interface RawVideoFrameMsg {
@@ -288,6 +303,12 @@ let encoderPending = false
 /** Main-thread stamp of the first frame that reached the encoder. */
 let firstFrameAtMs: number | null = null
 let lastKeySec = -Infinity
+/**
+ * H2b(b): the one early keyframe, and the instant it is due. Nulled the moment
+ * it is asked for, so this costs exactly one extra keyframe per take and never
+ * competes with the GOP cadence below it.
+ */
+let earlyKeySec: number | null = null
 /** Last timestamp handed to the encoder (µs) — the timeline never goes back. */
 let lastEncodedTsUs = -1
 /** Main-thread reading when a frame last actually reached the encoder. */
@@ -404,8 +425,19 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
     },
   })
 
+  // H2b(b): the early keyframe is only half of it — the muxer also refuses to
+  // close a fragment shorter than its minimum (1 s by default), which is
+  // exactly where the early keyframe lands. Halve it so the keyframe cadence
+  // stays the only thing deciding where fragments end; every LATER fragment is
+  // the same 2 s it was, because the GOP is what binds after the first one.
+  earlyKeySec = typeof msg.earlyFragmentSec === 'number' && msg.earlyFragmentSec > 0
+    ? msg.earlyFragmentSec
+    : null
   output = new Output({
-    format: new Mp4OutputFormat({ fastStart: 'fragmented' }),
+    format: new Mp4OutputFormat({
+      fastStart: 'fragmented',
+      ...(earlyKeySec === null ? null : { minimumFragmentDuration: earlyKeySec / 2 }),
+    }),
     target: new StreamTarget(sink),
   })
   videoSource = new EncodedVideoPacketSource('avc')
@@ -475,13 +507,26 @@ function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   // a keyframe — while the COMPOSITE in the very same take, whose cadence has
   // never had this term, encoded 6 frames with 1 keyframe. Same machine, same
   // second, one correct and one not.
-  const keyFrame = encodeCalls === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
+  const gopDue = encodeCalls === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
+  // H2b(b): ... plus ONE early keyframe, which is what closes the first
+  // fragment before the GOP would have. It fires once and then this is null.
+  //
+  // IT IS ADDED TO THE GRID, NOT INSERTED INTO IT, and that distinction is the
+  // whole value of the change. Letting it move `lastKeySec` shifts every later
+  // keyframe by a second — keyframes at 1/3/5 instead of 0/2/4 — so the first
+  // fragment arrives a second sooner and every fragment after it a second
+  // LATER, which is a wash at best. Measured on prod 2026-09-02 at a 5 s kill:
+  // shifted, 3.0-3.7 s of picture survived; unshifted, 4.0 s, the same as the
+  // shipped cadence. The GOP stays where it was; this is one extra keyframe.
+  const earlyDue = !gopDue && earlyKeySec !== null && tSec >= earlyKeySec
+  const keyFrame = gopDue || earlyDue
+  if (earlyKeySec !== null && tSec >= earlyKeySec) earlyKeySec = null
   let stamped: VideoFrame | null = null
   try {
     stamped = new VideoFrame(picture, { timestamp: tUs })
     encoder.encode(stamped, { keyFrame })
     encodeCalls++
-    if (keyFrame) lastKeySec = tSec
+    if (gopDue) lastKeySec = tSec
     lastEncodedTsUs = tUs
     lastEncodeOkMs = atMs
     if (keepAlive) stats.keepAliveFrames++
