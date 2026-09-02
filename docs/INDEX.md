@@ -8,3 +8,5 @@
 - QA_MATRIX.md — `scripts/browser-check.mjs` gates per browser; evidence in docs/qa/*.json.
 - RU_REACHABILITY.md — `scripts/ru-reachability.mjs`: DNS / TLS / block-page checks from RU networks; the risk ranking.
 - CLOUD_SETUP.md, CLOUD_RESET.md — provisioning and wiping the Supabase project (phase 2).
+- `scripts/x14a-stamps.mjs` (X14a, no doc of its own — the header is the playbook) — does the media carry its own capture stamp? Per-source table of `VideoFrame.metadata()`, `metadata().captureTime`, `VideoFrame.timestamp` and `AudioData.timestamp` against read time, with the drift over a 120 s run. `--fake` substitutes devices to answer field-population when a real capturer is unavailable, and labels the rows.
+- `scripts/b13-tabaudio.mjs` (B13) — plays a known 12-tone signal in the page, records it through tab audio, and reports four spectra (reference / opus floor / captured channel / exported file), the stereo markers, the delivered ec-ns-agc, and the lead both ways (`--looplat=both`). NEEDS macOS Screen Recording granted to the Chrome it launches; without it every rung returns `NotReadableError` and the run's own signal check refuses to print a verdict.

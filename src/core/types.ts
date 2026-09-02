@@ -64,6 +64,53 @@ export interface ChannelDiagnostics {
    * from theory is what has failed at this seam before.
    */
   anchor?: ChannelAnchor
+  /**
+   * B13 — WHAT THE PLATFORM ACTUALLY DELIVERED ON THIS AUDIO TRACK.
+   *
+   * Robert heard a 124.8-minute take as "less bass" with "some small noises",
+   * and the first suspect is Chrome's voice processing (AEC/NS/AGC) having
+   * survived on a display-audio track: it high-passes the bottom, gates quiet
+   * passages into artefacts and downmixes to mono. acquire.ts asks for all
+   * three OFF on every wedge rung and re-applies them to the delivered track,
+   * so the question is whether one of those two belts SLIPPED — and that
+   * question could not be answered about his take, because the answer was only
+   * ever a console line on a machine that had since been closed.
+   *
+   * Written for every measured audio channel, mic included. Audio only.
+   */
+  audioTrack?: DeliveredAudioSettings
+}
+
+/**
+ * B13. The delivered audio track's own settings, read off `getSettings()` at
+ * the moment capture starts and again at stop.
+ *
+ * `null` is not `false`: a track that never reported `echoCancellation` and one
+ * that reported it OFF are different findings, and a boolean cannot hold both.
+ * Chromium routinely omits these for display audio, which is precisely the
+ * source B13 is about.
+ */
+export interface DeliveredAudioSettings {
+  /** Voice processing, as DELIVERED. null = the platform reported no value. */
+  echoCancellation: boolean | null
+  noiseSuppression: boolean | null
+  autoGainControl: boolean | null
+  /** 1 here on a music source is the "mono warble" Robert reported 2026-08-26. */
+  channelCount: number | null
+  sampleRate: number | null
+  /** Platform-reported input latency in ms — the number the anchor subtracts. */
+  latencyMs: number | null
+  /**
+   * Settings at STOP, present ONLY when something moved during the take. A
+   * track that was repaired at arm and re-processed at minute 40 (a device
+   * change, crbug 344876285) is otherwise indistinguishable from a clean one.
+   */
+  atStop?: {
+    echoCancellation: boolean | null
+    noiseSuppression: boolean | null
+    autoGainControl: boolean | null
+    channelCount: number | null
+  }
 }
 
 /** B7. What each channel's start offset was BUILT from. Instrumentation only. */
@@ -83,6 +130,15 @@ export interface ChannelAnchor {
    * unreported part is what is left.
    */
   reportedInputLatencyMs?: number
+  /**
+   * B13. Whether `reportedInputLatencyMs` was actually SUBTRACTED from the raw
+   * anchor. It always was until B13; `?looplat=0` stops it on loopback sources
+   * (tab / system audio), which have no microphone and no physical input
+   * latency to remove. False with a non-zero latency above means the platform
+   * reported one and this take deliberately kept it — the reading that makes a
+   * pair of takes comparable without reading the URL they were made under.
+   */
+  inputLatencyApplied?: boolean
   /**
    * VIDEO. How long after this channel started pulling frames the FIRST one
    * arrived. A canvas answers in ~0 ms; a real getDisplayMedia surface does

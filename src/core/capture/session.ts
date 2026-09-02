@@ -383,6 +383,14 @@ function mergeAnchor(
     ...(existing?.reportedInputLatencyMs !== undefined
       ? { reportedInputLatencyMs: existing.reportedInputLatencyMs }
       : {}),
+    // B13. The companion to the line above, and it must travel WITH it: the
+    // reported latency alone cannot say whether it was subtracted, so a take
+    // recorded under `?looplat=0` and one recorded normally would persist an
+    // identical anchor block. This merge rebuilds the anchor field by field,
+    // so a field not named here is a field the take never carries.
+    ...(existing?.inputLatencyApplied !== undefined
+      ? { inputLatencyApplied: existing.inputLatencyApplied }
+      : {}),
     ...(fromResult?.firstFrameDelayMs !== undefined
       ? { firstFrameDelayMs: fromResult.firstFrameDelayMs }
       : {}),
@@ -1751,6 +1759,10 @@ class Session implements CaptureSession {
         epoch: this.epoch,
         writer,
         label: ch.kind,
+        // B13. Tab / system audio is an internal loopback: no microphone, no
+        // device buffer, nothing physical to be late by. Descriptive unless
+        // `?looplat=0` is set — see measuredAudio.subtractsInputLatency.
+        loopback: ch.kind === 'system-audio',
         audioCtx: ch.audioCtx ?? undefined,
         // H1 harness. An audio channel has no worker, so only `?killenc=`.
         killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
