@@ -727,6 +727,23 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'editoropen',
+    title: 'Why is the editor black for a long time after a long take?',
+    detail:
+      'The editor stage is <video> over the take\'s own channel files, and a raw channel is a FRAGMENTED MP4 written for the length of the take — one moof every ~2 s, ~3,700 of them in a 124-minute take. This times src -> loadedmetadata -> canplay -> FIRST PAINTED FRAME -> a seek to the middle, at several lengths, against a NON-fragmented file of identical content as the discriminator. The answer is a slope: a cost flat in length is a fixed parse, a cost that grows with length is a scan, and only the second gets worse the longer Robert records. {"lengths":[30,120,300]}.',
+    run: async (args) => {
+      const { runEditorOpen } = await import('../perf/editorOpen')
+      return runEditorOpen({
+        lengths: Array.isArray(args?.lengths) ? (args.lengths as number[]) : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        fps: typeof args?.fps === 'number' ? args.fps : undefined,
+        mbps: typeof args?.mbps === 'number' ? args.mbps : undefined,
+        rebuild: args?.rebuild === true,
+      })
+    },
+  },
+  {
     id: 'nativerender',
     title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
     detail:
@@ -744,6 +761,8 @@ const runners: Runner[] = [
           : undefined,
         camera: args?.camera === true,
         frame: args?.frame === true,
+        audioChannels:
+          typeof args?.audioChannels === 'number' ? args.audioChannels : undefined,
         cq:
           args?.cq === 'off'
             ? 'off'

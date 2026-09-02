@@ -23,7 +23,12 @@ const TICK_STEPS_MS = [
 ]
 const MIN_TICK_PX = 64
 
-function startDrag(e: React.PointerEvent, onMove: (clientX: number) => void) {
+function startDrag(
+  e: React.PointerEvent,
+  onMove: (clientX: number) => void,
+  /** Called once when the gesture ends, however it ends (up or cancel). */
+  onEnd?: () => void,
+) {
   const target = e.currentTarget as HTMLElement
   try {
     target.setPointerCapture(e.pointerId)
@@ -36,6 +41,7 @@ function startDrag(e: React.PointerEvent, onMove: (clientX: number) => void) {
     target.removeEventListener('pointermove', move)
     target.removeEventListener('pointerup', stop)
     target.removeEventListener('pointercancel', stop)
+    onEnd?.()
   }
   target.addEventListener('pointermove', move)
   target.addEventListener('pointerup', stop)
@@ -52,6 +58,8 @@ export function Timeline({
   timeMs,
   durationMs,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
   onEdit,
   proposal = null,
 }: {
@@ -62,6 +70,22 @@ export function Timeline({
   /** Output duration. */
   durationMs: number
   onSeek: (outputMs: number) => void
+  /**
+   * A DRAG ON THIS TIMELINE IS A SCRUB, and until 2026-09-02 it was not told
+   * so. Robert: "especially annoying noises when i drag now line in timeline
+   * around".
+   *
+   * B2 fixed exactly this noise for the transport Scrubber and the fix is the
+   * pair below: a held gesture pauses every element and ramps the preview bus
+   * to zero, so the picture follows the hand and nothing is heard. Only the
+   * Scrubber ever called it. Dragging the playhead HERE — or the ruler, or a
+   * lane — went straight to `seek`, so while playing, every pointermove landed
+   * past the audio resync threshold and each one hard-seeked and re-played
+   * every audio element: a fresh burst of sound per pointer event, which is
+   * the noise. Optional so a caller with no playback can still draw a timeline.
+   */
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   /** Parent clamps via clampEditState. */
   onEdit: (next: EditState) => void
   /** F5a: the PROPOSED cuts, drawn over the take. The controls that make and
@@ -202,6 +226,51 @@ export function Timeline({
   const seekAtClient = (clientX: number) => {
     // Output clock clamps to [0, duration]; outside-trim clicks land on the bound.
     onSeek(msAtClient(clientX) - editRef.current.globalTrimStartMs)
+  }
+
+  /**
+   * Every drag that MOVES THE PLAYHEAD — the ruler, a lane, the "now" line —
+   * goes through here rather than through startDrag directly, so all three are
+   * a scrub and none of them can be forgotten separately again.
+   *
+   * It also throttles to ~one seek per frame, which the transport Scrubber
+   * already did and this did not: a trackpad delivers pointermove at up to
+   * 120 Hz and each seek re-seeks every media element in the take, so an
+   * unthrottled drag queues work faster than the elements retire it. The first
+   * move of a gesture seeks immediately, so nothing feels slower.
+   */
+  const startSeekDrag = (e: React.PointerEvent) => {
+    onScrubStart?.()
+    let pending: number | null = null
+    let lastAt = 0
+    let timer = 0
+    const MIN_SEEK_MS = 16
+    const flush = () => {
+      timer = 0
+      const x = pending
+      pending = null
+      if (x === null) return
+      lastAt = performance.now()
+      seekAtClient(x)
+    }
+    startDrag(
+      e,
+      (clientX) => {
+        pending = clientX
+        if (performance.now() - lastAt >= MIN_SEEK_MS) flush()
+        else if (!timer) timer = window.setTimeout(flush, MIN_SEEK_MS)
+      },
+      () => {
+        if (timer) {
+          clearTimeout(timer)
+          timer = 0
+        }
+        // The last position the hand reached must land, or the playhead stops
+        // one throttle window short of where it was let go.
+        flush()
+        onScrubEnd?.()
+      },
+    )
   }
 
   /**
@@ -487,7 +556,7 @@ export function Timeline({
         <div
           ref={trackRef}
           className="tl__ruler"
-          onPointerDown={(e) => startDrag(e, seekAtClient)}
+          onPointerDown={(e) => startSeekDrag(e)}
         >
           {width > 0 &&
             ticks.map((t) => (
@@ -546,7 +615,7 @@ export function Timeline({
                   <Icon name={ce.enabled ? 'eye' : 'eye-off'} size={14} />
                 </button>
               </div>
-              <div className="lane__track" onPointerDown={(e) => startDrag(e, seekAtClient)}>
+              <div className="lane__track" onPointerDown={(e) => startSeekDrag(e)}>
                 {width > 0 &&
                   pieces.map((p) => {
                     const left = x(p.startMs)
@@ -792,7 +861,7 @@ export function Timeline({
           <div
             className="tl__playhead"
             style={{ left: x(playheadRecMs) }}
-            onPointerDown={(e) => startDrag(e, seekAtClient)}
+            onPointerDown={(e) => startSeekDrag(e)}
           />
         </div>
       )}

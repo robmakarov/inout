@@ -659,3 +659,36 @@ on Robert's real screen: nothing in that family is built before the census repor
 AGENT RECOMMENDATION, not his ruling, so his veto stands open: 10 (record the page not the pixels —
 a different product, Phase 6), 13 (every take at 60 by interpolation — capture at 60 instead), 19
 (shared math in Rust — inside P4 or not at all).
+
+2026-09-02 robert (7) — THE CEILING RULING, and it outranks any scope instinct: "celling must be
+raised to maximum than and always must try to push it above maximum, thats how product really build,
+not your stupid mvp limitations or whatever claude developers puted on you, when we achive perfection
+of all capabilitites we can see new horizons for product evolvment, so we must use all we can reach
+all the time, just keep it elastic too, if some shit can only work on top system and hardware we must
+not reject it also". Consequences: (a) "MVP" is NEVER a reason to scope a capability down; the target
+is the platform's maximum and then past it. (b) A capability that runs only on top hardware SHIPS —
+capability-gated with the elastic fallback underneath; it is never rejected for being unreachable on
+weak machines. (c) P4/native (ideas 17/18) is not "later", it is the DIRECTION, because the browser's
+walls are the present ceiling. (d) Idea 19 (shared math in Rust) is un-demoted — it belongs INSIDE
+P4, not nowhere. (e) The frozen rule is unchanged: elastic everywhere, current path as the fallback,
+the engine never refuses a press.
+
+2026-09-02 robert (8) — EVERY MOVEMENT IS KEPT (hard rule). On the changed-rectangle atlas: "all of
+micro movements like small cursor movement still must be kept, only users decides what is irrelavant
+to him, so keeping even smallest movements is rule". So for EVERY change-detection path: anything that
+changed at all is kept — no threshold, no "too small to matter" heuristic, ever. Binds idea 16, idea 1,
+X17's census (cursor-only and text-field-only changes are counted as REAL change, never noise) and
+AI1's keyframe picker, whose dropped small-change frames are now a defect by ruling, not a tuning knob.
+
+2026-09-02 robert (9) — X16 SPECULATIVE SEAMS DROPPED; RENDER SPEED PROMOTED INSTEAD. "i dont feel
+like its good, triming goes back and forth all the time" — a pre-cut guess is worth nothing when the
+trim keeps moving. X16 is out of Phase 1. His actual complaint is the one to answer: "render from last
+take was so slow so i feel like we need review render process very much" → R1, review the whole render
+path end to end, find where the time goes, before proposing any cleverness around it.
+
+2026-09-02 robert (10) — remaining verdicts from the idea review: idea 1 (perfect-text capture) = a v2
+experiment, and he sees a second use for it — "feels like something that can be used for collaboration
+with ai too" (a tile stream already says WHAT CHANGED, which is what an agent needs and what video
+hides) · idea 15 (zoom proposals) REJECTED: "bullshit, excatly the shit that must not go unaproved,
+features for users" · idea 11 (name the size) REJECTED: "user only use quality slider".
+OPEN QUESTION he raised, unanswered: can many recordings run at once from one Chrome?

@@ -53,7 +53,7 @@ detector, measured by X17 · 17 → P4 · 20 → E2 · 28 → J1 · 29 → C1 ·
 LANE + T1 (40 also ruled: the report card is an agent/dev surface, never a user one) · 43 · 44 · 45 → C7.
 
 ### Promoted to Phase 1 by this review — specs and gates in .ai/TASKS
-2 → H7 self-manifesting media files · 3 → X16 speculative seams · 21 → E3 deadline-paced background work ·
+2 → H7 self-manifesting media files · 21 → E3 deadline-paced background work ·
 22 → G7 main-thread lateness on the report card · 25 → M4 temporal-layers probe. Plus two probes that were
 buried inside heavy tasks and each answer an OPEN Phase-1 bug: X14a (`VideoFrame.metadata().captureTime` —
 the string appears NOWHERE in src/; the anchor is still read-time `performance.now()`, measuredVideo.ts:229)
@@ -81,10 +81,16 @@ the census IS the cheap half of trying it.
 26 two devices, one take — the full approved shape is in "Later — approved shapes" above · UX new mode · heavy · needs C1-C3 + J1
 27 streaming out: composed stage as a track to any WHIP ingest, same link as 26 · UX new mode · medium · after 26
 
+### DEAD by Robert's word 2026-09-02 — do not re-propose
+3 speculative seams (pre-cut at silences while idle) — "i dont feel like its good, triming goes back and forth all the time". A pre-cut guess is worthless when the trim keeps moving. What he actually wants instead: R1, review the render path, it was too slow on his last take.
+11 name the size (type an exact target file size) — "bullshit, user only use quality slider".
+15 zoom proposals from pixel change — "bullshit, excatly the shit that must not go unaproved, features for users". The delta detector itself survives ONLY as X17's measurement and AI1's index, never as a user-facing suggestion.
+
 ### Demoted 2026-09-02 (agent recommendation on review, Robert can veto) — cost now, payoff only later
 10 record the page not the pixels (DOM/description stream, pixels only for canvas/video/iframes) — this is a DIFFERENT PRODUCT, not an engine change; it belongs with Phase 6 reshaping and still needs AI2's vehicle (extension/snippet/P4).
 13 every take at 60 (scroll-aware interpolation, local model for camera) — a model on an 8 GB machine to fix what capturing at 60 fixes at the source; revisit only if takes recorded below 60 turn out to be common.
-19 shared math in Rust → WASM + native (resampler, loudness, echo ruler, tile hashing, governor) — buys nothing until P4 exists and costs a second toolchain now; start it INSIDE P4 or not at all.
+19 shared math in Rust → WASM + native — UN-DEMOTED by the ceiling ruling (DECISIONS robert (7)): it belongs INSIDE P4, not nowhere.
+NOTE on 1 and 16 after the ceiling ruling and the every-movement rule: idea 1 is a v2 experiment with a second reason to exist — Robert 2026-09-02: "feels like something that can be used for collaboration with ai too" (a tile stream already states WHAT CHANGED, which is what an agent needs and what a video hides). Idea 16 stays alive but is now bounded: any tile that changed AT ALL is kept, cursor twitches included; no threshold is permitted, so its saving must come from the encoder, never from discarding movement.
 
 ### Idea outside the 45, kept
 - OCR text selection in the paused player (Robert 2026-08-29: "select text from video" while paused): OCR the paused frame locally (zero tokens), transparent selectable spans over the stage scaled with its transform, cached per frame; degrades to today. Open: WASM OCR size vs the PWA budget · the cloud player · feeding the For-AI index. → Phase 4 as D-OCR.

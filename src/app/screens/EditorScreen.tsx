@@ -421,6 +421,8 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           timeMs={pb.timeMs}
           durationMs={pb.durationMs}
           onSeek={pb.seek}
+          onScrubStart={pb.scrubStart}
+          onScrubEnd={pb.scrubEnd}
           onEdit={(next) => setEditState(clampEditState(recording, next))}
           proposal={proposal}
         />

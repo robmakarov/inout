@@ -72,6 +72,45 @@ const PAUSED_SEEK_MS = 15
 const GAIN_RAMP_S = 0.01
 
 /**
+ * WAIT FOR A STARVED ELEMENT INSTEAD OF CORRECTING IT — Robert 2026-09-02, on a
+ * 124-minute take: "on edit screen still small noises in sound even after
+ * export is done", "tab audio feels little not synched with video, video less
+ * than second or about so slower".
+ *
+ * B2 named the mechanism and bounded the damage: a COLD DECODE stalls an
+ * element, `currentTime` stops while the master clock runs on, drift opens, and
+ * the correction — a slew, or a muted hard seek — is what is heard. It then
+ * removed the cause for takes small enough to hold in memory (mediaUrl.ts warms
+ * an audio channel up to 64 MB). A two-hour opus channel is ~115 MB, so a long
+ * take gets no warm-up at all and the whole class comes back: it is exactly the
+ * takes that stall most that are least protected.
+ *
+ * The cause cannot be removed for a take of any length — a 7 GB screen channel
+ * is never going in the heap — so the CORRECTION goes instead. A master clock
+ * that outruns its slowest renderer is the bug; one that waits for it is what
+ * every player does. While any element that should be playing has nothing to
+ * play, the clock holds and every element is paused, so nothing drifts, nothing
+ * is seeked, and nothing is slewed. The picture and the sound stay locked
+ * together — which is the same defect seen from the other side, a video running
+ * up to a second behind its audio because the video element is the one starving.
+ *
+ * BOUNDED, because a channel can also be permanently unreadable and a preview
+ * that waits forever for it is worse than one that glitches. Past the bound the
+ * hold is abandoned and playback carries on exactly as it did before this
+ * existed, with a line on the console saying which channel did not come back.
+ *
+ *   ?stallhold=0   restores the old correct-through-the-stall behaviour.
+ */
+const STALL_HOLD_MAX_MS = 3000
+/** HTMLMediaElement.HAVE_FUTURE_DATA — below this there is no next frame. */
+const HAVE_FUTURE_DATA = 3
+
+function stallHoldEnabled(): boolean {
+  if (typeof location === 'undefined') return true
+  return new URLSearchParams(location.search).get('stallhold') !== '0'
+}
+
+/**
  * Preview loudness parity: what you hear in the editor is what the export will
  * sound like. Audio elements route through element → channelGain (the export's
  * 1/N multi-source headroom) → makeup (the export's loudness normalization) →
@@ -187,6 +226,11 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
   const playingRef = useRef(false)
   /** True for the life of a scrubber drag — see Playback.scrubStart. */
   const scrubbingRef = useRef(false)
+  /** True while the clock is held waiting for a starved element (see above). */
+  const holdingRef = useRef(false)
+  /** When the current hold started, ms on the performance clock; 0 = not held. */
+  const holdSinceRef = useRef(0)
+  const stallHold = useRef(stallHoldEnabled())
   const timeRef = useRef(0)
   const editRef = useRef(edit)
   const durRef = useRef(outputDurationMs(edit))
@@ -287,7 +331,9 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
       // A scrub takes the PAUSED branch even mid-playback: each element is
       // seeked and held, so the picture follows the drag and no element is
       // ever asked to play a fragment from a position the drag already left.
-      const live = playingRef.current && !scrubbingRef.current
+      // A HOLD takes neither branch: see `holdAll` below. Nothing is seeked
+      // during a hold, because a seek is the very thing being avoided.
+      const live = playingRef.current && !scrubbingRef.current && !holdingRef.current
       for (const ch of recording.channels) {
         const el = els.current.get(ch.id)
         if (!el) continue
@@ -324,6 +370,11 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
               el.playbackRate = Math.min(base * limit.up, Math.max(base * limit.down, rate))
             }
             if (el.paused) void el.play().catch(() => {})
+          } else if (holdingRef.current) {
+            // Held: park everything where it is. The starved element gets the
+            // thread back to fill its buffer, and the healthy ones stop so
+            // they cannot walk away from it.
+            if (!el.paused) el.pause()
           } else {
             el.playbackRate = base
             if (Math.abs(drift) > PAUSED_SEEK_MS) el.currentTime = src / 1000
@@ -383,6 +434,54 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     sync(timeRef.current)
   }, [edit, sync])
 
+  /**
+   * Is any element that OUGHT to be playing unable to? Sets/clears the hold and
+   * answers whether the clock must wait.
+   *
+   * `readyState < HAVE_FUTURE_DATA` is the honest question — the element has no
+   * next frame — and it is asked only of channels the edit has material for at
+   * this instant, so a channel that is legitimately silent here never holds the
+   * take. An element that has reached its own end is not starving either: it is
+   * finished, and waiting for it would stop the take on its last channel.
+   */
+  const starving = useCallback(
+    (now: number): boolean => {
+      let stalled: HTMLMediaElement | null = null
+      let stalledId = ''
+      for (const ch of recording.channels) {
+        const el = els.current.get(ch.id)
+        if (!el) continue
+        if (channelSourceTimeAt(recording, editRef.current, ch.id, timeRef.current) === null) continue
+        if (el.ended) continue
+        if (el.readyState >= HAVE_FUTURE_DATA) continue
+        stalled = el
+        stalledId = ch.kind
+        break
+      }
+      if (!stalled) {
+        holdingRef.current = false
+        holdSinceRef.current = 0
+        return false
+      }
+      if (holdSinceRef.current === 0) holdSinceRef.current = now
+      if (now - holdSinceRef.current > STALL_HOLD_MAX_MS) {
+        // Give up rather than freeze: past the bound this is not a stall, it is
+        // a channel that is not coming back.
+        if (holdingRef.current) {
+          console.warn(
+            `[preview] the ${stalledId} channel has had nothing to play for ` +
+              `${Math.round(now - holdSinceRef.current)} ms — playing on without it`,
+          )
+        }
+        holdingRef.current = false
+        return false
+      }
+      holdingRef.current = true
+      return true
+    },
+    [recording],
+  )
+
   // Master clock. rAF alone FREEZES in a hidden tab while the audio elements
   // play on — the clock and the sync loop stop, audio walks many seconds ahead
   // of the frozen video, and on return everything is hard-yanked back ("audio
@@ -397,6 +496,14 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
       // between pointer events and fights the drag for the position.
       if (scrubbingRef.current) {
         last = now
+        return true
+      }
+      // WAIT FOR THE SLOWEST RENDERER (see STALL_HOLD_MAX_MS above). Checked
+      // before the clock moves, so a starved element never opens a drift that
+      // something then has to correct audibly.
+      if (stallHold.current && starving(now)) {
+        last = now
+        sync(timeRef.current)
         return true
       }
       const t = Math.min(durRef.current, timeRef.current + (now - last))
@@ -423,8 +530,12 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     return () => {
       cancelAnimationFrame(raf)
       clearInterval(iv)
+      // A hold belongs to a playing clock; leaving it set would make the next
+      // sync() take the hold branch and park every element forever.
+      holdingRef.current = false
+      holdSinceRef.current = 0
     }
-  }, [playing, sync])
+  }, [playing, sync, starving])
 
   const play = useCallback(() => {
     if (timeRef.current >= durRef.current) {
