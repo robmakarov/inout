@@ -638,3 +638,11 @@ same build on a different address and press record there ("lets try your shit wi
 adress, anything to make it gone"). If it records while the main address is stuck, the per-site
 theory is proven and the origin becomes the lever to design around; if it wedges too, the theory is
 dead. The rulings that stand: no held share, no user instructions, no console, no System Settings.
+2026-09-02 robert (5) — THE ON-TOP PANEL IDENTIFIED: a Document Picture-in-Picture recorder window
+(the `documentPictureInPicture` API — Chrome/Edge 130+, Firefox 151+, secure context) floating above
+every app while a take runs. MVP by his word ("thats mvp too"). Probed off-repo with a throwaway rig
+(~/Downloads/inout-dpip-test.html): the browser paints a title bar CSS cannot reach (34 CSS px on
+macOS Chrome, 0 on the other sides), the origin string in that bar cannot be hidden, there is no
+icon API, script cannot resize or move the window, and the minimum size floor needs a real drag to
+measure (automation makes Chrome ignore the requested size). Nothing of it is in the repo yet; it
+becomes a task in the phase-1 roadmap rewrite.
