@@ -727,6 +727,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'previewstarve',
+    title: 'Why does the editor\'s audio starve on a long take, and what makes it stop?',
+    detail:
+      'Robert 2026-09-02: "no waiting, we are trying to fix all waiting, not tolerate it." B2 established that a channel blob reaches the element as an OPFS-backed File and the FIRST pass over any region pays a disk read, and fixed it by reading the file into memory below 64 MB — which is 68 minutes of opus, so the longest takes get nothing. This jumps into regions the element has never touched and times how long until it is ACTUALLY playing, three ways: the OPFS file as shipped (cold), the same file read end to end and discarded first (warmed — no heap held, the OS page cache does the work), and the whole file copied into memory (B2\'s fix uncapped). Each lane gets its own fixture and cold runs first, or one lane\'s page cache answers for the next. {"minutes":124}.',
+    run: async (args) => {
+      const { runPreviewStarve } = await import('../perf/previewStarve')
+      return runPreviewStarve({
+        minutes: typeof args?.minutes === 'number' ? args.minutes : undefined,
+        probes: typeof args?.probes === 'number' ? args.probes : undefined,
+        rebuild: args?.rebuild === true,
+      })
+    },
+  },
+  {
     id: 'editoropen',
     title: 'Why is the editor black for a long time after a long take?',
     detail:

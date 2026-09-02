@@ -727,3 +727,18 @@ and at 2 hours. The architecture has to make length and edits IRRELEVANT: work p
 actually changed, never to how long the take is. That is J1/RENDER-CACHE, and it is now the shape the
 export must take rather than one option among three. Same family as robert (8): the answer is never a
 guess about what the user will do.
+
+2026-09-02 robert (15) — TAKE RATE CONTROL AWAY FROM CHROME. On learning the capture encoders run in
+bitrate mode so the browser decides what detail to discard: "fight this chrome motherfucker, i bet
+other platforms will be even nastier". So idea 6 (quantizer-mode capture) is not a size question, it
+is a CONTROL question: no platform's private rate control may be the thing deciding what is lost from
+his picture. His prediction about other platforms is also an argument for P4 — VideoToolbox exposes
+per-frame quality bounds directly, so the native core is where this fight is actually won.
+Also ruled, on the 60→30 rate ladder: "i hope its smooth way like water, like 59 58 57, not jump to
+30, or it breaks elastic rules". The ladder today is exactly two rungs, 60 ⇄ 30 (captureLadder.ts:86,
+floor is his own earlier "not less than 30 fps i guess"). ANSWER OWED IN THE BUILD, not in prose:
+frame rate is a quantized dial by physics — a 60 Hz source can only be sampled evenly at its divisors
+(60/30/20/15), and 57 fps means three unevenly dropped frames a second, which reads as judder and
+looks WORSE than a clean 30. So the "like water" rule binds the SYSTEM, not this one dial: the
+continuous dials (quantizer/quality, how much is composited, background work) are spent FIRST and the
+chunky one (rate) is the LAST resort. Today the ladder is an early response, which is the defect.
