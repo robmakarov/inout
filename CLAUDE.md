@@ -37,7 +37,7 @@ current path as fallback); the engine never refuses a record press.
 - **Live: https://inout-kappa.vercel.app — Vercel auto-builds `main` on push. THIS is where agents
   verify.** `preview_start { url: "https://inout-kappa.vercel.app/?synthetic=1" }` and drive it; the
   deployed build is the working copy. Test knobs (`?dead=`, `?die=`, `?killenc=`, `?slowstop=`) are in
-  docs/FLAGS.md; `?slow=` is reported DEAD CODE (G6e) — do not rely on it until G6 resolves it. Verify
+  docs/FLAGS.md; `?slow=` is LIVE (G6e measured it on prod: 183 ms → 6079 ms with `slow=mic:6000`). Verify
   in the app, not from the code — three sessions in a row shipped capture fixes "argued from the
   ordering" and the bug survived all three. https://inout-kappa-two.vercel.app is the same build on a
   second ORIGIN, used only as the screen-wedge discriminator (docs/SCREEN_WEDGE.md).
