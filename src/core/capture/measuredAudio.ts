@@ -241,6 +241,12 @@ export async function startMeasuredAudioCapture(opts: {
    * the file just stops partway with no signal to the user. */
   onFatal?: (err: Error) => void
   /**
+   * H1 harness (`?killenc=mic:9000`). Milliseconds until this channel's encoder
+   * is made to report failure through the very `fatal()` a real one reaches.
+   * An audio channel has no worker, so `?killworker=` does not apply to it.
+   */
+  killEncoderInMs?: number
+  /**
    * Live PCM tap (task O2). Called once per worklet batch with the same samples
    * that go to the encoder, before any encode. `startFrame` is channel-local
    * (sample 0 = first live sample); `startOffsetMs` places that sample on the
@@ -435,6 +441,11 @@ export async function startMeasuredAudioCapture(opts: {
     } catch {
       /* listener threw */
     }
+  }
+  if (opts.killEncoderInMs !== undefined && opts.killEncoderInMs > 0) {
+    // H1 harness. One-shot, uncleared: a take that ends first has already had
+    // its context closed and `fatal` is a no-op after the first call anyway.
+    setTimeout(() => fatal(new Error('induced encoder error (?killenc)')), opts.killEncoderInMs)
   }
   const sinkStream = new WritableStream<StreamTargetChunk>({
     async write(chunk) {

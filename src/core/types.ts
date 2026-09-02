@@ -277,6 +277,18 @@ export interface Recording {
    */
   lost?: ChannelLoss[]
   /**
+   * H1 — WHERE THE TAKE SURVIVED A COMPONENT DEATH, AND WHAT IT COST.
+   *
+   * `lost` is for a channel that is GONE. This is for one that came back: an
+   * encoder that failed, a worker that died, a recorder that errored — the
+   * segment was closed on the spot and the next one opened on the same live
+   * device, so the kind runs the whole take with a hole in it instead of
+   * stopping dead. One entry per seam, stamped on the same timeline as
+   * `channels[].startOffsetMs`, carrying the unrecorded gap. Absent on every
+   * take that never had to do it, which is every healthy take.
+   */
+  seams?: SegmentSeam[]
+  /**
    * UI1 — WHERE THE CAMERA PiP WAS WHEN THE TAKE STOPPED, if it was moved
    * during capture. The composite holds this pose, so the editor has to open
    * with it or the preview stops predicting the file (the default export
@@ -332,6 +344,35 @@ export interface ChannelLoss {
   reason: 'ended' | 'never-delivered'
   /** How long the take ran on after the loss. */
   lostMs: number
+}
+
+/**
+ * H1. One contained component death: the boundary between the segment that
+ * died and the one that replaced it. Descriptive only — the take already
+ * continued; this is what says where the hole is.
+ */
+export interface SegmentSeam {
+  kind: ChannelKind
+  /**
+   * Recording-timeline ms at which the closed segment's last sample sits.
+   * Rebased with the channels, so it is directly comparable to `startOffsetMs`.
+   */
+  atMs: number
+  /**
+   * The unrecorded gap, ms: how long this kind had no file open. O16 measured
+   * the same move at 69 ms and F6's pause seams at 99-218 ms; anything much
+   * larger is a drain that did not finish in budget and is worth reading as a
+   * defect rather than as a seam.
+   */
+  gapMs: number
+  /**
+   * 'encoder-error'  — the encoder reported failure (VideoEncoder's own `error`
+   *                    callback, a muxer write that threw, measuredAudio's
+   *                    `fatal`). The worker, if there is one, is alive.
+   * 'worker-death'   — `worker.onerror`: the worker itself is gone.
+   * 'recorder-error' — the MediaRecorder fallback lane fired `error`.
+   */
+  cause: 'encoder-error' | 'worker-death' | 'recorder-error'
 }
 
 /** S1. Descriptive only — nothing here changes a capture decision. */
@@ -558,6 +599,17 @@ export type CaptureEvent =
    * closes it if frames ever start.
    */
   | { type: 'channel-dead'; kind: ChannelKind }
+  /**
+   * H1 — A COMPONENT UNDER A LIVE CHANNEL DIED AND THE CHANNEL WAS REOPENED.
+   *
+   * Not `channel-error`, which is the sentence for a channel that is over
+   * ("saved up to this point only"), and not `channel-ended`, which is a
+   * device that is gone. The device here is still live and still recording:
+   * what happened is a hole of tens of milliseconds and a new file. The UI
+   * says so because the take is no longer one continuous file per kind, and
+   * because a user who is told nothing has no way to know that a hole exists.
+   */
+  | { type: 'channel-contained'; kind: ChannelKind; cause: SegmentSeam['cause']; gapMs: number }
   /** Session lost its last channel (or hit MAX_RECORDING_MS, if a cap is ever
    *  set again) and began stopping itself. UI should call stop() to collect the
    *  Recording — stop() is idempotent and always returns the same promise. */

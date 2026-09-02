@@ -1,4 +1,4 @@
-import type { CaptureConfig, ChannelKind, ChannelLoss } from '@core/types'
+import type { CaptureConfig, ChannelKind, ChannelLoss, SegmentSeam } from '@core/types'
 import type { Capabilities } from '@core/capabilities'
 import type { IconName } from '@app/components/Icon'
 
@@ -71,6 +71,45 @@ export function endedChannelMessage(kinds: readonly ChannelKind[], caps: Capabil
   const names = kinds.map((k) => channelLabel(k, caps)).join(' & ')
   const verb = kinds.length > 1 ? 'have' : 'has'
   return `${names} ${verb} stopped — the take is still recording everything else.`
+}
+
+/**
+ * H1 — WHAT A CONTAINED COMPONENT DEATH SAYS WHILE THE TAKE IS STILL RUNNING.
+ *
+ * Not the dead-channel sentence and not the ended-channel one: this channel is
+ * recording RIGHT NOW. What the user needs to know is that the machinery under
+ * it fell over, that the product caught it, and that a fraction of a second is
+ * missing — said once, without an instruction, because there is nothing for
+ * them to do and the worst outcome here would be someone stopping a take that
+ * is fine.
+ *
+ * WORDING IS ROBERT'S, on H4's precedent (B4's gate). This is the proposal.
+ */
+export function containedChannelMessage(
+  kinds: readonly ChannelKind[],
+  caps: Capabilities,
+): string {
+  const names = kinds.map((k) => channelLabel(k, caps)).join(' & ')
+  const verb = kinds.length > 1 ? 'were' : 'was'
+  return `${names} ${verb} interrupted and restarted itself — a fraction of a second is missing there. The take is still recording.`
+}
+
+/**
+ * H1 — THE SEAMS, AFTER THE TAKE. One line per contained death, naming the
+ * instant and the hole, for the same reason the loss lines name theirs: the
+ * file plays through the seam without a hitch and there is no other way to
+ * learn it happened.
+ */
+export function seamMessages(
+  seams: readonly SegmentSeam[],
+  caps: Capabilities,
+): { kind: ChannelKind; message: string }[] {
+  return seams.map((sm) => ({
+    kind: sm.kind,
+    message:
+      `${channelLabel(sm.kind, caps)} stopped recording for ${sm.gapMs} ms at ${atStamp(sm.atMs)} ` +
+      `and restarted itself — the rest of the take is there.`,
+  }))
 }
 
 /** m:ss, for a position inside a take. */
