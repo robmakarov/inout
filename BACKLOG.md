@@ -7,6 +7,14 @@ technical defects by severity. Done items get deleted, not archived.
 ## Inbox
 
 - (dump here)
+- **[P2 · gate] the oracle's spur gate moves 25 dB with machine load, so a red spur is not
+  attributable to a commit on its own.** Measured 2026-09-02 during B9: three consecutive
+  `spur -35.0 to -36.3 dB > -40 dB` FAILs (plus one `export throughput 0.95x < 1x` on v1) at load
+  average 15.2, on a commit that read -62.3 dB an hour earlier. Four INTERLEAVED runs at load 7-9,
+  plain main against the same branch, read main -50.7/-60.0 and the branch -51.7/-54.2, all PASS —
+  and plain main read -59.4 in the same high-load window. Either the spur measurement needs to be
+  load-insensitive, or the runner has to record the load with the verdict so a red reading can be
+  triaged instead of argued. Same family as the merge gate's cold-run flakiness (G lane).
 - **[P2 · technical] `?slow=` is dead code, and both CLAUDE.md and docs/FLAGS.md sell it as working.**
   Found 2026-09-02 while B9 needed to force a cold channel: `parseSlowChannels` (src/core/capture/synthetic.ts)
   has NO caller outside its own test — `?synthetic=1&slow=screen:600,camera:600` changed nothing,

@@ -3194,6 +3194,34 @@ anchor is the honest one about the take is still B7's question and is still
 open; the defect this task removes is the DISCARD, which was wrong under either
 answer.
 
+8 · RE-RUN ON THE MERGE COMMIT, because evidence has to be about what ships.
+H2b/H5 landed on main while this branch was measuring, and they change the same
+`doStop` this fix lives in, so every gate was run again after merging them in.
+  · `npm run exp -- x15c`, four takes, ONE OF THEM LEADING: true offset
+    -73.2 ms, take carries -73, 0.2 ms discarded, measured -0.25 frames
+    (spread 1, [0, 0, -1, 0]) — the gate met on the commit that ships. The three
+    non-leading takes read -0.75 / -0.75 / -1.00.
+  · `npm run oracle` v2 PASS twice (sync 56.3/69.7 and 66.9/79.2 ms) ·
+    `--engine=v1` PASS (45.6/59.0 ms, compOff +346 ms).
+  · `npm run oracle:long` PASS, 189 s: sync 46.6/73.6 ms, **instant maxAbs
+    85.612 · trimmed maxAbs 84.615**, compOff +108 ms, jump 0.034. Inside the
+    90 ms band and below all five runs of the recorded baseline, same verdict as
+    the pre-merge cell (83.2 / 82.1).
+  · typecheck clean · 89 files, 1002 tests green.
+
+9 · A GATE-HONESTY FINDING, FILED RATHER THAN SWALLOWED. The first three oracle
+runs after the merge FAILED — `spur -35.0 to -36.3 dB > -40 dB`, three in a row,
+plus one `export throughput 0.95x < 1x` on v1 — at load average 15.2 with
+another agent's build and test runs in the same repo. It looked exactly like a
+merge regression and it is not one: four INTERLEAVED runs at load 7-9, plain
+main against this branch, read main -50.7 / -60.0 dB and this branch -51.7 /
+-54.2 dB, all PASS, and plain main measured -59.4 dB in the same high-load
+window this branch read -35. The spur gate moves 25 dB with machine load, which
+means a red spur reading is not attributable to a commit without a same-window
+control. Filed to BACKLOG for the G lane. NOTHING in this fix can reach that
+metric anyway: every one of those runs had a POSITIVE compOff, and for a
+positive offset this code is bit-identical to what it replaced.
+
 
 NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):
 
