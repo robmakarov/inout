@@ -242,8 +242,12 @@ phase: MVP validation (2026-07-16)
   (`primaryRefused`, acquire.ts). `wedge` entries carry `channels` (his: screen+tab-audio+camera+mic,
   every time). Evidence: unit (displayInflight, wedgeJournal) + typecheck; the freeze fix can only
   be proven on his next wedge reload — the journal's next `block` (or its absence) is the proof.
-  Remaining moves are Robert's: the two endpoint levers, and the iframe-scoped request (DECISIONS
-  2026-09-01 (9), not ruled).
+  HIS RULINGS THE SAME MORNING (DECISIONS 2026-09-02 wedge): prevention, not the iframe — that lever
+  is PARKED until he says otherwise; and the zero-build test is approved: the same build now lives on
+  a second origin, https://inout-kappa-two.vercel.app (Vercel project domain, follows every deploy,
+  public), and when the main address is wedged he presses record THERE. Records = per-site theory
+  proven, the origin becomes the lever to design around (his call how); wedges = theory dead, the
+  two endpoint levers remain. Playbook: docs/SCREEN_WEDGE.md "THE STANDING TEST".
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …

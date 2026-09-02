@@ -15,6 +15,9 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
   local server to look at the same code is wasted tokens. Add `&slow=mic:6000` to reproduce a stuck
   arm without hardware. Verify in the app, not from the code — three sessions in a row shipped capture
   fixes "argued from the ordering" and the bug survived all three.
+  The same build is also served at https://inout-kappa-two.vercel.app — a second ORIGIN, on purpose:
+  it is the screen-wedge discriminator (docs/SCREEN_WEDGE.md "THE STANDING TEST"), with its own
+  storage and wedge journal. Do not point users or docs at it for anything else.
   **A TAB LEFT OPEN ACROSS A DEPLOY IS TESTING THE OLD BUILD.** The app is a PWA and its service
   worker serves `inout-v1` from cache, so a plain navigate can hand you the previous bundle while
   `verify-deploy` (which fetches, uncached) correctly says prod is current — an hour was lost to

@@ -51,6 +51,11 @@ explanation first).
 5. **Do not ask him for the console** (ruling 2026-08-30: "i will not do anything in
    console"). Everything the verdict needs is in step 1's journal; if it is empty, the
    machine is on a build older than 2026-08-30 evening.
+6. **Has the second-address test run?** Read the journal of the second origin too
+   (`https://inout-kappa-two.vercel.app/sw.js`, same keys). A good delivery there dated
+   inside a wedge run on the main address = the per-site theory is PROVEN. A `wedge` there
+   in the same run = DEAD. Either way, write the outcome into "THE STANDING TEST" below
+   before anything else is proposed.
 
 This doc exists because the fix history is spread across a dozen commits and nobody —
 including the agents writing the fixes — should ever reconstruct it again.
@@ -302,10 +307,34 @@ sticky banner that says what happened, that nothing was recorded, and that the a
 narrowed its request — the next press is the whole of their job. Every escalation is
 automatic: rung down, stale-refusal, one reload.
 
-## The two endpoint levers — both Robert's call, neither buildable without him
+## THE STANDING TEST — the second address (approved by Robert 2026-09-02)
+
+Chrome keys the stuck state to the SITE (his site-permission reset cured it; he reads it the
+same way: "i meant permission for site i guess"). So the same build is served on a second
+origin that follows every production deploy: **https://inout-kappa-two.vercel.app** (a
+project domain on the `inout` Vercel project, added 2026-09-02 over the CLI; public, no
+login wall — the `inout-git-main-…` alias is behind Vercel Authentication and is NOT usable
+for this). Its storage, prefs, grants and wedge journal are its own: the first press there
+asks for camera and mic once, and its journal is read at
+`https://inout-kappa-two.vercel.app/sw.js` exactly like the main one.
+
+The test: **while the main address is wedged, open the second address and press record.**
+- Records → the per-site theory is proven, and the origin is the lever to design around.
+  What that design is remains HIS call (see below); the iframe is parked.
+- Wedges too → the theory is dead; the stuck state is per profile or per machine, and the
+  remaining levers are the two endpoint ones.
+Nothing else is to be built on this until the test has run once.
+
+## The levers — all Robert's call, none buildable without him
 
 If the playbook's verdict lands on "below Chrome" (or on "Chrome's picker path" and
-upstream never fixes it), the page is out of moves and these are the only two left:
+upstream never fixes it), the page is out of moves and these are the only ones left:
+
+0. **The iframe-scoped request — PARKED, by ruling 2026-09-02** ("i need prevention, not
+   iframe, keep this idea as last resort if i say so"). A child page on a second address
+   does the asking; the button must live in it (Chrome opens the picker only for a click
+   inside the asking page); the stream must be handed back to the app. Never proposed by
+   a session again; he re-opens it or nobody does.
 
 1. **Hold the share across takes** (was O12). One picker per session instead of one per
    take — removes the failure surface instead of containing it, and his own field evidence

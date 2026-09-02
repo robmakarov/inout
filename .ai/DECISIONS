@@ -625,3 +625,16 @@ attempted earlier ("dont forget ui panel we tried for browsers that stays on top
 too" — identity to confirm) → phase 4 features+UI → phase 2 paid/infra/bug collection → 3 native →
 5 engine experiments + AI collaboration → 6 reshaping. Phase-1 "done" is his call; phase 2 may run
 in parallel only when he says so.
+
+robert 2026-09-02 (wedge) — PREVENTION, NOT THE IFRAME; THE SECOND-ADDRESS TEST IS APPROVED. Told
+that rung 3 (the bare request) wedged three times in a row and that the page has no request-side
+move left, and given the plain explanation of the iframe-scoped request (a child page on a second
+address does the asking; the button must live in it; the stream must be handed back), he ruled:
+"i need prevention, not iframe, keep this idea as last resort if i say so" — the iframe lever is
+PARKED, re-opened only on his word, never proposed by a session. He read the site-permission cure
+the same way this project does ("i meant permission for site i guess, so not page only"): the stuck
+state is per SITE in Chrome. And he approved the zero-build discriminator: when wedged, open the
+same build on a different address and press record there ("lets try your shit with different
+adress, anything to make it gone"). If it records while the main address is stuck, the per-site
+theory is proven and the origin becomes the lever to design around; if it wedges too, the theory is
+dead. The rulings that stand: no held share, no user instructions, no console, no System Settings.
