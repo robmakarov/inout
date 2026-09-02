@@ -33,6 +33,7 @@ import {
   RECOVERY_RATIO,
   ladderDecision,
   type LadderRung,
+  type LadderStepMeta,
 } from './captureLadder'
 import {
   pressureDetectorEnabled,
@@ -43,7 +44,7 @@ import {
   type PressureSignals,
 } from '../pressure'
 import { backgroundPaceEnabled, currentPace, noteTakePressure } from '../backgroundWork'
-import { noteElastic } from '../elasticLog'
+import { passDoor } from '../door'
 import { burstAbsorberEnabled } from './burstBudget'
 
 /**
@@ -196,6 +197,15 @@ export interface LiveCompositeV2Options {
     rung: LadderRung,
     reason: string,
     from: 'predicted' | 'measured' | 'probe',
+    /**
+     * M1 — WHAT THE LADDER SAW, travelling with the verdict so the door can
+     * record the step where it is APPLIED rather than where it was decided.
+     * This file used to write the elastic ledger line itself, at the moment of
+     * the verdict, and the session then refused to step in max mode: every max
+     * take under load carried a ledger saying its picture had halved when
+     * nothing had moved. The record belongs to the act, not the intention.
+     */
+    step: LadderStepMeta,
   ) => void
   /**
    * E1 — every pressure sample, four times a second, as read. The product does
@@ -459,22 +469,37 @@ export async function startLiveCompositeV2(
     const absorbed = signals.burst ?? 0
     if (absorbed > 0 && !burstOpen) {
       burstOpen = true
-      noteElastic(
+      passDoor(
         {
+          dial: 'quality',
+          decidedBy: 'absorber',
           layer: 'burst',
           action: 'shed',
           what: `encoder burst absorber engaged (${absorbed} frame(s) held this interval)`,
           why: reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : reading.line,
           ...(reading.leader ? { block: reading.leader.block } : null),
           level: reading.level,
+          measured: { framesHeld: absorbed, queueMean: signals.queueMean, cliff: signals.queueCliff },
+          nowMs: now,
         },
-        now,
+        () => {
+          /* the absorber is inside the worker: the act is the worker's, and the
+             door's job here is that it cannot happen unrecorded. */
+        },
       )
     } else if (absorbed === 0 && burstOpen) {
       burstOpen = false
-      noteElastic(
-        { layer: 'burst', action: 'restore', what: 'encoder queue back inside its steady bound', why: reading.line },
-        now,
+      passDoor(
+        {
+          dial: 'quality',
+          decidedBy: 'absorber',
+          layer: 'burst',
+          action: 'restore',
+          what: 'encoder queue back inside its steady bound',
+          why: reading.line,
+          nowMs: now,
+        },
+        () => undefined,
       )
     }
     if (!pressureOn) return
@@ -561,21 +586,15 @@ export async function startLiveCompositeV2(
       `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'} ` +
         `(${verdict.from}): ${verdict.reason}`,
     )
-    // E2's LAYER THREE, on the ledger. The picture is the last dial that may
-    // move and the one the ordering gate is about, so it is written with the
-    // block that decided it and the level that was read.
-    noteElastic(
-      {
-        layer: 'picture',
-        action: verdict.direction === 'down' ? 'shed' : 'restore',
-        what: `${previousFps} → ${verdict.rung.fps} fps (${verdict.from})`,
-        why: verdict.reason,
-        ...(verdict.block ? { block: verdict.block as HardwareBlock } : null),
-        ...(pressureLevel ? { level: pressureLevel } : null),
-      },
-      now,
-    )
-    options.onDegradeStep?.(verdict.rung, verdict.reason, verdict.from)
+    // E2's LAYER THREE GOES THROUGH THE DOOR (M1), and it is written by
+    // whoever APPLIES it — see the note on `onDegradeStep` above. The verdict
+    // travels with everything the ledger line needs.
+    options.onDegradeStep?.(verdict.rung, verdict.reason, verdict.from, {
+      direction: verdict.direction,
+      previousFps,
+      block: (verdict.block as HardwareBlock | undefined) ?? null,
+      level: pressureLevel,
+    })
   }
 
   function checkLadder(now: number, real: number, framesIn: number): void {

@@ -90,7 +90,21 @@
  *     whole take.
  */
 
-import { atLeast, type PressureLevel } from '../pressure'
+import { atLeast, type HardwareBlock, type PressureLevel } from '../pressure'
+
+/**
+ * M1 — WHAT TRAVELS WITH A VERDICT so that whoever APPLIES it can record it
+ * through the door. The ladder decides; the session acts; the ledger line
+ * belongs to the act, because a verdict the session refuses (max mode) is not a
+ * step and used to be written as one.
+ */
+export interface LadderStepMeta {
+  direction: 'down' | 'up'
+  /** The rate the take was running at when the verdict was formed. */
+  previousFps: number
+  block: HardwareBlock | null
+  level: PressureLevel | null
+}
 
 /** A rung is a RATE now, and nothing else. */
 export interface LadderRung {

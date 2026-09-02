@@ -10,6 +10,7 @@ import { sourceFrameEnabled } from '@core/frame'
 import { captureRateCeiling, rateForSurface } from '@core/rate'
 import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
+import { constrainThroughDoor, measuredFromSettings, passDoor } from '@core/door'
 import { detectPlatform } from '@core/platform'
 import { preemptiveRefusalAllowed } from './captureQuality'
 import { measuredEncoderThroughput } from './encoderBudget'
@@ -580,15 +581,31 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     const sizeCeiling = captureCeilingLongEdge()
     if (Number.isFinite(sizeCeiling) && long > sizeCeiling) {
       try {
-        await withTimeout(
-          track.applyConstraints({
-            width: { max: sizeCeiling },
-            height: { max: sizeCeiling },
-          }),
-          1500,
-          'applyConstraints(export ceiling)',
+        // M1 — through the door. This narrows the picture before the take has a
+        // clock; it read as nothing at all in every ledger the take carried.
+        const capped = await passDoor(
+          {
+            dial: 'resolution',
+            decidedBy: 'budget',
+            action: 'shed',
+            what: `screen capped to a ${sizeCeiling} long edge`,
+            why: 'past the largest export step — those pixels can never be exported (O6/F18)',
+            measured: measuredFromSettings(before),
+          },
+          async (ticket) => {
+            await withTimeout(
+              constrainThroughDoor(ticket, track, {
+                width: { max: sizeCeiling },
+                height: { max: sizeCeiling },
+              }),
+              1500,
+              'applyConstraints(export ceiling)',
+            )
+            const settings = track.getSettings()
+            ticket.note({ widthAfter: settings.width ?? null, heightAfter: settings.height ?? null })
+            return settings
+          },
         )
-        const capped = track.getSettings()
         console.info(
           `[capture] native-res capture: ${before.width}×${before.height} is past the largest export ` +
             `step (${sizeCeiling} long edge) — those pixels can never be exported, so ` +
@@ -613,10 +630,33 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
       : ceiling
     if (rate < ceiling && (now.frameRate ?? 0) > rate + 1) {
       try {
-        await withTimeout(
-          track.applyConstraints({ frameRate: { max: rate } }),
-          1500,
-          'applyConstraints(display rate budget)',
+        // M1 — through the door, and this is the one the audit called item (h)'s
+        // neighbour: a take is held below the rate the user asked for, before it
+        // starts, on a measurement of THIS machine. Correct behaviour; it simply
+        // had no voice anywhere a take could be read from.
+        await passDoor(
+          {
+            dial: 'rate',
+            decidedBy: 'budget',
+            action: 'shed',
+            what: `${now.frameRate ?? '?'} → ${rate} fps before the take started`,
+            why:
+              `${now.width}×${now.height} at ${ceiling} fps wants ` +
+              `${(((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6).toFixed(0)} Mpx/s and this ` +
+              `machine's encoder measured ${(measuredEncoderThroughput() / 1e6).toFixed(0)} Mpx/s (F15/O15)`,
+            measured: {
+              ...measuredFromSettings(now),
+              askedFps: ceiling,
+              wantMpxPerS: ((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6,
+              canMpxPerS: measuredEncoderThroughput() / 1e6,
+            },
+          },
+          (ticket) =>
+            withTimeout(
+              constrainThroughDoor(ticket, track, { frameRate: { max: rate } }),
+              1500,
+              'applyConstraints(display rate budget)',
+            ),
         )
         const want = ((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6
         const can = measuredEncoderThroughput() / 1e6
@@ -644,16 +684,34 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     }
   } else if (exceedsCaptureCeiling(before)) {
     try {
-      await withTimeout(
-        track.applyConstraints({
-          width: { max: CAPTURE_MAX_WIDTH },
-          height: { max: CAPTURE_MAX_HEIGHT },
-          frameRate: { max: captureRateCeiling() },
-        }),
-        1500,
-        'applyConstraints(display)',
+      // M1, AUDIT ITEM (h) — NOT A LIVE BUG, MADE LOUD. CAPTURE_MAX_* are
+      // derived from DEFAULT_EXPORT_SETTINGS with no independent justification,
+      // and native-res capture (the default) never reaches this branch. With
+      // `?nativeres=0` it is a 1080p cap on the user's screen, and now it says so.
+      const after = await passDoor(
+        {
+          dial: 'resolution',
+          decidedBy: 'budget',
+          action: 'shed',
+          what: `display capped to ${CAPTURE_MAX_WIDTH}×${CAPTURE_MAX_HEIGHT}@${captureRateCeiling()}`,
+          why: 'native-res capture is OFF, so the take is bound by CAPTURE_MAX_* (?nativeres=0)',
+          measured: measuredFromSettings(before),
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, track, {
+              width: { max: CAPTURE_MAX_WIDTH },
+              height: { max: CAPTURE_MAX_HEIGHT },
+              frameRate: { max: captureRateCeiling() },
+            }),
+            1500,
+            'applyConstraints(display)',
+          )
+          const settings = track.getSettings()
+          ticket.note(measuredFromSettings(settings))
+          return settings
+        },
       )
-      const after = track.getSettings()
       console.info(
         `[capture] display capped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
           `${after.width}×${after.height}@${after.frameRate ?? '?'}`,
@@ -691,12 +749,32 @@ async function ensureEvenDisplayDims(track: MediaStreamTrack): Promise<void> {
   const even = { width: evenDown(s.width), height: evenDown(s.height) }
   if (even.width === s.width && even.height === s.height) return
   try {
-    await withTimeout(
-      track.applyConstraints({ width: { max: even.width }, height: { max: even.height } }),
-      1500,
-      'applyConstraints(display even)',
+    // M1 — through the door. One pixel column, and it is still a resolution
+    // change: the take is not recorded at the size the source offered, and the
+    // reason (AVC cannot encode an odd side) belongs with the take.
+    const after = await passDoor(
+      {
+        dial: 'resolution',
+        decidedBy: 'geometry',
+        action: 'set',
+        what: `${s.width}×${s.height} → ${even.width}×${even.height} (odd side evened)`,
+        why: 'AVC subsamples chroma by two and REFUSES an odd side rather than rounding',
+        measured: measuredFromSettings(s),
+      },
+      async (ticket) => {
+        await withTimeout(
+          constrainThroughDoor(ticket, track, {
+            width: { max: even.width },
+            height: { max: even.height },
+          }),
+          1500,
+          'applyConstraints(display even)',
+        )
+        const settings = track.getSettings()
+        ticket.note(measuredFromSettings(settings))
+        return settings
+      },
     )
-    const after = track.getSettings()
     console.info(
       `[capture] ${s.width}×${s.height} has an odd side, which AVC cannot encode — asked for ` +
         `${even.width}×${even.height}, got ${after.width}×${after.height}`,

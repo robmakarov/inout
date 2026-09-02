@@ -5,6 +5,14 @@ import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate
 import { loadQualityStep } from '@core/qualityStep'
 import { noteTakeActive } from '@core/backgroundWork'
 import { startElasticLog, takeElasticLog } from '@core/elasticLog'
+import {
+  armDoor,
+  constrainThroughDoor,
+  measuredFromSettings,
+  openDoor,
+  passDoor,
+  takeDoorLog,
+} from '@core/door'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
@@ -63,7 +71,7 @@ import {
   type MeasuredAudioHandle,
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
-import { drainRecorder } from './recorderDrain'
+import { DRAIN_BUDGET_MS, drainRecorder } from './recorderDrain'
 import {
   MEASURED_VIDEO_MIME,
   canMeasureVideoCapture,
@@ -71,7 +79,7 @@ import {
   type MeasuredVideoHandle,
 } from './measuredVideo'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
-import type { LadderRung } from './captureLadder'
+import type { LadderRung, LadderStepMeta } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, probeDurationMs, writePendingManifest } from './recovery'
@@ -565,6 +573,12 @@ class Session implements CaptureSession {
    */
   async arm(): Promise<void> {
     const armT0 = performance.now()
+    // M1 — THE DOOR OPENS WITH THE ARM, NOT WITH THE PRESS. The two most
+    // consequential decisions this engine makes about a take are taken before
+    // it has a clock: O15's encoder budget narrows the screen, and F15's rate
+    // budget holds the frame rate down, both inside this method. They read as
+    // negative milliseconds in the take's ledger, which is what they are.
+    armDoor()
     // H6 — THE WARM STANDS DOWN, HERE, SYNCHRONOUSLY, BEFORE ANY AWAIT.
     // encoderWarm.ts pays the process's first-VideoEncoder cost at mount so a
     // take does not; press record while it is still paying and the two fight
@@ -1029,6 +1043,7 @@ class Session implements CaptureSession {
   private async stepDisplayDown(
     rung: LadderRung,
     reason: string,
+    step: LadderStepMeta,
   ): Promise<void> {
     const ch = this.channels.find((c) => c.kind === 'screen' && !c.ended)
     if (!ch) return
@@ -1042,12 +1057,36 @@ class Session implements CaptureSession {
       // `screen channel recorded 3024x1964 (the track said 2217x1440)`. And
       // his rule is the same rule: "if something needs to be dropped it must be
       // fps not resolution", "no screen proportion changes".
-      await withTimeout(
-        ch.track.applyConstraints({ frameRate: { max: rung.fps } }),
-        THROTTLE_BUDGET_MS,
-        `${ch.kind} to ${rung.label}`,
+      //
+      // M1 — AND IT GOES THROUGH THE DOOR, which is where the elastic ledger's
+      // picture line is now written: at the act, with the outcome, instead of
+      // at the verdict (liveCompositeV2's note on `onDegradeStep`).
+      const after = await passDoor(
+        {
+          dial: 'rate',
+          decidedBy: 'ladder',
+          layer: 'picture',
+          action: step.direction === 'down' ? 'shed' : 'restore',
+          what: `${step.previousFps} → ${rung.fps} fps`,
+          why: reason,
+          ...(step.block ? { block: step.block } : null),
+          ...(step.level ? { level: step.level } : null),
+          measured: measuredFromSettings(before),
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, ch.track, { frameRate: { max: rung.fps } }),
+            THROTTLE_BUDGET_MS,
+            `${ch.kind} to ${rung.label}`,
+          )
+          const settings = ch.track.getSettings()
+          // WHAT THE PLATFORM ACTUALLY GAVE, not what was asked for. Chrome
+          // agrees to a constraint and then hands back something else often
+          // enough that this is the difference between a ledger and a wish.
+          ticket.note({ fpsAfter: settings.frameRate ?? null })
+          return settings
+        },
       )
-      const after = ch.track.getSettings()
       console.info(
         `[capture] display ${before.frameRate ?? '?'} → ${after.frameRate ?? '?'} fps ` +
           `at ${after.width}×${after.height} (${reason})`,
@@ -1089,6 +1128,22 @@ class Session implements CaptureSession {
   private markCompositeUnusable(reason: string, blameEncoder = true): void {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
+    // M1, AUDIT ITEM (d) — SILENCE ONLY. Robert's split of 2026-09-02: this
+    // behaviour is CORRECT (the take is unharmed, the unedited export renders
+    // instead of copying), and what was wrong was that it happened with no
+    // flag, no grade and no line anywhere a take could be read from. So it is
+    // not changed, it is announced — through the door, like everything else.
+    passDoor(
+      {
+        dial: 'channels',
+        decidedBy: blameEncoder ? 'watchdog' : 'device',
+        action: 'shed',
+        what: 'the live composite stopped being recorded',
+        why: reason,
+        measured: { blamedOnTheEncoder: blameEncoder },
+      },
+      () => undefined,
+    )
     console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
     if (blameEncoder) this.noteEncoderCollapse(`the composite degraded: ${reason}`)
     else console.info(`[capture] not an encoder collapse (${reason}) — the budget is untouched`)
@@ -1155,6 +1210,9 @@ class Session implements CaptureSession {
     // clock, so every shed and every recovery is stamped relative to a press
     // rather than to a page load.
     startElasticLog(this.epoch)
+    // M1 — and the door takes the same clock, so an arming decision reads
+    // negative against the press and a step at minute 40 reads +2,400,000.
+    openDoor(this.epoch)
 
     for (const ch of this.channels) this.activateChannel(ch, startT0)
     console.info(
@@ -1402,6 +1460,25 @@ class Session implements CaptureSession {
       this.budgetDroppedComposite = true
       this.encoderPlan = drop.plan
       workingPlan = drop.plan
+      // M1 — THROUGH THE DOOR. This one is taken before the take has a clock and
+      // was invisible in every ledger the product had: a machine that once
+      // collapsed silently stopped recording a whole channel on every later
+      // take, and the only trace was one console line nobody reads.
+      passDoor(
+        {
+          dial: 'channels',
+          decidedBy: 'budget',
+          action: 'shed',
+          what: 'the live composite is not opened at all on this take',
+          why: drop.why,
+          measured: {
+            ceilingMpxPerS: ceiling / 1e6,
+            plannedMpxPerS: plan.pixelRate / 1e6,
+            newPlanMpxPerS: drop.plan.pixelRate / 1e6,
+          },
+        },
+        () => undefined,
+      )
       console.info(
         `[capture] encoder budget: the composite is NOT being recorded — ${drop.why}. ` +
           `New plan: ${describePlan(drop.plan)}. The unedited export re-renders instead of ` +
@@ -1421,15 +1498,34 @@ class Session implements CaptureSession {
     })
     if (!verdict) return
     try {
-      await withTimeout(
-        screenCh.track.applyConstraints({
-          width: { max: verdict.screenLongEdge },
-          height: { max: verdict.screenLongEdge },
-        }),
-        THROTTLE_BUDGET_MS,
-        'applyConstraints(encoder budget)',
+      const before = screenCh.track.getSettings()
+      const after = await passDoor(
+        {
+          dial: 'resolution',
+          decidedBy: 'budget',
+          action: 'shed',
+          what: `screen ${screen.width}x${screen.height} → long edge ${verdict.screenLongEdge}`,
+          why: verdict.why,
+          measured: {
+            ...measuredFromSettings(before),
+            ceilingMpxPerS: ceiling / 1e6,
+            plannedMpxPerS: workingPlan.pixelRate / 1e6,
+          },
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, screenCh.track, {
+              width: { max: verdict.screenLongEdge },
+              height: { max: verdict.screenLongEdge },
+            }),
+            THROTTLE_BUDGET_MS,
+            'applyConstraints(encoder budget)',
+          )
+          const settings = screenCh.track.getSettings()
+          ticket.note({ widthAfter: settings.width ?? null, heightAfter: settings.height ?? null })
+          return settings
+        },
       )
-      const after = screenCh.track.getSettings()
       // The runtime's own dimensions are what singleGenerationTake and
       // compositeFrame read, so they have to follow the track or the take
       // would be planned at one size and recorded at another.
@@ -1604,17 +1700,37 @@ class Session implements CaptureSession {
         // O6: the gentler rung of the same ladder — ask the SOURCE for less
         // before giving up on the composite. Only ever fires when native-res
         // capture is on, because otherwise the track is already at the floor.
-        onDegradeStep: (rung, reason) => {
+        onDegradeStep: (rung, reason, from, step) => {
           // MAX MODE DOES NOT STEP. The ladder still MEASURES — its verdict is
           // what tells the take it is behind, and O15 still files the collapse
           // against the plan — but nothing is taken away from the picture the
           // user asked for. What they get instead is dropped frames, reported
           // rather than hidden, which is the price max exists to let them pay.
           if (!rateLadderAllowed()) {
+            // M1 — A REFUSAL IS A DECISION. It used to be silent here while the
+            // elastic ledger, written one function earlier, said the picture
+            // had stepped: every loaded max take claimed a shed that never
+            // happened. Now the take says the ladder asked and max said no.
+            passDoor(
+              {
+                dial: 'rate',
+                decidedBy: 'ladder',
+                layer: 'picture',
+                action: step.direction === 'down' ? 'shed' : 'restore',
+                what: `${step.previousFps} → ${rung.fps} fps (${from})`,
+                why: reason,
+                ...(step.block ? { block: step.block } : null),
+                ...(step.level ? { level: step.level } : null),
+              },
+              (ticket) =>
+                ticket.refuse(
+                  'max mode: nothing steps down in max (Robert 2026-08-30, "max must not have ladder")',
+                ),
+            )
             this.noteEncoderCollapse(`the rate ladder wanted to step: ${reason}`)
             return
           }
-          void this.stepDisplayDown(rung, reason)
+          void this.stepDisplayDown(rung, reason, step)
         },
         onDegrade: (reason) => {
           this.markCompositeUnusable(`compositor v2: ${reason}`)
@@ -2751,14 +2867,27 @@ class Session implements CaptureSession {
           try {
             // Keep the frame SIZE exactly as it is — only the rate drops.
             // Re-constraining the resolution mid-file would change it mid-file.
-            await withTimeout(
-              t.applyConstraints({
-                ...(settings.width ? { width: { max: settings.width } } : {}),
-                ...(settings.height ? { height: { max: settings.height } } : {}),
-                frameRate: { max: TAIL_THROTTLE_FPS },
-              }),
-              THROTTLE_BUDGET_MS,
-              `${ch.kind} tail throttle`,
+            // M1 — through the door: it is a rate change like any other, and a
+            // ledger with a hole where the stop is cannot be read at stop.
+            await passDoor(
+              {
+                dial: 'rate',
+                decidedBy: 'drain',
+                action: 'set',
+                what: `${ch.kind} source throttled to ${TAIL_THROTTLE_FPS} fps for the tail drain`,
+                why: 'P0-tail: a MediaRecorder backlog can only be drained if the source stops feeding it',
+                measured: measuredFromSettings(settings),
+              },
+              (ticket) =>
+                withTimeout(
+                  constrainThroughDoor(ticket, t, {
+                    ...(settings.width ? { width: { max: settings.width } } : {}),
+                    ...(settings.height ? { height: { max: settings.height } } : {}),
+                    frameRate: { max: TAIL_THROTTLE_FPS },
+                  }),
+                  THROTTLE_BUDGET_MS,
+                  `${ch.kind} tail throttle`,
+                ),
             )
             throttled = true
           } catch (err) {
@@ -2772,6 +2901,37 @@ class Session implements CaptureSession {
           `[capture] ${ch.kind} drained in ${stats.drainMs}ms (+${stats.drainedBytes} B)` +
             `${stats.timedOut ? ' — TIMED OUT, the end of this channel is missing' : ''}`,
         )
+        // M1, AUDIT ITEM (b) — AND THIS IS THE HALF THAT WAS MISSING. The drain
+        // gives up after DRAIN_BUDGET_MS = 2000, records `timedOut`, and — until
+        // now — surfaced NOTHING: the take ended with the end of a channel not
+        // in the file and nothing anywhere said so. The budget itself is left
+        // exactly where it is (sizing it is a measurement, not a guess), but a
+        // take that hit it now says so where the report card can read it.
+        //
+        // WHICH PATH IT IS, confirmed rather than assumed (the audit asked):
+        // this drain runs ONLY on the MediaRecorder lanes — the filter above
+        // requires `ch.recorder`, and the default raw/measured path (X6 video,
+        // A1 audio) flushes its own encoder with no budget at all. Composite v1
+        // carries its own copy of the same 2 s. So (b) is a FALLBACK-LANE
+        // defect, not a default-path one.
+        if (stats.timedOut) {
+          passDoor(
+            {
+              dial: 'quality',
+              decidedBy: 'drain',
+              action: 'shed',
+              what: `the end of the ${ch.kind} channel is missing — the tail drain ran out of budget`,
+              why: `the MediaRecorder was still emitting after ${stats.drainMs} ms`,
+              measured: {
+                drainMs: stats.drainMs,
+                drainedBytes: stats.drainedBytes,
+                budgetMs: DRAIN_BUDGET_MS,
+                lane: 'mediarecorder',
+              },
+            },
+            () => undefined,
+          )
+        }
       }),
     )
   }
@@ -3197,6 +3357,10 @@ class Session implements CaptureSession {
       // Closes the ledger: whatever the take did is now the take's, and the
       // next press starts an empty one.
       const elastic = takeElasticLog()
+      // M1 — and the door's, which is wider: every decision this take made
+      // about itself, including the ones taken before the first frame and the
+      // ones nobody chose (Chrome's own adaptation).
+      const door = takeDoorLog()
       const stats: NonNullable<Recording['stopStats']> = {
         requestedFps: this.requestedRate,
         ...(mem?.usedJSHeapSize !== undefined ? { heapBytes: mem.usedJSHeapSize } : null),
@@ -3214,6 +3378,12 @@ class Session implements CaptureSession {
         // given up in, and an order cannot be read off one string.
         ...(elastic.events.length ? { elastic: elastic.events } : null),
         ...(elastic.droppedEvents ? { elasticDropped: elastic.droppedEvents } : null),
+        // M1 — THE DOOR'S LEDGER. `elastic` above is the order of defence, three
+        // layers of it; this is every change to rate, resolution, quality or
+        // which channels ran, with who decided it, what it was measured on, and
+        // whether it was applied, refused or failed.
+        ...(door.decisions.length ? { decisions: door.decisions } : null),
+        ...(door.droppedDecisions ? { decisionsDropped: door.droppedDecisions } : null),
       }
       recording.stopStats = stats
     } catch {
