@@ -436,8 +436,11 @@ it is built combine-ready:
           and `node scripts/editor-drag-cost.mjs` are the two cells; `?bgpace=0` is the fallback.
           Handoff under the task. LEFT BEHIND: BACKLOG P2 — the export panel's size probe, not the
           render, is what stalls the editor's first seconds (300 frames encoded on the main thread).
-  8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
-          below] not started until Robert says so, even with both prerequisites perfect.
+  8. M1   THE COMBINE — max + emergency elastic  [READY TO BUILD 2026-09-02 (Robert: "you can
+          work on it, just dont turn on elastic for max in app untill i say so") · ships
+          FLAG-GATED, OFF — THE DEFAULT FLIP alone stays Robert's · spec below]. His note is a
+          requirement: max-elastic is part of the ONE elastic system — E1's detector, dial and
+          seams, sampled from rawVideo.worker.ts at max — never a second implementation.
   9. O4-WebGPU + O5 remnants              [heavy] the render-floor levers. F16b is done, so this
           is unblocked — but read F16b's handoff first: the export a max+camera take needs is now
           usually FINISHED before it is asked for, which moves what a faster render floor is worth.
@@ -1403,16 +1406,21 @@ Worth ten minutes in whoever's next max session on real hardware.
 KNOBS: `?dead=<screen|camera>` and `?die=<kind>:<ms>` (from the record press, any kind, comma
 separated). docs/FLAGS.md carries both.
 
-## M1 THE COMBINE — max + emergency elastic [ROBERT-GATED ("but not until i say") + blocked on
-   A1 and E1 both perfect · Robert 2026-09-01: "when max is perfect and elastic is perfect we
-   will combine them too, so if loss will be there it will be minimal for seconds, be ready"]
+## M1 THE COMBINE — max + emergency elastic [READY TO BUILD 2026-09-02, DECISIONS robert (2):
+   the "but not until i say" gate was the DEFAULT, not the work — build now, ship flag-gated
+   OFF, elastic never engages at max in the app until Robert flips it · Robert 2026-09-01:
+   "when max is perfect and elastic is perfect we will combine them too, so if loss will be
+   there it will be minimal for seconds, be ready" · ONE elastic system, per his 2026-09-02
+   note: same detector, dial and seam machinery as E1; M1 lifts the sampling into
+   rawVideo.worker.ts, it does not fork the mechanism]
 At max, elastic stays OFF as a quality ladder and arms as an EMERGENCY FLOOR: when E1's predictive
 detector says starvation is COMING (never after it arrives), sacrifice in this order, certifying
 every event in the take: composite encoder (free — O15's first move already) → camera fps →
 screen fps 60→30 → resolution, LAST. AUDIO IS NEVER SACRIFICED — audio is KB/s against video's
 MB/s and its loss is the one Robert hears; a starved system drops video frames before one audio
 buffer. Recovery is O16's segmenting, seconds later, automatic. The bar is his sentence: loss
-minimal, for seconds. DO NOT START on the dependencies alone — Robert says when.
+minimal, for seconds. THE FLAG STAYS OFF AND THE DEFAULT FLIP IS ROBERT'S ALONE — a take at max
+with the flag off must be byte-identical to today at every gate.
 TECH CANDIDATE (2026-09-01 verdict pass, Robert: "add it to try for max elastic which is turned
 off for now"): temporal SVC — configure the max60 encoders L1T2 (30 fps base + 60 enhancement;
 CAPABILITY-PROBE isConfigSupported on Robert's Chrome FIRST, per codec, never rank from memory).

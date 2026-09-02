@@ -51,38 +51,20 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P1 — SEEN ONCE, H1's rig, 2026-09-02] **a channel whose measured stop misses the 5 s budget is
-  DELETED, not "kept with what reached disk".** One cell in four of
-  `node scripts/contain-check.mjs` came back with screen AND camera absent from the take entirely —
-  the report card said "screen was requested and never delivered a byte" about a channel whose own
-  console line had it armed at +120 ms and delivering 1920x1080 frames all take. The mechanism is in
-  plain sight in `session.ts doStop`: `Promise.all(channels.map(c => c.stopped))` is bounded at
-  STOP_BUDGET_MS (5000) and the warning it prints says "keeping what reached disk" — but the very
-  next lines are `kept = this.channels.filter(c => c.bytes > 0)` and
-  `if (c.bytes === 0) blobStore.remove(c.blobKey)`, and `bytes` is filled by the stop reply that just
-  timed out. So the file on disk (megabytes of it) is deleted and the take reports the channel as
-  never delivered. NOT H1's mechanism — the budget, the filter and the removal all predate it, and
-  three re-runs of the same cell passed with every channel full length — but H1's rig is what caught
-  it, and the trigger is load: the failing run was the fourth back-to-back Chrome and both raw
-  channels logged ~184 dropped frames. The fix is to read the bytes off DISK before deleting anything,
-  or to keep a channel whose blob is non-empty regardless of what its stop reply said.
-- [P1 — MEASURED, H2's floor probe, 2026-09-01] **a crash in the first ~5 seconds of a take
-  loses the WHOLE take, and in the first ~7 seconds loses the picture.** Eight single-kill
-  cells on prod, `node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000,7000,8000,10000,20000`:
-  at 2.8 / 3.3 / 4.2 s the pending manifest is NOT on disk and nothing is recoverable — no
-  Recording, no blobs, `takeCount 0` — because `session.ts writeManifest` puts it in
-  `localStorage` and Chrome's storage service commits localStorage asynchronously, so a `kill -9`
-  inside that window takes the only pointer to the take's blobs with it. At 5.4 s the manifest is
-  there and the take salvages as AUDIO ONLY: audio is on ~1 s WebM clusters and already has
-  material, while a fragmented-MP4 fragment needs its minimum duration AND the next keyframe, so
-  neither video channel has anything decodable. From 7.5 s on everything comes back and the
-  2.1 s bound in docs/CRASH_BOUND.md holds at every length up to 31 minutes.
-  TWO FIXES, both cheap, both BEHAVIOUR CHANGES and therefore Robert's to allow: write the
-  manifest through the durable positioned writer the channels already use (or IndexedDB, which
-  has a real transaction commit) instead of localStorage; and close the first video fragment
-  early so a young take has something decodable. Each is additive — it can only turn a lost take
-  into a recovered one — and each should ship capability-gated with the current path as fallback,
-  per the frozen rule.
+- [P2 — MEASURED, H2b, 2026-09-02] **press record within a second of the app loading and the
+  first ~6 seconds of a take have no picture on disk at all.** Not the fragment cadence and not
+  salvage: a Chrome process's first `VideoEncoder` pays a multi-second init
+  (`rawVideo.worker.ts`, note 6) and the app's own encoder-warm probe is still running at that
+  moment, so no encoded chunk exists to write. Measured on prod, identical build, three video
+  channels per cell, files read out of the profile after a SIGKILL and demuxed in node: pressing
+  ~200 ms after first paint left NOTHING on disk for any video channel at 2/3/4/5 s and then all
+  three files appeared at once at 7 s carrying the whole take; pressing ten seconds in gave 1.0 s
+  of decodable picture at a 2 s kill and 4.0 s at 5 s. A user who presses record immediately is in
+  the first state, and a crash there costs them the picture even with H2b's floors on. Reproduce
+  with `node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000 --settleBeforeRecordMs=0`.
+  Candidate fixes, none of them H2b's: hold the record press until the warm probe has finished
+  (it already runs at mount and already knows when it is done), or warm the raw channels' encoders
+  rather than only the measuring one.
 - [P2 — MEASURED, F16b, 2026-09-02] **the export panel's size probe is what stalls the first
   seconds in the editor, and it is on the main thread.** Hunting F16b's gate 5 (does a background
   render cost the person dragging?) found stalls of 35-201 ms landing 0.4-0.7 s into a drag, in

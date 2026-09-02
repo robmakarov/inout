@@ -243,22 +243,6 @@ function judge(out) {
 
   ok('the take completed and reached the store', rec.durationMs > 0, `${rec.durationMs} ms`)
 
-  if (!contained) {
-    // NOTHING ENGAGES ON A HEALTHY TAKE. This is the gate that keeps the rest
-    // honest: a containment that fires when nothing died is a defect that
-    // would show up as a green run everywhere else.
-    ok('no seam was written', seams.length === 0, JSON.stringify(seams))
-    ok('nothing was lost', !rec.lost?.length, JSON.stringify(rec.lost ?? []))
-    ok(
-      'one segment per kind',
-      ['screen', 'camera', 'mic'].every((k) => segmentsOf(rec, k).length <= 1),
-      (rec.channels ?? []).map((c) => `${c.kind}x1`).join(' '),
-    )
-    ok('no live band', !out.bandAtFault, JSON.stringify(out.bandAtFault))
-    ok('the report card grades it clean', out.card?.channels?.status === 'pass', out.card?.line)
-    return checks
-  }
-
   /**
    * H5 — THE STOP REPLY WAS LATE AND THE FILE WAS NOT. `?slowstop=` holds the
    * reply past doStop's 5 s budget with the take written exactly as a healthy
@@ -281,6 +265,8 @@ function judge(out) {
     ok('every other channel is full length',
       ['camera', 'mic'].every((k) => segmentsOf(rec, k).length > 0 && rec.durationMs - lastEnd(rec, k) < 1_500),
       ['camera', 'mic'].map((k) => `${k} ${Math.round(lastEnd(rec, k))}`).join(' · '))
+    ok('a late reply is NOT certified as a loss', !rec.lost?.some((l) => l.kind === 'screen'),
+      JSON.stringify(rec.lost ?? []))
     ok('the rescue said so on the console',
       (out.consoleTail ?? []).some((l) => /H5 screen never answered its stop/.test(l)),
       (out.consoleTail ?? []).find((l) => /H5/.test(l)) ?? 'nothing said')
@@ -304,6 +290,22 @@ function judge(out) {
     ok('every other channel is full length',
       ['screen', 'mic'].every((k) => segmentsOf(rec, k).length > 0 && rec.durationMs - lastEnd(rec, k) < 1_500),
       ['screen', 'mic'].map((k) => `${k} ${Math.round(lastEnd(rec, k))}`).join(' · '))
+    return checks
+  }
+
+  if (!contained) {
+    // NOTHING ENGAGES ON A HEALTHY TAKE. This is the gate that keeps the rest
+    // honest: a containment that fires when nothing died is a defect that
+    // would show up as a green run everywhere else.
+    ok('no seam was written', seams.length === 0, JSON.stringify(seams))
+    ok('nothing was lost', !rec.lost?.length, JSON.stringify(rec.lost ?? []))
+    ok(
+      'one segment per kind',
+      ['screen', 'camera', 'mic'].every((k) => segmentsOf(rec, k).length <= 1),
+      (rec.channels ?? []).map((c) => `${c.kind}x1`).join(' '),
+    )
+    ok('no live band', !out.bandAtFault, JSON.stringify(out.bandAtFault))
+    ok('the report card grades it clean', out.card?.channels?.status === 'pass', out.card?.line)
     return checks
   }
 
@@ -358,7 +360,7 @@ const plan = [
 
 const results = []
 for (const [name, fault] of plan) {
-  process.stdout.write(`\ncontain-check: ${name}${fault ? ` (?${fault.knob}=${fault.kind}:${FAULT_AT_MS})` : ''} …\n`)
+  process.stdout.write(`\ncontain-check: ${name}${fault ? ` (?${fault.knob}=${fault.kind}:${fault.atMs ?? FAULT_AT_MS}${(fault.extra ?? []).map(([k, v]) => `&${k}=${v}`).join('')})` : ''} …\n`)
   const out = await runCell(name, fault)
   out.checks = judge(out)
   results.push(out)

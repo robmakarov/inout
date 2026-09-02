@@ -74,3 +74,21 @@ describe('what a finished take keeps', () => {
     expect(v.durationMs).toBe(0)
   })
 })
+
+describe('a disk that will not answer', () => {
+  it('keeps the channel even when the SIZE read threw, and never removes the file', () => {
+    // The entry is there and would not open — most likely locked by a writer
+    // that has not finished dying. Deleting on that is deleting on a question
+    // nobody answered.
+    const v = keepChannel({ replyBytes: 0, diskBytes: 0, probedMs: 0, unreadable: true, wallClockMs: 44_000 })
+    expect(v.keep).toBe(true)
+    expect(v.durationMs).toBe(44_000)
+    expect(v.source).toBe('wall clock')
+  })
+
+  it('still believes a demux that ANSWERED, refusal or not', () => {
+    const v = keepChannel({ replyBytes: 0, diskBytes: 9_000, probedMs: 8_100, unreadable: true, wallClockMs: 44_000 })
+    expect(v.durationMs).toBe(8_100)
+    expect(v.source).toBe('demuxed')
+  })
+})
