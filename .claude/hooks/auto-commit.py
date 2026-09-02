@@ -9,7 +9,7 @@ separate session's proto/style.html wedge morph.
 
 This commits only what this session may claim:
 
-    to_commit = dirty - (claimed_by_other_live_sessions - mine)
+    to_commit = mine + (files nobody claims, but only if no other session is live)
 
 `mine` is every file this session wrote, read out of its own transcript: paths from
 Write/Edit/MultiEdit/NotebookEdit, plus paths a Bash command plausibly wrote — a
@@ -19,20 +19,44 @@ nothing on purpose: one `grep -rn foo src/` would otherwise fence off a whole tr
 
 A claim may be a file, a directory (claiming everything under it) or a glob.
 Another session's claim wins over a blind sweep but never over my own edits, and
-files nobody claims still get swept so nothing rots uncommitted.
+files nobody claims are swept by the last session standing (rule 3 below) so
+nothing rots uncommitted.
 
 A session releases its claims when its own Stop hook finishes (a done-marker newer
 than its transcript). Sessions killed without a Stop release after CLAIM_HOURS.
 
-Message: if the session left one in .git/inout-autocommit/msg/<session_id>, that is
-the commit message and the placeholder never appears. Otherwise the generated
-message names the session and the files, so a sweep is at least traceable.
+Message: if the session left one in <common git dir>/inout-autocommit/msg/<id>,
+that is the commit message. Otherwise this session's own files are committed under
+a generated message that names it, and only files no live session claims can carry
+the `wip: unattributed sweep` subject.
 
 Push is gated: scripts/build-gate.sh builds the exact commit and runs its tests
 first, because this hook pushes with --no-verify and a non-building push is how
 aa39084 left prod silently serving a stale build for hours. This is the dominant
 push path in the repo, so it checks the same things the pre-push hook does. A
 gate failure blocks the push loudly and keeps the commit local.
+
+T1 (2026-09-02) turns the parallel-session rules into structure, after three
+incidents in two days: a session's `git checkout` moved another session's HEAD, a
+Stop hook swept another session's Bash-edited files, and a task's work landed on
+main. Four rules, each proved by `npm run drill` (scripts/session-drill.py):
+
+  1 BRANCH ASSERT. The transcript records the branch every edit was made on. If
+    HEAD is no longer there, the commit is refused loudly and nothing is touched —
+    a foreign checkout moved this session, and committing would put the work on
+    someone else's branch.
+  2 WORKTREE OWNERSHIP. A worktree made by scripts/worktree.sh names its session in
+    $GIT_DIR/inout-owner; while that session is live, no other session commits from
+    it.
+  3 NO BLIND SWEEP WHILE ANYONE ELSE IS LIVE. A file nobody claims may be a live
+    session's Bash edit this extractor did not see, so only the last session
+    standing sweeps unclaimed files. Nothing rots; it waits.
+  4 PUSH ONLY FROM <BRANCH>. A task branch's tip is never pushed to main. It is
+    committed locally and the hook says so.
+
+Rule 3 is also why the `wip: unattributed sweep` subject can no longer land on a
+session's own work: unnamed work is committed under a message that names the
+session, and the placeholder is reserved for files no live session claims.
 
 Env overrides: INOUT_AUTOCOMMIT_CLAIM_HOURS, INOUT_AUTOCOMMIT_BRANCH,
 INOUT_AUTOCOMMIT_NO_PUSH, INOUT_AUTOCOMMIT_NO_GATE.
@@ -92,8 +116,9 @@ LOCK_STALE_SECS = 600
 LOCK_WAIT_SECS = 90
 
 # Bump whenever _extract learns a new claim kind, so caches written by the older
-# extractor are re-read instead of silently under-claiming.
-CACHE_VERSION = 2
+# extractor are re-read instead of silently under-claiming. 3 added the branch
+# each claim was made on.
+CACHE_VERSION = 3
 
 
 def log(state_dir, msg):
@@ -243,24 +268,27 @@ def _plausible_path(tok):
 # ---------------------------------------------------------------- transcripts
 
 def _extract(line):
-    """Absolute claims from one transcript line: edit-tool paths and Bash writes.
+    """(absolute claims, branch) from one transcript line.
 
-    Bash targets are resolved against the record's own cwd, since a command may
-    have run somewhere other than the repo root. Claims may be files, directories
-    or globs; see claim_matches.
+    Claims are edit-tool paths and Bash writes; Bash targets are resolved against
+    the record's own cwd, since a command may have run somewhere other than the
+    repo root. Claims may be files, directories or globs; see claim_matches.
+
+    The branch is the `gitBranch` the client stamped on the record — where this
+    edit was actually made, which is what rule 1 asserts HEAD still points at.
     """
     if '"tool_use"' not in line:
-        return ()
+        return (), ""
     try:
         rec = json.loads(line)
     except ValueError:
-        return ()
+        return (), ""
     msg = rec.get("message")
     if not isinstance(msg, dict):
-        return ()
+        return (), ""
     content = msg.get("content")
     if not isinstance(content, list):
-        return ()
+        return (), ""
     cwd = rec.get("cwd") or ""
     out = []
     for block in content:
@@ -284,24 +312,28 @@ def _extract(line):
                     out.append(target)
                 elif cwd:
                     out.append(os.path.join(cwd, target))
-    return out
+    return out, (rec.get("gitBranch") or "")
 
 
-def touched_files(transcript, cache_dir):
-    """Paths edited in `transcript`, parsing only the tail appended since last call.
+def scan_transcript(transcript, cache_dir):
+    """What a session claimed, and where it was standing when it did.
 
-    Transcripts are append-only JSONL, so a byte offset plus the paths found so far
-    is a sound cache. Any inconsistency (file shrank, unreadable cache) re-parses
-    from zero.
+    Returns {"paths": set of absolute claims, "branches": [branch, ...]} — the
+    branches in the order the session edited on them, consecutive repeats folded,
+    so branches[-1] is where its most recent edit happened.
+
+    Parses only the tail appended since the last call: transcripts are append-only
+    JSONL, so a byte offset plus what was found so far is a sound cache. Any
+    inconsistency (file shrank, unreadable cache) re-parses from zero.
     """
     try:
         size = os.path.getsize(transcript)
     except OSError:
-        return set()
+        return {"paths": set(), "branches": []}
 
     key = os.path.basename(transcript) + ".json"
     cache_file = os.path.join(cache_dir, key)
-    offset, paths = 0, []
+    offset, paths, branches = 0, [], []
     try:
         with open(cache_file) as f:
             cached = json.load(f)
@@ -309,30 +341,41 @@ def touched_files(transcript, cache_dir):
         if cached.get("v") == CACHE_VERSION and cached.get("size", 0) <= size:
             offset = cached.get("offset", 0)
             paths = cached.get("paths", [])
+            branches = cached.get("branches", [])
     except (OSError, ValueError):
         pass
     if offset > size:
-        offset, paths = 0, []
+        offset, paths, branches = 0, [], []
 
-    found = set(paths)
+    found, seen = set(paths), list(branches)
     try:
         with open(transcript, "r", errors="replace") as f:
             f.seek(offset)
             for line in f:
-                found.update(_extract(line))
+                claims, branch = _extract(line)
+                if not claims:
+                    continue
+                found.update(claims)
+                if branch and (not seen or seen[-1] != branch):
+                    seen.append(branch)
             end = f.tell()
     except OSError:
-        return found
+        return {"paths": found, "branches": seen}
 
     try:
         tmp = cache_file + ".tmp"
         with open(tmp, "w") as f:
             json.dump({"v": CACHE_VERSION, "offset": end, "size": size,
-                       "paths": sorted(found)}, f)
+                       "paths": sorted(found), "branches": seen}, f)
         os.replace(tmp, cache_file)
     except OSError:
         pass
-    return found
+    return {"paths": found, "branches": seen}
+
+
+def touched_files(transcript, cache_dir):
+    """Just the paths — see scan_transcript."""
+    return scan_transcript(transcript, cache_dir)["paths"]
 
 
 def project_transcript_dir(repo):
@@ -348,21 +391,25 @@ def project_transcript_dir(repo):
 
 
 def other_session_claims(project_dir, my_session, state_dir, cache_dir):
-    """Files claimed by other sessions that are still live.
+    """(files claimed by other live sessions, the ids of those sessions).
 
     Live = transcript touched within CLAIM_HOURS and not released. A session
     releases by writing done/<sid> after its Stop hook commits; if it edits again
     afterwards its transcript outruns the marker and it re-claims.
+
+    The id list is what rule 3 reads: while another session is live, files nobody
+    claims are left alone, because a claim this extractor missed looks exactly
+    like a file nobody owns.
     """
-    claims = set()
+    claims, live = set(), []
     if not project_dir or not os.path.isdir(project_dir):
-        return claims
+        return claims, live
     cutoff = time.time() - CLAIM_HOURS * 3600
     done_dir = os.path.join(state_dir, "done")
     try:
         entries = os.listdir(project_dir)
     except OSError:
-        return claims
+        return claims, live
 
     for name in entries:
         if not name.endswith(".jsonl"):
@@ -383,7 +430,8 @@ def other_session_claims(project_dir, my_session, state_dir, cache_dir):
         except OSError:
             pass
         claims |= touched_files(path, cache_dir)
-    return claims
+        live.append(sid)
+    return claims, live
 
 
 # ----------------------------------------------------------------- work tree
@@ -454,6 +502,63 @@ def in_progress(repo):
     return None
 
 
+# ----------------------------------------------------- session boundaries
+
+def current_branch(repo):
+    """`git branch --show-current` — empty string on a detached HEAD."""
+    return git(repo, "branch", "--show-current").stdout.strip()
+
+
+def worktree_owner(gd):
+    """The session scripts/worktree.sh cut this worktree for, or None.
+
+    The marker sits in the worktree's own git dir ($GIT_DIR/inout-owner), so it
+    travels with the worktree and disappears when it is removed.
+    """
+    try:
+        with open(os.path.join(gd, "inout-owner")) as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return rec if isinstance(rec, dict) and rec.get("session") else None
+
+
+def owner_is_live(owner, state_dir):
+    """True while the owning session is still working (rule 2).
+
+    Same liveness test the file claims use — a transcript touched within
+    CLAIM_HOURS and no newer release marker — so an abandoned worktree unlocks
+    on its own instead of needing a human.
+    """
+    try:
+        stamp = os.path.getmtime(owner.get("transcript") or "")
+    except OSError:
+        try:
+            stamp = float(owner.get("created") or 0)
+        except (TypeError, ValueError):
+            stamp = 0.0
+    if stamp < time.time() - CLAIM_HOURS * 3600:
+        return False
+    try:
+        return os.path.getmtime(
+            os.path.join(state_dir, "done", owner["session"])) < stamp
+    except OSError:
+        return True
+
+
+def refuse(state_dir, payload, message):
+    """Stop without committing, loudly.
+
+    Exit 2 on a Stop hook puts the text in front of the model instead of burying
+    it in a log nobody reads — but only once: `stop_hook_active` says we already
+    said it, and blocking twice would spin the session.
+    """
+    text = log(state_dir, message)
+    sys.stderr.write(text + "\n")
+    print(text)
+    return 0 if payload.get("stop_hook_active") else 2
+
+
 # --------------------------------------------------------------------- lock
 
 class Lock:
@@ -516,30 +621,97 @@ def build_gate(repo, sha):
 
 # --------------------------------------------------------------------- main
 
-def build_message(state_dir, session_id, paths):
-    """Session-authored message if there is one, else a traceable generated one."""
-    msg_file = os.path.join(state_dir, "msg", session_id)
-    try:
-        with open(msg_file) as f:
-            text = f.read().strip()
+def authored_message(state_dir, session_id, legacy_dir=""):
+    """The message this session staged with commit-msg.sh, consumed once.
+
+    legacy_dir is the pre-T1 per-worktree state directory: a session that staged
+    its message before this hook moved state to the common git dir still gets it.
+    """
+    for base in (state_dir, legacy_dir):
+        if not base:
+            continue
+        msg_file = os.path.join(base, "msg", session_id)
+        try:
+            with open(msg_file) as f:
+                text = f.read().strip()
+        except OSError:
+            continue
         if text:
             try:
                 os.remove(msg_file)  # one message, one commit
             except OSError:
                 pass
-            return text, True
-    except OSError:
-        pass
+            return text
+    return None
 
+
+def _scopes(paths):
     tops = sorted({p.split("/")[0] if "/" in p else p for p in paths})
-    scope = ", ".join(tops[:3]) + ("…" if len(tops) > 3 else "")
-    subject = "wip: unattributed sweep in %s (%d file%s)" % (
-        scope, len(paths), "" if len(paths) == 1 else "s")
-    body = "\n".join(
-        ["", "No session-authored message; committed by the Stop hook.",
-         "Session: %s" % session_id, ""] + ["  %s" % p for p in sorted(paths)[:40]]
-        + (["  … and %d more" % (len(paths) - 40)] if len(paths) > 40 else []))
-    return subject + "\n" + body, False
+    return ", ".join(tops[:3]) + ("…" if len(tops) > 3 else "")
+
+
+def _listing(paths):
+    return "\n".join(["  %s" % p for p in sorted(paths)[:40]]
+                     + (["  … and %d more" % (len(paths) - 40)]
+                        if len(paths) > 40 else []))
+
+
+def mine_message(session_id, paths):
+    """Generated message for files THIS session edited but never named.
+
+    Attributed on purpose: the placeholder subject means "nobody owns these", and
+    after T1 that has to stay true, so a session's own work never wears it.
+    """
+    return ("wip: %s (%d file%s) — session named no message\n\n"
+            "Committed by the Stop hook from this session's own claims.\n"
+            "Name the next one: printf 'subject\\n\\nbody\\n' | "
+            ".claude/hooks/commit-msg.sh\n"
+            "Session: %s\n\n%s"
+            % (_scopes(paths), len(paths), "" if len(paths) == 1 else "s",
+               session_id, _listing(paths)))
+
+
+def sweep_message(session_id, paths):
+    """Files no live session claims — the only place the placeholder may appear."""
+    return ("wip: unattributed sweep in %s (%d file%s)\n\n"
+            "No live session claims these; swept by the last session standing.\n"
+            "Session: %s\n\n%s"
+            % (_scopes(paths), len(paths), "" if len(paths) == 1 else "s",
+               session_id, _listing(paths)))
+
+
+def commit_paths(repo, state_dir, paths, message):
+    """Commit exactly `paths` under `message`; the short sha, or None."""
+    spec = "\0".join(paths)
+    # `git add` errors out on a pathspec matching neither the worktree nor the
+    # index — a fully staged `git rm`/`git mv` source — and one such path would
+    # abort the whole commit. Those are already staged, and `git commit --only`
+    # carries them by itself, so only feed `add` the paths it can match.
+    indexed = set(git(repo, "ls-files", "-z").stdout.split("\0"))
+    addable = [p for p in paths
+               if p in indexed or os.path.lexists(os.path.join(repo, p))]
+    if addable:
+        add = subprocess.run(
+            ["git", "-C", repo, "add", "-A", "--pathspec-from-file=-",
+             "--pathspec-file-nul", "--"],
+            input="\0".join(addable), capture_output=True, text=True)
+        if add.returncode != 0:
+            # Not fatal: commit --only may still capture what is already staged.
+            log(state_dir, "git add warning: %s" % add.stderr.strip())
+
+    # --only keeps another session's staged-but-uncommitted files out of this commit.
+    commit = subprocess.run(
+        ["git", "-C", repo, "commit", "-q", "--no-verify", "--only",
+         "-m", message, "--pathspec-from-file=-", "--pathspec-file-nul"],
+        input=spec, capture_output=True, text=True)
+    if commit.returncode != 0:
+        err = (commit.stdout + commit.stderr).strip()
+        if "nothing to commit" in err or "no changes added" in err:
+            print(log(state_dir, "nothing to commit after add"))
+        else:
+            print(log(state_dir, "git commit failed: %s" % err))
+        return None
+    return git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
 
 
 def main():
@@ -562,7 +734,14 @@ def main():
     gd = git(repo, "rev-parse", "--git-dir").stdout.strip() or ".git"
     if not os.path.isabs(gd):
         gd = os.path.join(repo, gd)
-    state_dir = os.path.join(gd, "inout-autocommit")
+    # State lives in the COMMON git dir, so every worktree of this repo shares one
+    # lock, one release set and one cache — they all push to the same origin, and
+    # rule 2 has to read a marker another worktree's session wrote.
+    common = git(repo, "rev-parse", "--git-common-dir").stdout.strip() or gd
+    if not os.path.isabs(common):
+        common = os.path.join(repo, common)
+    state_dir = os.path.join(common, "inout-autocommit")
+    legacy_dir = os.path.join(gd, "inout-autocommit")  # pre-T1 per-worktree state
     cache_dir = os.path.join(state_dir, "cache")
     for d in (state_dir, cache_dir, os.path.join(state_dir, "done"),
               os.path.join(state_dir, "msg")):
@@ -573,6 +752,16 @@ def main():
         print(log(state_dir, "skip: %s in progress" % blocker))
         return 0
 
+    # RULE 2 — a worktree cut for a session that is still working is its own.
+    owner = worktree_owner(gd)
+    if (owner and owner.get("session") != session_id
+            and owner_is_live(owner, state_dir)):
+        return refuse(state_dir, payload,
+                      "REFUSED: %s is session %s's worktree (scripts/worktree.sh) "
+                      "and that session is still live — its files are not mine to "
+                      "commit. Take your own: scripts/worktree.sh <task-id>."
+                      % (repo, owner.get("session")))
+
     project_dir = os.path.dirname(transcript) if transcript else ""
     if not project_dir or not os.path.isdir(project_dir):
         project_dir = project_transcript_dir(repo)
@@ -581,9 +770,11 @@ def main():
             if os.path.exists(guess):
                 transcript = guess
 
-    mine = set()
+    mine, edit_branches = set(), []
     if transcript and os.path.exists(transcript):
-        for abs_path in touched_files(transcript, cache_dir):
+        scope = scan_transcript(transcript, cache_dir)
+        edit_branches = scope["branches"]
+        for abs_path in scope["paths"]:
             rel = rel_to_repo(repo, abs_path)
             if rel:
                 mine.add(rel)
@@ -591,11 +782,29 @@ def main():
         log(state_dir, "warning: no transcript for %s; claiming nothing, "
                        "sweeping only unclaimed files" % session_id)
 
+    their_claims, live_others = other_session_claims(
+        project_dir, session_id, state_dir, cache_dir)
     theirs = set()
-    for abs_path in other_session_claims(project_dir, session_id, state_dir, cache_dir):
+    for abs_path in their_claims:
         rel = rel_to_repo(repo, abs_path)
         if rel:
             theirs.add(rel)
+
+    # RULE 1 — commit where the work was done, or do not commit.
+    branch = current_branch(repo)
+    if edit_branches and branch != edit_branches[-1]:
+        return refuse(state_dir, payload,
+                      "REFUSED: this session edited on '%s' but HEAD is now '%s'. "
+                      "Something moved this checkout under the work — a `git "
+                      "checkout` in another session, or a switch left behind. "
+                      "Nothing was committed and no file was touched. Put HEAD "
+                      "back (git switch %s) and stop again, or commit by hand "
+                      "where the work belongs."
+                      % (edit_branches[-1], branch or "a detached HEAD",
+                         edit_branches[-1]))
+    if len(set(edit_branches)) > 1:
+        log(state_dir, "warning: this session edited on %s; committing on %s"
+            % (" then ".join(edit_branches), branch))
 
     with Lock(os.path.join(state_dir, "lock")) as lock:
         if not lock.held:
@@ -604,84 +813,87 @@ def main():
         dirty = dirty_paths(repo)
         mine_x, mine_g = split_claims(mine)
         their_x, their_g = split_claims(theirs)
-        held_back = sorted(p for p in dirty
-                           if claim_matches(p, their_x, their_g)
-                           and not claim_matches(p, mine_x, mine_g))
-        blocked = set(held_back)
-        to_commit = sorted(p for p in dirty if p not in blocked)
 
-        if not to_commit:
+        def is_mine(path):
+            return claim_matches(path, mine_x, mine_g)
+
+        mine_dirty = sorted(p for p in dirty if is_mine(p))
+        theirs_dirty = sorted(p for p in dirty if not is_mine(p)
+                              and claim_matches(p, their_x, their_g))
+        unclaimed = sorted(set(dirty) - set(mine_dirty) - set(theirs_dirty))
+
+        # RULE 3 — a file nobody claims may be a live session's Bash edit that the
+        # extractor did not see, so only the last session standing sweeps.
+        sweepable = unclaimed if not live_others else []
+        held_back = sorted(theirs_dirty + (unclaimed if live_others else []))
+
+        message = authored_message(state_dir, session_id, legacy_dir)
+        plan = []
+        if message:
+            paths = sorted(mine_dirty + sweepable)
+            if paths:
+                plan.append((paths, message, "named"))
+        else:
+            if mine_dirty:
+                plan.append((mine_dirty,
+                             mine_message(session_id, mine_dirty), "unnamed"))
+            if sweepable:
+                plan.append((sweepable,
+                             sweep_message(session_id, sweepable), "sweep"))
+
+        if not plan:
             msg = "nothing to commit"
             if held_back:
-                msg += " (%d file%s left to other live session%s)" % (
+                msg += " (%d file%s held back: %d other session%s live)" % (
                     len(held_back), "" if len(held_back) == 1 else "s",
-                    "" if len(held_back) == 1 else "s")
+                    len(live_others), "" if len(live_others) == 1 else "s")
             print(log(state_dir, msg))
             _release(state_dir, session_id)
             return 0
 
-        message, authored = build_message(state_dir, session_id, to_commit)
+        shas = []
+        for paths, text, kind in plan:
+            sha = commit_paths(repo, state_dir, paths, text)
+            if not sha:
+                continue
+            shas.append(sha)
+            print(log(state_dir, "committed %s: %d %s file%s%s" % (
+                sha, len(paths), kind, "" if len(paths) == 1 else "s",
+                "" if not held_back else "; held back %d for %d live session(s): %s"
+                % (len(held_back), len(live_others), ", ".join(held_back[:5])))))
 
-        spec = "\0".join(to_commit)
-        # `git add` errors out on a pathspec matching neither the worktree nor the
-        # index — a fully staged `git rm`/`git mv` source — and one such path would
-        # abort the whole commit. Those are already staged, and `git commit --only`
-        # carries them by itself, so only feed `add` the paths it can match.
-        indexed = set(git(repo, "ls-files", "-z").stdout.split("\0"))
-        addable = [p for p in to_commit
-                   if p in indexed or os.path.lexists(os.path.join(repo, p))]
-        if addable:
-            add = subprocess.run(
-                ["git", "-C", repo, "add", "-A", "--pathspec-from-file=-",
-                 "--pathspec-file-nul", "--"],
-                input="\0".join(addable), capture_output=True, text=True)
-            if add.returncode != 0:
-                # Not fatal: commit --only may still capture what is already staged.
-                log(state_dir, "git add warning: %s" % add.stderr.strip())
-
-        # --only keeps another session's staged-but-uncommitted files out of this commit.
-        commit = subprocess.run(
-            ["git", "-C", repo, "commit", "-q", "--no-verify", "--only",
-             "-m", message, "--pathspec-from-file=-", "--pathspec-file-nul"],
-            input=spec, capture_output=True, text=True)
-        if commit.returncode != 0:
-            err = (commit.stdout + commit.stderr).strip()
-            if "nothing to commit" in err or "no changes added" in err:
-                print(log(state_dir, "nothing to commit after add"))
-                _release(state_dir, session_id)
-                return 0
-            print(log(state_dir, "git commit failed: %s" % err))
+        if not shas:
+            _release(state_dir, session_id)
             return 0
 
-        sha = git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
-        line = "committed %s: %d file%s%s%s" % (
-            sha, len(to_commit), "" if len(to_commit) == 1 else "s",
-            "" if authored else " (generated message)",
-            "" if not held_back else "; left %d to other live session(s): %s" % (
-                len(held_back), ", ".join(held_back[:5])))
-        print(log(state_dir, line))
-
         if not NO_PUSH:
-            gate_err = build_gate(repo, sha)
-            if gate_err is not None:
+            # RULE 4 — a task branch's tip is never pushed to main.
+            if branch != BRANCH:
                 print(log(state_dir,
-                          "PUSH BLOCKED — commit %s failed the build gate; prod keeps "
-                          "the previous build. Fix and push by hand (the pre-push gate "
-                          "re-runs), or INOUT_AUTOCOMMIT_NO_GATE=1 to push blind.\n%s"
-                          % (sha, gate_err)))
+                          "NOT PUSHED: HEAD is '%s' and this hook only pushes '%s'. "
+                          "The commit is local and safe; merge it to %s when the "
+                          "task's gates are green."
+                          % (branch or "detached", BRANCH, BRANCH)))
             else:
-                push = subprocess.run(
-                    ["git", "-C", repo, "push", "-q", "--no-verify", "origin",
-                     "HEAD:%s" % BRANCH], capture_output=True, text=True)
-                if push.returncode != 0:
-                    print(log(state_dir, "push failed (commit is safe locally): %s"
-                              % (push.stderr or push.stdout).strip()))
+                gate_err = build_gate(repo, shas[-1])
+                if gate_err is not None:
+                    print(log(state_dir,
+                              "PUSH BLOCKED — commit %s failed the build gate; prod "
+                              "keeps the previous build. Fix and push by hand (the "
+                              "pre-push gate re-runs), or INOUT_AUTOCOMMIT_NO_GATE=1 "
+                              "to push blind.\n%s" % (shas[-1], gate_err)))
                 else:
-                    log(state_dir, "pushed %s to %s" % (sha, BRANCH))
+                    push = subprocess.run(
+                        ["git", "-C", repo, "push", "-q", "--no-verify", "origin",
+                         "HEAD:%s" % BRANCH], capture_output=True, text=True)
+                    if push.returncode != 0:
+                        print(log(state_dir, "push failed (commit is safe locally): "
+                                  "%s" % (push.stderr or push.stdout).strip()))
+                    else:
+                        log(state_dir, "pushed %s to %s" % (shas[-1], BRANCH))
 
         _release(state_dir, session_id)
     return 0
-
 
 def _release(state_dir, session_id):
     """Drop this session's claims — its work is committed."""

@@ -47,15 +47,20 @@ current path as fallback); the engine never refuses a record press.
   fragment first because `localStorage` can be refused on `file://`.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
-commits the files this session edited plus files no other live session claims. **Name your own commit**
-before you finish: `printf 'subject\n\nbody\n' | .claude/hooks/commit-msg.sh` — a `wip: unattributed
-sweep …` placeholder is a bug to fix. Files edited through Bash (`sed`, heredoc) are UNCLAIMED and get
-swept by whichever session stops first; edit files you care about through the Edit/Write tools.
-**A BRANCH YOU CREATE IS NOT A BRANCH YOU KEEP.** Sessions in this checkout share one HEAD and one
-index: another session's `git checkout` moves you, and your next commit lands wherever HEAD points
-(2026-09-02, task H2b committed to `main` that way). `git branch --show-current` immediately before
-every commit, and take your own worktree for anything that must not ship early — never move the `main`
-ref from a worktree other sessions commit into.
+commits the files THIS session edited, and files no live session claims only when it is the last
+session standing. **Name your own commit** before you finish: `printf 'subject\n\nbody\n' |
+.claude/hooks/commit-msg.sh` — otherwise the hook commits your work under a message saying you named
+none. Files edited through Bash (`sed`, heredoc) are claimed only when the command reads as a write;
+edit files you care about through the Edit/Write tools.
+Four rules are enforced, not advice (T1) — `npm run drill` proves each in ~2 s, and each one is a
+REFUSED commit (exit 2, loud, nothing touched): HEAD must still be on the branch this session edited
+on · a worktree another live session owns is not yours to commit · unclaimed files are never swept
+while another session is live · a task branch commits locally and is NEVER pushed to `main`.
+**ONE TASK, ONE WORKTREE**: `scripts/worktree.sh <id>` cuts `/tmp/inout-<id>` on `task/<id>` with
+node_modules, settings and an owner marker. Sessions in one checkout share one HEAD and one index —
+another session's `git checkout` moves you (2026-09-02: H2b landed on `main` that way). Land the work
+FROM THE MAIN CHECKOUT (`git merge --ff-only task/<id>`); never move the `main` ref from a worktree
+other sessions commit into.
 
 Deploy guard: every push is gated. `scripts/build-gate.sh` builds the exact pushed commit and runs its
 tests (~7 s, throwaway worktree) from both `.githooks/pre-push` (repo hooks live in tracked
