@@ -789,3 +789,20 @@ out and go to G6, not to capture: the report card's `rescue` dimension grades AT
 LOSS, and ChannelDiagnostics does not record WHICH TAP RAN, so A1's own gate could not verify its
 premise from the take. This is note 17 again: a gate that cannot fail is not a gate, and neither is
 one that cannot pass. B2's listen is answered in the same breath and opens B13.
+
+2026-09-02 robert (19) — THE CEILING RULING REORDERS THE PHASES: COLOUR AND SIZE COME UP. Asked why
+WebGPU sat in Phase 5 — "i said we must raise celling to the maximum" — and on the answer chose
+"Colour + size, both up". O9 and X17 leave the experiments phase and become Phase 1, because a ceiling
+the product is measured against cannot live in the phase for things we might try. O9 is the colour
+ceiling he already demanded out loud on 2026-08-29 ("I WANT 100% COLORS") and the numbers were sitting
+there unclaimed: 80.0 % green raw → 70.3 composite → 67.3 render, against aligned supersampling at
+94.7 % and AV1 4:4:4 at 99.3 % for 1.11× bytes. X17 is the size ceiling, and size is already named as
+a Phase-1 dimension.
+WEBGPU ITSELF STAYS IN PHASE 5, and the reason is measurement, not scope: max opens no composite so
+the painter never runs on the max path, and in the export draw is 535 ms against encode-wait 21,705 of
+a 27,370 ms loop — 1.95 %. THE INVERSION IS THE POINT, and it is why O9(a) moved while O4 did not:
+draw being 2 % is exactly what makes supersampling affordable. Four times the draw cost is still under
+8 % of the loop, so the spare GPU headroom is spent on COLOUR rather than on speed. The same number
+argues one task up and the other down. The 2026-08-24 premise stays unmeasured and gates any future
+WebGPU proposal: are transferred capture frames GPU-resident in the worker, or is every upload a
+readback?
