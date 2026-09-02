@@ -773,3 +773,19 @@ is the only way in. And the audit's findings split three ways, his distinction: 
 CORRECT and only their silence is wrong (the composite drop, the codec fallbacks — do not change them,
 make them announce) · some are simply wrong (zero audio latency, the tail drain, the For-AI truncation)
 · some are underived constants that earn a measurement or go.
+
+2026-09-02 robert (18) — A1 GATE 2 IS READ AND THE CAPTURE PATH PASSED; WHAT IS RED IS THE
+INSTRUMENT. Asked whether anything was playing in the tab during the 27-minute silent run at 7:04 of
+rec_gpsoujs2sydf (124.8 min, camera + mic + screen + tab audio, prod, recorded 177 s after a level-3
+wedge): "nothing was there, i dont see problem with recording, only sound is not perfect, less bass or
+whatever, tab audio part of second faster than screen video i think, some small noises in tab audio".
+So the 63 revivals across 15 silent runs are a quiet tab, not a dead tap, and the fix shipped in
+9b6b224 held: silentTail 1,970 ms against 1,650,144 ms on the 2026-09-01 failure rec_78ogcw052vdn.
+The ladder-never-retires change is also proven — the 7:04 run took 31 attempts where the old six-cap
+would have abandoned the channel after 160 s. THE GATE ITSELF WAS UNPASSABLE: "revivals 0 after
+warm-up" cannot be met by any honest take, because a revive only proves 5 s of pure silence on a live
+track and no field in the black box separates a dead tap from a quiet tab. Two instrument defects fall
+out and go to G6, not to capture: the report card's `rescue` dimension grades ATTEMPTS instead of
+LOSS, and ChannelDiagnostics does not record WHICH TAP RAN, so A1's own gate could not verify its
+premise from the take. This is note 17 again: a gate that cannot fail is not a gate, and neither is
+one that cannot pass. B2's listen is answered in the same breath and opens B13.

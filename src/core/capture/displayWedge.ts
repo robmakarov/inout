@@ -121,9 +121,13 @@ export const ESCALATE_AT_STALLS = 2
 
 /** 0 = full request. Higher = fewer of OUR options; see the ladder above. */
 export type DisplayRequestLevel = 0 | 1 | 2 | 3
-/** The floor. Every rung, this one included, still gets the user their audio —
- *  rung 3 moves our three raw-audio flags onto the delivered track instead of
- *  sending them in the request, which is the last thing of ours left in it. */
+/** The floor. Every rung, this one included, still gets the user their audio,
+ *  and the three raw-audio flags ride the request on EVERY rung — the floor
+ *  included (acquire.ts owns the request shape; `repairDisplayAudio` is only a
+ *  belt for a track that arrives processed anyway). An earlier version of this
+ *  comment said rung 3 moved the flags onto the delivered track instead of
+ *  sending them; it never did, and the wrong version sent B13 hunting the floor
+ *  rung for Robert's thin tab audio on 2026-09-02. */
 export const MAX_DISPLAY_LEVEL = 3
 
 interface WedgeState {
