@@ -192,6 +192,27 @@ phase: MVP validation (2026-07-16)
   test. COST STATED: a user who never touches the slider now captures at a 1920 long edge instead of
   up to 2560, and can no longer export 1440p from such a take. That is the resource saving Robert
   asked for and the slider is the first thing above the chips.
+- THE EXPORT A MAX+CAMERA TAKE NEEDS IS MADE BEFORE IT IS ASKED FOR, AND IT IS ELASTIC (F16 +
+  F16b, 2026-09-02). A take with two video channels has no single file to packet-copy, so its
+  export must RENDER — and that render now starts AT STOP, on the same conservative predicate F16
+  already used (`exportWouldRender`), at the step the panel will actually ask for
+  (`quality.defaultTierForTake`, moved out of EditorScreen so the two cannot disagree). Measured on
+  prod-shaped takes: ready 13.2 s after a 16.7 s take stopped, and the export press then took
+  14 ms. A take whose export is already a copy — screen-only max, every sub-max take — never starts
+  one, and every miss, failure, cancel or supersession falls through to rendering on demand.
+  IT RUNS BESIDE A LIVE TAKE, NOT INSTEAD OF ONE (Robert's ruling: "render can be parallel to
+  record, it just must not fuck up ... make it elastic too"). `core/backgroundWork.ts` is the
+  broker — capture publishes E1's pressure readings, background work subscribes — and the order is
+  absolute: CAPTURE > EDITING > BACKGROUND RENDER. No take → full speed · take + nominal → half the
+  wall clock in 100 ms chunks · fair → a fifth · serious/critical → fully shed · a reading nobody
+  can take → shed, because the thing being given up is the job. A hand on the editor trickles it
+  for 700 ms. Under an induced load the job is fully shed 495-513 ms after the load arrives and
+  back 407-646 ms after it lifts (four runs); the take beside an elastic job pays -0.69 fps against
+  its own bracketing controls, beside an unthrottled one -4.16. `?bgpace=0` restores the
+  unthrottled behaviour; `?prerender=0` turns the whole thing off.
+  AN EDIT BINDS THE RUNNING JOB (Robert, DECISIONS (4)): a cut stops it where it stands and says
+  where the edit landed; a SPLIT — which the engine merges straight back — re-keys it instead of
+  killing it, so the work survives an edit that cannot change a byte.
 - THE EXPORT IS A BACKGROUND JOB IN A DOCK ON EVERY SCREEN (2026-08-30, third answer in one day to
   where the export lives; supersedes the strips-in-the-slider-slot pass, which had itself replaced
   the two-panel screen — `AppMode` lost 'share' then, and lost 'exporting' now).

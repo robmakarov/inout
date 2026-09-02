@@ -3,7 +3,7 @@ import type { EditState, Recording } from '@core/types'
 import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
-  QUALITY_TIERS,
+  defaultTierForTake,
   isDefaultTier,
   resolveTier,
   settingsForTier,
@@ -12,7 +12,8 @@ import {
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
-import { cancelPrerender, exportWouldRender, startPrerender } from '@core/compose'
+import { cancelPrerender, editBindsPrerender, exportWouldRender, startPrerender } from '@core/compose'
+import { noteEditingActivity } from '@core/backgroundWork'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { loadRecovery } from '@core/capture'
 import { editsRepo, recordingsRepo } from '@core/store'
@@ -93,31 +94,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const [chosenId, setChosenId] = useState<string | null>(null)
   useEffect(() => setChosenId(null), [recording.id])
   const tier = useMemo(() => {
-    // `tiersForTake` never returns an empty ladder — the lowest rung is
-    // reachable from every ceiling — so `top` is defined in every real case.
-    const top = tiers[tiers.length - 1] ?? resolveTier(QUALITY_TIERS[0]!, frameAspect, frameRate)
     const picked = chosenId ? tiers.find((t) => t.id === chosenId) : undefined
-    if (picked) return picked
-    const ceiling = recording.qualityStep
-    if (ceiling) {
-      // The step the user chose before recording. 'max' is this file's 'source'.
-      return tiers.find((t) => t.id === (ceiling === 'max' ? 'source' : ceiling)) ?? top
-    }
-    /**
-     * A TAKE FROM BEFORE THE CEILING EXISTED KEEPS THE DEFAULT IT WAS MADE
-     * UNDER, and this is not a detail: defaulting an old take to the TOP of its
-     * (uncapped) ladder would make its untouched export a full re-render of
-     * every frame, where yesterday it was a packet copy. That is the frozen
-     * "instant default export" rule, broken silently, for every take already on
-     * disk. F18's rule stands for these: their own resolution when they offer
-     * one, otherwise the default step.
-     */
-    return (
-      tiers.find((t) => t.id === 'source') ??
-      tiers.find((t) => isDefaultTier(t)) ??
-      top
-    )
-  }, [tiers, chosenId, recording.qualityStep, frameAspect, frameRate])
+    // F16b moved the default out of this component and into quality.ts: the
+    // pre-render started at STOP has to resolve the same step this panel will,
+    // or the export it made is a file nobody asks for.
+    return picked ?? defaultTierForTake(recording, frameAspect)
+  }, [tiers, chosenId, recording, frameAspect])
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
   // has since moved would cut the wrong places.
@@ -221,6 +203,15 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     if (!prerenderEnabled()) return
     const chosen = resolveTier(tier, frameAspect, frameRate)
     const settings = settingsForTier(chosen)
+    /**
+     * F16b, and it is the half that runs FIRST: an edit landing while a job
+     * works takes effect IN the job (Robert, DECISIONS (4)). Before this, the
+     * stale render kept spending the machine for the whole debounce below —
+     * and for as long as the user kept dragging — on a file the key would
+     * never let anyone serve. Synchronous, ahead of the timer, because "stops
+     * immediately" is the ruling.
+     */
+    editBindsPrerender({ recording, edit, settings })
     if (!exportWouldRender({ recording, edit, settings, allowPacketCopy: isDefaultTier(tier) })) {
       cancelPrerender()
       return
@@ -291,7 +282,28 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   return (
     // F13: the take's own frame aspect, so the stage, the timeline and the
     // export panel are all the width of the picture this take will make.
-    <div className="editor" style={{ '--stage-ar': frameAspect } as React.CSSProperties}>
+    <div
+      className="editor"
+      style={{ '--stage-ar': frameAspect } as React.CSSProperties}
+      /**
+       * F16b — A HAND ON THE EDITOR OUTRANKS THE BACKGROUND RENDER.
+       *
+       * Robert's order is CAPTURE > EDITING > BACKGROUND RENDER, and until
+       * this line the middle term was not implemented anywhere: the job ran
+       * flat out beside somebody dragging a playhead. Measured in a real
+       * visible editor before it existed, the steady drag was fine (p95
+       * scheduling lateness 1.4-1.5 ms alone against 2.2-3.2 ms beside the
+       * render) but the FIRST seek of a drag stalled 35-201 ms in four of
+       * seven runs — the player's decoder starting against a render that is
+       * saturating the same path.
+       *
+       * Capture phase, and pointerdown/move only: it must fire before any
+       * handler that might stop propagation, and it must not depend on which
+       * control was grabbed. The broker throttles itself back up 700 ms after
+       * the hand stops, so nothing here has to say when editing ENDS.
+       */
+      onPointerDownCapture={noteEditingActivity}
+      onPointerMoveCapture={noteEditingActivity}>
       {/* H4: a kind that is BOTH missing and certified lost gets the specific
           sentence only. "The device never connected" is the right line for a
           camera that was never granted or never appeared, and the wrong one

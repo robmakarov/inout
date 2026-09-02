@@ -708,6 +708,25 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f16b',
+    title: 'F16b — is a background render beside a live take PROVABLY harmless, and does the brake reach it?',
+    detail:
+      'Robert\'s ruling: "render can be parallel to record, it just must not fuck up ... make it elastic too". Records ONE take through the production session as the control, then records the SAME take twice more — once with the shipped background pre-render beside it (elastic), once with the same render and no brake at all (the POSITIVE CONTROL, i.e. what shipping decoration would look like). Compared on the take\'s own evidence: delivered fps out of the composite file, the audio counters, and S1\'s report card. A fourth lane loads the machine while a job works and times the brake both ways off the broker\'s own subscription. HEAVY — four takes. {"takeMs":40000,"pressureLane":false} runs the three-way alone.',
+    run: async (args) => {
+      const { runBackgroundElastic } = await import('../perf/backgroundElastic')
+      return runBackgroundElastic({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        pressureLane: args?.pressureLane === false ? false : undefined,
+        loadAtMs: typeof args?.loadAtMs === 'number' ? args.loadAtMs : undefined,
+        loadMs: typeof args?.loadMs === 'number' ? args.loadMs : undefined,
+        load:
+          args?.load === 'cpu' || args?.load === 'encode' || args?.load === 'all' ? args.load : undefined,
+      })
+    },
+  },
+  {
     id: 'nativerender',
     title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
     detail:

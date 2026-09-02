@@ -12,13 +12,17 @@ let settle: ((r: ExportResult) => void) | null = null
 let reject: ((e: unknown) => void) | null = null
 let progress: ((p: { phase: string; ratio: number }) => void) | null = null
 
+let lastPace: unknown = undefined
+
 vi.mock('./pipeline', () => ({
   exportRecording: (opts: {
     signal?: AbortSignal
     onProgress?: (p: { phase: string; ratio: number }) => void
+    pace?: unknown
   }) => {
     renderCalls += 1
     progress = opts.onProgress ?? null
+    lastPace = opts.pace
     return new Promise<ExportResult>((res, rej) => {
       settle = res
       reject = rej
@@ -60,8 +64,16 @@ vi.mock('@core/store', () => ({
     }),
 }))
 
-const { cancelPrerender, prerenderKey, prerenderStatus, resetPrerenderForTests, startPrerender, takePrerender } =
-  await import('./prerender')
+const {
+  cancelPrerender,
+  editBindsPrerender,
+  firstEditDivergenceMs,
+  prerenderKey,
+  prerenderStatus,
+  resetPrerenderForTests,
+  startPrerender,
+  takePrerender,
+} = await import('./prerender')
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording
 const edit = { channels: [], segments: [{ startMs: 0, endMs: 1000 }] } as unknown as EditState
@@ -90,6 +102,7 @@ function fakeResult(): ExportResult {
 afterEach(() => {
   cancelPrerender()
   resetPrerenderForTests()
+  lastPace = undefined
   renderCalls = 0
   settle = null
   reject = null
@@ -192,11 +205,89 @@ describe('the pre-rendered export', () => {
     expect(takePrerender(key)).toBeNull()
   })
 
+  /**
+   * F16b — A BACKGROUND JOB IS ELASTIC, a user-visible export is not. The
+   * priority order is absolute (CAPTURE > EDITING > BACKGROUND RENDER) and
+   * this is the only place in the product that hands a render a brake.
+   */
+  it('hands the render the elastic brake, which no user-visible export gets', () => {
+    startPrerender({ recording, edit, settings })
+    expect(lastPace).toBeTruthy()
+  })
+
   it('cancelling aborts the render rather than letting it finish unwanted', async () => {
     startPrerender({ recording, edit, settings })
     const key = prerenderKey({ recording, edit, settings })
     cancelPrerender()
     expect(prerenderStatus(key)).toBeNull()
     expect(takePrerender(key)).toBeNull()
+  })
+})
+
+/**
+ * AN EDIT BINDS THE ONGOING JOB — Robert, 2026-09-01 (DECISIONS (4)). Key
+ * supersession already stopped a stale file being SERVED; these pin the
+ * stronger half, that the stale WORK stops. Before this the job kept rendering
+ * a file nobody could ever be given, for the whole of the editor's debounce and
+ * for as long as a drag lasted.
+ */
+describe('an edit that lands while a job works', () => {
+  const cut = {
+    ...edit,
+    segments: [
+      { startMs: 0, endMs: 400 },
+      { startMs: 700, endMs: 1000 },
+    ],
+  } as unknown as EditState
+
+  it('stops the job where it is', async () => {
+    startPrerender({ recording, edit, settings })
+    const key = prerenderKey({ recording, edit, settings })
+    expect(editBindsPrerender({ recording, edit: cut, settings })).toBe(true)
+    expect(prerenderStatus(key)).toBeNull()
+    expect(takePrerender(key)).toBeNull()
+    // And the render underneath is aborted, not left running.
+    expect(renderCalls).toBe(1)
+  })
+
+  /**
+   * A SPLIT IS NOT A CUT. The editor holds two adjacent spans; the engine
+   * merges them straight back (timeline.ts). Measured on 2026-09-02 before
+   * this existed: splitting before cutting killed a render that was 20 %
+   * through, for a file that would have been byte-identical.
+   */
+  it('a split with nothing removed keeps its job and re-aims it', () => {
+    startPrerender({ recording, edit, settings })
+    const split = {
+      ...edit,
+      segments: [
+        { startMs: 0, endMs: 400 },
+        { startMs: 400, endMs: 1000 },
+      ],
+    } as unknown as EditState
+    expect(editBindsPrerender({ recording, edit: split, settings })).toBe(false)
+    expect(renderCalls).toBe(1)
+    // …and it now answers to the edit the editor is holding, so the export
+    // that follows the split JOINS the work instead of starting it again.
+    expect(prerenderStatus(prerenderKey({ recording, edit: split, settings }))?.state).toBe('running')
+  })
+
+  it('does nothing when the output has not changed', () => {
+    startPrerender({ recording, edit, settings })
+    expect(editBindsPrerender({ recording, edit, settings })).toBe(false)
+    expect(prerenderStatus(prerenderKey({ recording, edit, settings }))?.state).toBe('running')
+  })
+
+  it('names WHERE the edit landed, on the take\'s own timeline', () => {
+    expect(firstEditDivergenceMs(edit, cut)).toBe(400)
+    expect(firstEditDivergenceMs(cut, edit)).toBe(400)
+    expect(firstEditDivergenceMs(edit, edit)).toBeNull()
+  })
+
+  it('an export pressed after the cut can never join the pre-cut job', () => {
+    startPrerender({ recording, edit, settings })
+    editBindsPrerender({ recording, edit: cut, settings })
+    expect(takePrerender(prerenderKey({ recording, edit: cut, settings }))).toBeNull()
+    expect(takePrerender(prerenderKey({ recording, edit, settings }))).toBeNull()
   })
 })

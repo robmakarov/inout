@@ -115,7 +115,7 @@ class WorkerStartFailure extends Error {
 }
 
 function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
-  const { recording, edit, settings, onProgress, signal } = opts
+  const { recording, edit, settings, onProgress, signal, pace } = opts
   let worker: Worker
   try {
     worker = new Worker(new URL('./export.worker.ts', import.meta.url), { type: 'module' })
@@ -130,10 +130,16 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
     let producedOutput = false
     const onAbort = (): void => post({ type: 'abort' })
 
+    // F16b: the brake lives on the main thread (it reads capture's pressure
+    // instrument) and the render lives in here, so the level crosses as a
+    // message. Unsubscribed with everything else — a finished job that kept
+    // listening would keep the broker's listener set growing all session.
+    let unsubscribePace: (() => void) | null = null
     const finish = (fn: () => void): void => {
       if (settled) return
       settled = true
       signal?.removeEventListener('abort', onAbort)
+      unsubscribePace?.()
       worker.terminate()
       fn()
     }
@@ -197,7 +203,10 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         loudness: loudnessMode(),
         sourceFrame: sourceFrameEnabled(),
       },
+      paced: !!pace,
+      pace: pace?.level(),
     })
+    if (pace) unsubscribePace = pace.subscribe((level) => post({ type: 'pace', level }))
   })
 }
 

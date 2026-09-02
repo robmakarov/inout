@@ -35,10 +35,33 @@
  *    so pressing the button early costs the user the remaining time and never
  *    restarts the work.
  */
-import type { EditState, ExportProgress, ExportResult, ExportSettings, Recording } from '@core/types'
+import type {
+  EditState,
+  ExportProgress,
+  ExportResult,
+  ExportSettings,
+  PaceSource,
+  Recording,
+  WorkPace,
+} from '@core/types'
 import { newId } from '@core/id'
 import { blobStore, persistBlobCopy } from '@core/store'
+import { currentPace, onBackgroundWorkChange } from '@core/backgroundWork'
+import { keptSegments } from '@core/timeline'
 import { exportRecording } from './pipeline'
+
+/**
+ * F16b — THE ELASTIC BRAKE, wired to the product's one pressure instrument.
+ *
+ * Robert's ruling (2026-09-01): the background render runs BESIDE a live take
+ * at strictly lower priority and is the first load shed on the machine. This
+ * is the only place a job is handed one: a user-visible export never gets a
+ * pace, because a person is waiting for it.
+ */
+const backgroundPace: PaceSource = {
+  level: () => currentPace(),
+  subscribe: (cb: (level: WorkPace) => void) => onBackgroundWorkChange((state) => cb(state.pace)),
+}
 
 /**
  * A pre-rendered file has to survive the NEXT export, and by default it does
@@ -74,10 +97,44 @@ export function prerenderKey({ recording, edit, settings }: PrerenderKeyInput): 
   return JSON.stringify([recording.id, edit, settings ?? null])
 }
 
+/**
+ * THE SAME OUTPUT, WRITTEN DIFFERENTLY — F16b.
+ *
+ * The key above is deliberately strict, and it stays strict: it is what
+ * decides whether a finished file may be SERVED. This is a second, weaker
+ * question, asked only of a job that is still RUNNING: would the file it is
+ * making be the same file under the new edit?
+ *
+ * It differs in exactly one place — the spans are normalised through
+ * `keptSegments`, which is what the ENGINE sees. A bare split is two adjacent
+ * spans in the editor and one span in the render (timeline.ts: "this is what
+ * keeps a split-with-nothing-deleted free"), so a user who splits before
+ * cutting has changed the key without changing a single byte of output. Killing
+ * a 20 %-finished render for that — measured, exactly that, on 2026-09-02 —
+ * spends the machine to obey a bookkeeping difference.
+ *
+ * Everything else goes in whole, as before: camera track, viewport, background,
+ * channels, the global trim, the settings. Same shape ⇒ same bytes.
+ */
+export function prerenderShape({ recording, edit, settings }: PrerenderKeyInput): string {
+  return JSON.stringify([recording.id, { ...edit, segments: keptSegments(edit) }, settings ?? null])
+}
+
 export type PrerenderState = 'running' | 'done' | 'failed'
+
+/** Where a job came from. F16 started them from the editor only; F16b starts
+ *  the max+camera one at STOP, where the machine is idle by definition. */
+export type PrerenderOrigin = 'stop' | 'edit'
 
 interface Job {
   key: string
+  /** What this job is rendering. Kept so a LATER edit can be described against
+   *  the one the job is spending the machine on — an edit that binds has to be
+   *  able to say WHERE it landed. */
+  input: PrerenderKeyInput
+  /** Why it was started: 'stop' (F16b, at the end of the take) or 'edit' (F16,
+   *  1.2 s after the editor settles). Evidence for the console line. */
+  origin: PrerenderOrigin
   state: PrerenderState
   progress: ExportProgress
   startedAt: number
@@ -120,7 +177,7 @@ export function cancelPrerender(): void {
  * Begin a render for this exact output, or keep the one already running for it.
  * Returns nothing: nobody waits on a pre-render, that is the whole point.
  */
-export function startPrerender(input: PrerenderKeyInput): void {
+export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin = 'edit'): void {
   const key = prerenderKey(input)
   if (job && job.key === key) return
   cancelPrerender()
@@ -129,6 +186,8 @@ export function startPrerender(input: PrerenderKeyInput): void {
   const blobKey = `${OWN_PREFIX}${newId('p')}`
   const started: Job = {
     key,
+    input,
+    origin,
     state: 'running',
     progress: { phase: 'preparing', ratio: 0 },
     startedAt: Date.now(),
@@ -140,12 +199,23 @@ export function startPrerender(input: PrerenderKeyInput): void {
   }
   job = started
 
+  if (origin === 'stop') {
+    console.info(
+      `[compose] pre-render started AT STOP for a take whose export must render — ` +
+        `${(input.recording.durationMs / 1000).toFixed(1)}s, ${input.settings?.width ?? '?'}x` +
+        `${input.settings?.height ?? '?'} (F16b)`,
+    )
+  }
+
   started.promise = (async () => {
     const result = await exportRecording({
       recording: input.recording,
       edit: input.edit,
       settings: input.settings,
       signal: abort.signal,
+      // F16b: a background job, and therefore elastic. Every other caller of
+      // exportRecording is a person waiting for a file.
+      pace: backgroundPace,
       onProgress: (p) => {
         // NOT guarded by `job === started`: once claimed the job is retired
         // from this module but its progress is what the user is watching —
@@ -192,6 +262,90 @@ export function startPrerender(input: PrerenderKeyInput): void {
       }
     },
   )
+}
+
+/**
+ * WHERE TWO EDITS FIRST DISAGREE, on the take's own timeline — the number the
+ * console line has to carry, because "an edit landed" without a WHERE is not
+ * evidence of anything.
+ *
+ * Read off the kept spans rather than the raw fields: a trim, a cut and a
+ * delete all arrive as different fields and mean the same thing to a render.
+ * Null when the spans are identical (a change of camera track, background or
+ * viewport — which still invalidates the job, and says so in its own words).
+ */
+export function firstEditDivergenceMs(before: EditState, after: EditState): number | null {
+  const a = keptSegments(before)
+  const b = keptSegments(after)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i]
+    const y = b[i]
+    if (!x || !y) return (x ?? y)!.startMs
+    if (x.startMs !== y.startMs) return Math.min(x.startMs, y.startMs)
+    if (x.endMs !== y.endMs) return Math.min(x.endMs, y.endMs)
+  }
+  return null
+}
+
+/**
+ * AN EDIT BINDS THE ONGOING JOB — Robert, 2026-09-01 (DECISIONS (4)): "a cut or
+ * delete landing while a job works takes effect IN the job, immediately — it
+ * stops spending work on the excluded span and its output can never contain
+ * it."
+ *
+ * Key-supersession already stopped a stale file being SERVED (the key carries
+ * the edit whole, so `takePrerender` refuses it). This is the stronger half:
+ * the stale work must not CONTINUE. Before this, an edit landing mid-job left
+ * that job running for at least the editor's 1.2 s debounce — and for as long
+ * as the user kept dragging — spending the machine on a file that could never
+ * be served. The precedent this project does not get to repeat is the join bug
+ * where cancel was wired to nothing and the render finished anyway: a control
+ * that does not reach the running job is decoration, and an edit is a control.
+ *
+ * WHAT IT KEEPS: nothing. F16 left two options — segment-level reuse where the
+ * seams allow, or debounced restart — and said to measure rather than choose by
+ * taste. The measurement is in the F16b handoff: reuse is only ever valid for
+ * output the render has ALREADY WRITTEN, the render writes audio a chunk ahead
+ * of video, and the muxed file cannot be reopened at an earlier point — so the
+ * reusable case is exactly "the cut lands after everything already encoded",
+ * which is the case a restart pays the least for anyway. Restart, debounced by
+ * the editor, is what ships.
+ *
+ * Returns true when a running job was actually stopped.
+ */
+export function editBindsPrerender(next: PrerenderKeyInput): boolean {
+  if (!job || job.key === prerenderKey(next)) return false
+  const stale = job
+  /**
+   * THE EDIT THAT CHANGES NOTHING keeps its job — and gets it re-aimed. A
+   * split makes two spans the engine immediately merges back into one, so the
+   * render in flight is already making the file this new edit asks for; it
+   * just no longer answers to the name it was started under.
+   */
+  if (prerenderShape(stale.input) === prerenderShape(next)) {
+    stale.key = prerenderKey(next)
+    stale.input = next
+    console.info(
+      '[compose] an edit landed that does not change the output (a split with nothing removed) — ' +
+        `the background render keeps its ${Math.round(stale.progress.ratio * 100)}% and is re-aimed at it (F16b)`,
+    )
+    return false
+  }
+  const sameTake = stale.input.recording.id === next.recording.id
+  const at = sameTake ? firstEditDivergenceMs(stale.input.edit, next.edit) : null
+  const where =
+    at !== null
+      ? `at ${(at / 1000).toFixed(2)}s of the take`
+      : sameTake
+        ? 'that changes the picture rather than the spans'
+        : 'from another take'
+  console.info(
+    `[compose] an edit landed ${where} while a background render was ` +
+      `${Math.round(stale.progress.ratio * 100)}% through (phase ${stale.progress.phase}) — ` +
+      `the job is stopped here and nothing it made can be served (F16b)`,
+  )
+  cancelPrerender()
+  return true
 }
 
 /** What a claimer gets: the render, and the levers a user-visible export needs. */

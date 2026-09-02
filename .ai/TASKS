@@ -408,11 +408,23 @@ it is built combine-ready:
           or dying take cannot re-baseline the machine's throughput history under you.
           STILL OWED: the WORDING of the four new sentences is Robert's (B4's gate); proposals are
           in the handoff and only the words are open.
-  7. F16b prerender-at-stop, max+camera   [light-medium · spec below] instant-feel max with a
-          camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
+  7. F16b prerender-at-stop, max+camera   DONE 2026-09-02 — the export a max+camera take needs is
+          started when the take ENDS, and it runs beside the next take instead of instead of it.
+          Measured on a 16.7 s take: ready 13.2 s after stop, and the export press took 14 ms.
+          `core/backgroundWork.ts` is the load-shedding broker (E1's detector, second consumer);
+          under an induced load the job is fully shed 495-513 ms after it arrives and back
+          407-646 ms after it lifts, four runs. A take recorded beside the ELASTIC job pays
+          -0.69 fps against its own bracketing controls (whose drift is ±1.6-9.5); beside the
+          UNTHROTTLED one, -4.16 fps, the worst lane in 4 of 4 runs. An edit now binds the running
+          job — a cut stops it where it stands, a split re-keys it instead. `npm run exp -- f16b`
+          and `node scripts/editor-drag-cost.mjs` are the two cells; `?bgpace=0` is the fallback.
+          Handoff under the task. LEFT BEHIND: BACKLOG P2 — the export panel's size probe, not the
+          render, is what stalls the editor's first seconds (300 frames encoded on the main thread).
   8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
           below] not started until Robert says so, even with both prerequisites perfect.
-  9. O4-WebGPU + O5 remnants              [heavy] the render-floor levers, after F16b.
+  9. O4-WebGPU + O5 remnants              [heavy] the render-floor levers. F16b is done, so this
+          is unblocked — but read F16b's handoff first: the export a max+camera take needs is now
+          usually FINISHED before it is asked for, which moves what a faster render floor is worth.
  10. B8   PiP placement                   DONE 2026-09-01 — and it was not a placement task. The
           filed -0.5 s was ONE badly-localised sample of a four-sample search on a take whose live
           composite was dropping a third of its frames; the census that replaced it found a real
@@ -902,6 +914,111 @@ positive control) · under induced pressure the job throttles to zero inside the
 time and ramps back after, both events logged · T2's lateness bands hold with the editor open
 beside a working job, measured on drags, not idle · a screen-only max take still packet-copies
 and never starts a job · a sub-max take is untouched · oracle v2+v1 green.
+
+HANDOFF 2026-09-02 (task/F16b). DONE, all eight gates, measured not argued.
+THE EXPORT A MAX+CAMERA TAKE NEEDS NOW STARTS WHEN THE TAKE ENDS, and it runs BESIDE the next
+take instead of instead of it. Three pieces, and only the first was in the spec's title:
+  · `core/backgroundWork.ts` — the BROKER. Not a second detector: capture publishes E1's readings
+    (liveCompositeV2, one line) and background work subscribes. no take → full · take + nominal →
+    half · fair → trickle · serious/critical → PAUSED · NOTHING READABLE → paused, because the
+    thing being shed here is the job and R1's rule points the other way than it does for capture.
+  · `core/compose/paceGate.ts` — the MECHANISM the render awaits. Free at full speed (a
+    user-visible export has no pace and the call is a synchronous no-op), a duty cycle below it,
+    a sleep at paused, and it can be reached by a cancel — the F16-join defect, not repeated.
+  · the wiring: `render.ts` awaits it every 10 frames AND at every chunk seam, the worker learns
+    the level by message (`pipeline.ts` + `export.worker.ts`), and `prerender.ts` is the only
+    caller that hands a render a brake.
+STARTING AT STOP is four lines in CaptureScreen's stop hand-off, on the SAME predicate F16 already
+used (`exportWouldRender`) — so a take whose export is a copy never starts one — plus one move:
+UI1's default-step rule left EditorScreen and became `quality.defaultTierForTake`. That move IS the
+feature: if the stop handler and the panel resolved the step differently the export would not JOIN
+the job, and the whole thing would be silently off while looking exactly like it was on.
+
+GATE 1 — AN EDIT BINDS THE ONGOING JOB. Local build, real app, `?synthetic=1&qstep=max&screensize=3024x1964`.
+  A 38.4 s screen+camera max take. At stop: "pre-render started AT STOP for a take whose export
+  must render — 38.4s, 3024x1962 (F16b)". Split at 19.0 s → "an edit landed that does not change
+  the output (a split with nothing removed) — the background render keeps its 11% and is re-aimed
+  at it (F16b)". Delete clip 2 → "an edit landed at 19.02s of the take while a background render
+  was 25% through (phase rendering) — the job is stopped here and nothing it made can be served
+  (F16b)". The restarted job: "[export] 571 frames in 13934ms", "[bits] render 3024×1962 avc …
+  19.025s". Export: "export served a render that was already made (F16)", export_complete
+  durationMs 13, sizeBytes 1644635.
+  READ OUT OF THE FILE (mediabunny over the served job blob, not out of the interface):
+  duration 19.093 s · 571 frames · last frame 19.000 s · 3024×1962 · 1,644,635 bytes — against the
+  POST-cut edit's kept span [0, 19.025 s] of a 38.388 s take. The deleted span is not in the file.
+  An export after the cut cannot join the pre-cut job: that job was aborted at 25 % and its key is
+  gone (pinned by test).
+GATE 2 — THE JOIN. A 16.7 s max+camera take: "pre-render started AT STOP … 16.7s, 3024x1962" →
+  "pre-render ready after 13.2s — 1.4 MB waiting before it was asked for" → "export served a render
+  that was already made (F16)", export_complete **durationMs 14**, 1,514,099 bytes.
+GATE 3 — A TAKE RECORDED WHILE A JOB WORKS. `npm run exp -- f16b '{"takeMs":45000,"loadAtMs":8000,"loadMs":16000}'
+  --query='qstep=max&screenfps=60&camfps=60' --headed --gpu`, FOUR runs. Five takes per run:
+  control · elastic job · unthrottled job (the positive control: the same render with no brake,
+  i.e. what shipping decoration would look like) · control again · the pressure lane. The job is
+  the control take's OWN max render (2560×1440@60) — the render a max+camera take actually needs.
+  LOSSES, which is what the gate is about: composite `dropped` = 0 in 15 of 16 lanes; the exception
+  is one ELASTIC lane at 17 of 2091 frames (0.8 %). silentTailMs 0 and revivals 0 in every lane of
+  every run. Padding 0 except 87 ms (elastic, run 3) and 82 ms — in a CONTROL lane of the same run,
+  so padding is not job-attributable.
+  DELIVERED FPS, against the mean of the two controls that BRACKET each lane (the two controls in
+  one run differ by -1.62, +2.56, +6.54 and -9.52 fps — the page speeds up and slows down across
+  five takes, and a single-control comparison reads that drift):
+      elastic       +1.10 · -2.40 · -0.48 · -0.99   mean **-0.69 fps**, straddling zero
+      unthrottled   -2.12 · -3.85 · -4.92 · -5.76   mean **-4.16 fps**, the worst lane in 4 of 4
+  So the brake is what makes the job free: without it the take gives up ~8 % of its delivered
+  frames, with it the cost is inside the controls' own drift.
+  WHAT THIS RUN DOES NOT CLAIM: the positive control did not make the take LOSE frames either
+  (0 dropped in all four unthrottled lanes). A take heavy enough to actually drop frames to an
+  unthrottled background render was not reachable on this 8 GB machine in a rig — at 1920×1080@60
+  the harm shows as delivery, not as loss. The loss case is gate 4's, where the pressure is real.
+GATE 4 — UNDER INDUCED PRESSURE (pressureLead's own load, the one E1's bands were read from,
+  8 s → 24 s of a 45 s take, with a job running at 15 % when it arrives):
+      shed  495 · 498 · 500 · 513 ms after the load went on
+      back  621 · 617 · 646 · 407 ms after it lifted (trickle first, half ~1 s later)
+  and the reading that did it is named in the event: "pressure serious — encode-latency: 86.3 ms
+  in the encoder against 100 ms of pipeline", "pressure critical — 174.4 ms …". E1 measured this
+  detector's lead at 985 ms, so a shed at ~0.5 s lands inside it. The job made no progress while
+  shed (0.15 → 0.42 across the whole lane) and the composite dropped 0 frames in every run.
+GATE 5 — T2's BANDS ON DRAGS, not idle. `node scripts/editor-drag-cost.mjs` — real headed,
+  VISIBLE, focused Chrome over CDP, the real editor, a real pointer drag on the timeline at 62 Hz.
+  (An agent's browser pane is a hidden document and clamps setInterval to ~1 Hz; every lateness
+  number read through it is the clamp. The script refuses to run on a hidden page.)
+      p95 scheduling lateness   1.1 / 1.2 ms alone → 1.2 / 1.3 ms beside the working render
+      worst tick                2.3 / 3.3 ms → 9.6 / 16.1 ms, all inside one 16.7 ms frame
+      pointer stream            62.5 Hz → 62.2-62.4 Hz, 459-466 pointermoves either way
+  AND IT FOUND WHAT ACTUALLY STALLS THE EDITOR: before the panel's own size probe was excluded,
+  the same drag hit 35-201 ms stalls in four runs of seven, all landing 0.4-0.7 s in — inside the
+  10.8-11.0 s `[quality] size probe`, which encodes 300 real frames on the main thread when the
+  editor opens. Not the render. Filed BACKLOG P2 with the repro.
+GATE 6 — A SCREEN-ONLY MAX TAKE. 17.8 s, `?qstep=max&screensize=3024x1964`, camera off: NO
+  "pre-render started AT STOP" line at all, and the export is "instant copy avc from
+  single-generation", export_complete durationMs 291.
+GATE 7 — A SUB-MAX TAKE IS UNTOUCHED. 22.6 s at `?qstep=1080p` with a camera: no job, "instant
+  copy avc from composite", export_complete durationMs 297.
+GATE 8 — ORACLE. v2 PASS twice (sync 55.7/69.5 ms and 43.2/58.8 ms, inst=instant, trim=smartcut,
+  export 4.78x/4.85x) and v1 PASS (39.6/52.4 ms). typecheck clean; 945 tests, 24 new.
+
+FOUR THINGS THIS TASK SHIPPED THAT THE SPEC DID NOT NAME, each because the measurement asked:
+  · A SPLIT IS NOT A CUT. `prerenderShape` normalises the spans through `keptSegments` — what the
+    ENGINE sees — so an edit that cannot change a byte of output RE-KEYS the running job instead
+    of killing it. Measured before it existed: splitting before cutting threw away a render that
+    was 20 % through, for a file that would have been byte-identical.
+  · EDITING SHEDS TOO. Robert's order is CAPTURE > EDITING > BACKGROUND RENDER and the middle term
+    was implemented nowhere: the job ran flat out beside a hand on the timeline. `noteEditingActivity`
+    (pointer capture on the editor root) trickles the job for 700 ms after the last pointer event.
+  · THE BRAKE IS READ EVERY 10 FRAMES, not only at the 1 s chunk seam — a brake that can only bite
+    at the end of a chunk is up to a second late, which is exactly the window the drag stalls fell in.
+  · `?bgpace=0` — the frozen rule's runtime fallback, and the same positive control the gate uses,
+    reachable from a URL on Robert's own machine. docs/FLAGS.md carries it and `?prerender=`, which
+    had never been documented.
+STILL OWED / NOT CLAIMED:
+  · A max take with NO COMPOSITE (`?singlegen=capture`, screen-only) publishes no pressure, so the
+    broker reads it as blind and PAUSES a job from an earlier take for that take's duration. Such a
+    take never starts a job of its own (gate 6), so nothing is lost — but it is a shed, not an
+    elastic ride, and it stops being one the day M1 lifts the instrument into rawVideo.worker.ts.
+  · The 2-minute pause budget (a job shed that long gives up and the export renders on demand) is
+    pinned by test and has never been reached by a real take.
+  · The three-way's harm case is delivery, not loss — see gate 3's own caveat.
 
 ## S1 the take report card — "perfect" is a verdict, not a vibe [light-medium · instrument ·
    authored 2026-09-01 second pass]
