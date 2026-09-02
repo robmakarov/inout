@@ -3218,7 +3218,9 @@ main against this branch, read main -50.7 / -60.0 dB and this branch -51.7 /
 -54.2 dB, all PASS, and plain main measured -59.4 dB in the same high-load
 window this branch read -35. The spur gate moves 25 dB with machine load, which
 means a red spur reading is not attributable to a commit without a same-window
-control. Filed to BACKLOG for the G lane. NOTHING in this fix can reach that
+control. Filed to BACKLOG for the G lane, where it
+merges with the unreproduced 2026-08-25 observation of the same thing — that one blamed the take's
+LENGTH; this is a controlled 6 s reproduction, so it is load. NOTHING in this fix can reach that
 metric anyway: every one of those runs had a POSITIVE compOff, and for a
 positive offset this code is bit-identical to what it replaced.
 

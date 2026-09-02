@@ -7,14 +7,6 @@ technical defects by severity. Done items get deleted, not archived.
 ## Inbox
 
 - (dump here)
-- **[P2 · gate] the oracle's spur gate moves 25 dB with machine load, so a red spur is not
-  attributable to a commit on its own.** Measured 2026-09-02 during B9: three consecutive
-  `spur -35.0 to -36.3 dB > -40 dB` FAILs (plus one `export throughput 0.95x < 1x` on v1) at load
-  average 15.2, on a commit that read -62.3 dB an hour earlier. Four INTERLEAVED runs at load 7-9,
-  plain main against the same branch, read main -50.7/-60.0 and the branch -51.7/-54.2, all PASS —
-  and plain main read -59.4 in the same high-load window. Either the spur measurement needs to be
-  load-insensitive, or the runner has to record the load with the verdict so a red reading can be
-  triaged instead of argued. Same family as the merge gate's cold-run flakiness (G lane).
 - **[P2 · technical] `?slow=` is dead code, and both CLAUDE.md and docs/FLAGS.md sell it as working.**
   Found 2026-09-02 while B9 needed to force a cold channel: `parseSlowChannels` (src/core/capture/synthetic.ts)
   has NO caller outside its own test — `?synthetic=1&slow=screen:600,camera:600` changed nothing,
@@ -783,11 +775,17 @@ technical defects by severity. Done items get deleted, not archived.
   first-frame delay) into ChannelDiagnostics/cert so a field take carries the numbers, then
   compensate from measurements, not theory. X14 (≤20 ms) stays blocked on platform deliverables.
 
-- [P2] 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
-  against its −40 dB band on a 120 s run of HEAD (7c9a02f). The same build at 6 s read −52.3 (pass)
-  and the previous build at 120 s read −56.7 (pass), so this is either machine load — the metric is
-  known load-sensitive — or something length-dependent in the mix. Re-run 120 s on a quiet machine
-  before believing either.
+- [P1 · gate] THE SPUR GATE MOVES 25 dB WITH MACHINE LOAD, so a red spur cannot be attributed to a
+  commit without a same-window control. Filed 2026-08-25 as one unreproduced observation (−34.6 dB on
+  a 120 s run of 7c9a02f, where the same build at 6 s read −52.3 and the previous build at 120 s read
+  −56.7); REPRODUCED UNDER CONTROL 2026-09-02 during B9, and it is load, not length. Three consecutive
+  6 s FAILs at −35.0 to −36.3 dB (plus one `export throughput 0.95× < 1×` on v1) at load average 15.2,
+  on a branch that had read −62.3 dB an hour earlier — and plain main read −59.4 dB in the same
+  window. Four INTERLEAVED runs at load 7–9, main against that branch, read main −50.7 / −60.0 and the
+  branch −51.7 / −54.2, all PASS. A session that reads the first three as a regression will spend
+  hours bisecting nothing; this one nearly did. ACTION: either make the measurement load-insensitive,
+  or record the load average alongside the verdict so a red reading can be triaged instead of argued.
+  G lane, same family as the merge gate's cold-run flakiness.
 
 - [P2 → ROADMAP G1] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics (merged, 86ed200). Still open: the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 
