@@ -771,21 +771,36 @@ export function displayMediaOptions(
   // it. That rung is covered on the TRACK instead — capDisplayTrack enforces
   // the export ceiling on what actually arrives, whatever the request managed
   // to say.
-  // THE NEW FLOOR (2026-08-30). Rung 2 was called "nothing of ours left to
-  // drop" and that was not true: the three raw-audio flags are ours — the user
-  // chose Tab Audio, nobody chose `echoCancellation: false` — and they have
-  // ridden every rung since 2026-08-26 on the claim that "three boolean audio
-  // constraints are advisory and cannot reject or hang a request", which was
-  // asserted and never measured. Robert's machine wedged FIVE times with the
-  // ladder already on rung 2, so whatever is choking is in what rung 2 still
-  // sends, and this is what rung 2 still sends.
+  // RUNG 3 ASKED A QUESTION AND GOT ITS ANSWER, SO IT STOPS CHARGING FOR IT.
   //
-  // Nothing the user chose goes missing: the flags MOVE to the delivered track
-  // (repairDisplayAudio, below) instead of being dropped, so the tab music is
-  // still raw. If the track refuses them we are exactly where this project was
-  // before 2026-08-26, on a machine that has already wedged three times, and
-  // the console says so.
-  if (level >= 3) return { video: true, audio: config.systemAudio ? true : false }
+  // The rung was added on 2026-08-30 to test one thing: whether the three
+  // raw-audio flags — which are OURS, since the user chose Tab Audio and nobody
+  // chose `echoCancellation: false` — were what Chrome was choking on. So it
+  // dropped them and asked for bare `audio: true`, moving them onto the
+  // delivered track instead (repairDisplayAudio, below).
+  //
+  // It wedged three times in a row anyway, and docs/SCREEN_WEDGE.md closed the
+  // question on 2026-09-02: "our options are not the trigger; the ladder stays
+  // only because it costs nothing". It is not costing nothing. Bare
+  // `audio: true` is Chromium's voice-processing default — AEC alone
+  // high-passes the signal — and a machine parked on this rung records every
+  // take with tab music run through it. Robert, 2026-09-02, on a 124-minute
+  // take: "something off with tab sound when i play music from youtube, not
+  // enough bass or quality, no as it was sounded like" — the same complaint,
+  // in the same words, as the 2026-08-26 one this flag was introduced to fix,
+  // and the rung climbs back only one per wedge-free DAY, so a machine that
+  // wedges lives here.
+  //
+  // The repair is why it was thought free, and the repair was never measured:
+  // Chromium configures a display-audio track's processing when the track is
+  // created, and `applyConstraints` on those properties is not something it
+  // promises to honour. A fix that MIGHT work is not a licence to break the
+  // sound for an experiment that has already concluded.
+  //
+  // So the flags ride this rung too. It still drops everything else rung 2
+  // drops; the repair below stays as the belt for a track that somehow arrives
+  // processed anyway.
+  if (level >= 3) return { video: true, audio }
   if (level >= 2) return { video: true, audio }
   if (level === 1) {
     return {

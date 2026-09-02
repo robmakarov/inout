@@ -13,7 +13,7 @@ import {
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { cancelPrerender, editBindsPrerender, exportWouldRender, startPrerender } from '@core/compose'
-import { noteEditingActivity } from '@core/backgroundWork'
+import { noteEditingActivity, noteEditorOpen, noteEditorOpening } from '@core/backgroundWork'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { loadRecovery } from '@core/capture'
 import { editsRepo, recordingsRepo } from '@core/store'
@@ -45,6 +45,26 @@ export function EditorScreen() {
 function Editor({ recording, edit }: { recording: Recording; edit: EditState }) {
   const setEditState = useAppStore((s) => s.setEditState)
   const pb = usePlayback(recording, edit)
+  /**
+   * OPENING THE EDITOR OUTRANKS THE BACKGROUND RENDER (backgroundWork.ts,
+   * EDITOR_OPENING_MAX_MS). At the end of a long take the at-stop pre-render is
+   * already running flat out on the same decoder this screen needs to show its
+   * first frame, and Robert saw the result as a black screen. The window opens
+   * on mount and closes as soon as the preview has its sources and the browser
+   * has had a frame to paint them.
+   */
+  useEffect(() => {
+    noteEditorOpening()
+    return noteEditorOpen
+  }, [recording.id])
+  useEffect(() => {
+    if (!pb.ready) return
+    // Two frames: one for React to commit the elements, one for the browser to
+    // paint them. Anything sooner hands the machine back before the picture is
+    // actually up.
+    const a = requestAnimationFrame(() => requestAnimationFrame(noteEditorOpen))
+    return () => cancelAnimationFrame(a)
+  }, [pb.ready])
   const [confirmOpen, setConfirmOpen] = useState(false)
   // F13: the remembered step, resolved to THIS take's shape. `resolveTier` is
   // the identity on a 16:9 take and on every take with the flag off, so a

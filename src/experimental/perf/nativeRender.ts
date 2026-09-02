@@ -42,21 +42,26 @@ import {
   ALL_FORMATS,
   BlobSource,
   CanvasSource,
+  EncodedAudioPacketSource,
+  EncodedPacket,
   Input,
   Mp4OutputFormat,
   Output,
   StreamTarget,
+  WebMOutputFormat,
   getFirstEncodableVideoCodec,
   type StreamTargetChunk,
 } from 'mediabunny'
 import { exportRecording } from '@core/compose'
 import { getLastRenderStats } from '@core/compose/render'
 import { getLastScratchStats } from '@core/compose/scratch'
+import { constantQualityQp, setConstantQuality } from '@core/compose/constantQuality'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
 import { newId } from '@core/id'
 import { blobStore, createPositionedWriter } from '@core/store'
 import { defaultEditState } from '@core/timeline'
-import type { ChannelRecording, Recording } from '@core/types'
+import { DEFAULT_BACKGROUND } from '@core/compose/background'
+import type { ChannelRecording, EditState, Recording } from '@core/types'
 
 const MB = (bytes: number): number => Math.round((bytes / 1024 / 1024) * 10) / 10
 
@@ -82,6 +87,32 @@ export interface NativeRenderOptions {
   outputs?: QualityTierId[]
   /** Add a camera channel, so the render runs TWO decoders like his take did. */
   camera?: boolean
+  /**
+   * RENDER IT THE WAY HE RENDERED IT (Robert 2026-09-02: "render was with frame
+   * and zoom effect once - it must not make it slower"). With this on, the edit
+   * carries the default background frame and one zoom span, which is what a
+   * take with a frame and a zoom actually asks the render to draw. Off, the
+   * edit is the plain default — so one run of this rig prices the decoration
+   * against itself on the same source.
+   */
+  frame?: boolean
+  /**
+   * HOW MANY AUDIO CHANNELS THE TAKE CARRIES. Robert's take had two (mic and
+   * tab audio) and every previous run of this rig had NONE, so the audio stage
+   * of the render — decode two opus streams, Hermite-resample, soft-limit every
+   * sample, encode AAC, once per output second — has never been in a number
+   * this rig produced. `audioMs` reading 0 in every report is not evidence that
+   * it is free; it is evidence that it was never measured.
+   */
+  audioChannels?: number
+  /**
+   * Constant quality for this run: a QP, or 'off' for the bitrate target. The
+   * flag is normally a URL parameter and this rig is served from a harness page
+   * whose URL it does not own, so the A/B has to be settable from the cell —
+   * and the encoder is where a native-resolution render spends its wall clock,
+   * so this is the first thing a slow-export report has to be able to swing.
+   */
+  cq?: number | 'off'
   /** Ignore a cached fixture of the same shape. */
   rebuild?: boolean
   /** Stop the fixture build early if it is taking longer than this. */
@@ -244,6 +275,13 @@ export async function buildChannelFile(opts: {
   mbps: number
   budgetSec: number
   label: string
+  /**
+   * Write a FRAGMENTED MP4, the way rawVideo.worker.ts writes a real channel
+   * (`fastStart: 'fragmented'`). Default false, which is what every earlier run
+   * of R2 built — a plain file with one sample table, which is a different
+   * thing for a reader to open. editorOpen.ts needs both to tell them apart.
+   */
+  fragmented?: boolean
 }): Promise<{ frames: number; bytes: number; ms: number }> {
   const { key, width, height, fps, seconds, mbps, budgetSec, label } = opts
   const codec = await getFirstEncodableVideoCodec(['avc'], { width, height })
@@ -266,7 +304,7 @@ export async function buildChannelFile(opts: {
     abort: closeOnce,
   })
   const output = new Output({
-    format: new Mp4OutputFormat(),
+    format: new Mp4OutputFormat(opts.fragmented ? { fastStart: 'fragmented' } : undefined),
     target: new StreamTarget(writable, { chunked: true, chunkSize: 4 << 20 }),
   })
   const canvas = new OffscreenCanvas(width, height)
@@ -332,6 +370,124 @@ export function channel(
   }
 }
 
+/**
+ * ONE OPUS AUDIO CHANNEL, the shape capture writes (measuredAudio.ts): stereo
+ * 48 kHz opus at 128 kbps in WebM. Content is a moving tone plus noise so no
+ * part of the render can coast on silence, and so the loudness statistics the
+ * export reads are those of a real signal rather than of a flat line.
+ */
+async function buildAudioFile(key: string, seconds: number): Promise<number> {
+  const SR = 48_000
+  const CH = 2
+  const writer = await createPositionedWriter(key)
+  const sink = new WritableStream<StreamTargetChunk>({
+    async write(chunk) {
+      await writer.write(chunk.data, chunk.position)
+    },
+  })
+  const output = new Output({ format: new WebMOutputFormat(), target: new StreamTarget(sink) })
+  const source = new AudioBufferSourceLikeSource()
+  output.addAudioTrack(source.packetSource)
+  await output.start()
+  await source.start({ sampleRate: SR, numberOfChannels: CH, seconds })
+  await output.finalize()
+  await writer.close()
+  const blob = await blobStore.read(key)
+  return blob.size
+}
+
+/** The encoder half of buildAudioFile, kept apart so the muxing reads plainly. */
+class AudioBufferSourceLikeSource {
+  readonly packetSource = new EncodedAudioPacketSource('opus')
+
+  async start(opts: { sampleRate: number; numberOfChannels: number; seconds: number }): Promise<void> {
+    const { sampleRate, numberOfChannels, seconds } = opts
+    const FRAMES = 960 // 20 ms, opus's own frame
+    const total = Math.round(seconds * sampleRate)
+    let queued: Promise<void> = Promise.resolve()
+    const encoder = new AudioEncoder({
+      output: (chunk, meta) => {
+        queued = queued.then(() =>
+          this.packetSource.add(EncodedPacket.fromEncodedChunk(chunk), meta as never),
+        )
+      },
+      error: (err) => console.error('[r2] audio fixture encoder', err),
+    })
+    encoder.configure({ codec: 'opus', sampleRate, numberOfChannels, bitrate: 128_000 })
+    const data = new Float32Array(FRAMES * numberOfChannels)
+    for (let at = 0; at < total; at += FRAMES) {
+      const n = Math.min(FRAMES, total - at)
+      for (let i = 0; i < n; i++) {
+        const t = (at + i) / sampleRate
+        const v = 0.3 * Math.sin(2 * Math.PI * (220 + 40 * Math.sin(t)) * t) + 0.02 * (Math.random() - 0.5)
+        for (let c = 0; c < numberOfChannels; c++) data[c * n + i] = v
+      }
+      const chunk = new AudioData({
+        data: data.slice(0, n * numberOfChannels),
+        format: 'f32-planar',
+        sampleRate,
+        numberOfFrames: n,
+        numberOfChannels,
+        timestamp: Math.round((at / sampleRate) * 1e6),
+      })
+      encoder.encode(chunk)
+      chunk.close()
+      if (encoder.encodeQueueSize > 8) {
+        await new Promise<void>((r) => encoder.addEventListener('dequeue', () => r(), { once: true }))
+      }
+    }
+    await encoder.flush()
+    encoder.close()
+    await queued
+  }
+}
+
+/** An audio ChannelRecording over a file buildAudioFile wrote. */
+function audioChannel(
+  kind: 'mic' | 'system-audio',
+  blobKey: string,
+  durationMs: number,
+  bytes: number,
+): ChannelRecording {
+  return {
+    id: newId('ch'),
+    kind,
+    media: 'audio',
+    mimeType: 'audio/webm;codecs=opus',
+    blobKey,
+    startOffsetMs: 0,
+    durationMs,
+    bytes,
+  }
+}
+
+/**
+ * The edit under test. Plain = exactly what this rig always ran. Framed = the
+ * default background (a gradient backdrop, a 6 % inset, rounded corners and a
+ * drop shadow) plus a zoom that holds 2x across the middle third of the take,
+ * which is the shape of the edit Robert exported.
+ */
+function editFor(recording: Recording, frame: boolean): EditState {
+  const edit = defaultEditState(recording)
+  if (!frame) return edit
+  const endMs = recording.durationMs
+  const whole = { xFrac: 0.5, yFrac: 0.5, widthFrac: 1 }
+  const inAt = Math.round(endMs / 3)
+  const outAt = Math.round((2 * endMs) / 3)
+  return {
+    ...edit,
+    background: { ...DEFAULT_BACKGROUND },
+    viewport: {
+      keyframes: [
+        { ...whole, atMs: 0 },
+        { xFrac: 0.5, yFrac: 0.5, widthFrac: 0.5, atMs: inAt },
+        { xFrac: 0.5, yFrac: 0.5, widthFrac: 0.5, atMs: outAt },
+        { ...whole, atMs: endMs },
+      ],
+    },
+  }
+}
+
 export async function runNativeRender(
   opts: NativeRenderOptions = {},
 ): Promise<NativeRenderReport> {
@@ -341,7 +497,14 @@ export async function runNativeRender(
   const takeSec = opts.takeSec ?? 240
   const mbps = opts.sourceMbps ?? 24
   const outputs = opts.outputs ?? (['1080p', '1440p'] as QualityTierId[])
+  const frame = opts.frame === true
   const notes: string[] = []
+  const cqBefore = constantQualityQp()
+  if (opts.cq !== undefined) {
+    setConstantQuality(opts.cq === 'off' ? null : opts.cq)
+    notes.push(`constant quality forced to ${opts.cq} for this run (was ${cqBefore ?? 'off'})`)
+  }
+  if (frame) notes.push('edit carries the default background frame and one zoom span')
 
   // ---- the fixture -------------------------------------------------------
   const key = fixtureKey(sourceW, sourceH, sourceFps, takeSec, mbps)
@@ -393,6 +556,25 @@ export async function runNativeRender(
     cameraInfo = { width: 1920, height: 1080, sizeMB: MB(camBlob.size) }
   }
 
+  // ---- the audio his take had, which this rig never had -----------------
+  const audioChannels: ChannelRecording[] = []
+  const wantAudio = Math.max(0, Math.min(4, Math.round(opts.audioChannels ?? 0)))
+  for (let i = 0; i < wantAudio; i++) {
+    const aKey = `r2aud-v1-${Math.round(actualSec)}s-${i}`
+    let size = 0
+    if (opts.rebuild || (await existingFixture(aKey)) === null) {
+      await blobStore.remove(aKey).catch(() => undefined)
+      const t0 = performance.now()
+      size = await buildAudioFile(aKey, actualSec)
+      notes.push(`built audio fixture ${aKey} (${MB(size)} MB) in ${Math.round(performance.now() - t0)} ms`)
+    } else {
+      size = (await blobStore.read(aKey)).size
+    }
+    audioChannels.push(
+      audioChannel(i === 0 ? 'mic' : 'system-audio', aKey, durationMs, size),
+    )
+  }
+
   const recording: Recording = {
     id: newId('rec'),
     createdAt: Date.now(),
@@ -400,6 +582,7 @@ export async function runNativeRender(
     channels: [
       channel('screen', key, sourceW, sourceH, sourceFps, durationMs, sourceBlob.size),
       ...(cameraChannel ? [cameraChannel] : []),
+      ...audioChannels,
     ],
   }
 
@@ -439,7 +622,7 @@ export async function runNativeRender(
       )
       const result = await exportRecording({
         recording,
-        edit: defaultEditState(recording),
+        edit: editFor(recording, frame),
         settings,
         onProgress: (p) => {
           lastRatio = p.ratio
@@ -494,6 +677,10 @@ export async function runNativeRender(
       samples,
     })
   }
+
+  // Put the flag back: a rig must not leave a machine configured differently
+  // than it found it, and this one writes localStorage.
+  if (opts.cq !== undefined) setConstantQuality(cqBefore)
 
   return {
     source: {

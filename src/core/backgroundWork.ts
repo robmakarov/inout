@@ -82,6 +82,33 @@ export const RAMP_UP_AFTER_MS = 1000
 export const EDITING_QUIET_MS = 700
 
 /**
+ * HOW LONG THE EDITOR'S OWN OPENING OUTRANKS A BACKGROUND RENDER — and why
+ * "editing" could not just mean a hand that is already moving.
+ *
+ * Robert, 2026-09-02, on a 124-minute take: "when edit was open after long take
+ * there was black screen for long time until it loaded."
+ *
+ * At the end of a take whose export must render, F16b starts a pre-render AT
+ * STOP. `takeActive` is false by then and nobody has touched the editor yet, so
+ * `paceFor` answers FULL and that render goes flat out — decoder, encoder and
+ * disk — in the same seconds the editor is opening its channel blobs, starting
+ * a <video> decoder per channel at the take's native resolution, and building
+ * a filmstrip and a waveform. Every one of those competes with the render for
+ * the same media engine, and the user is looking at black while they lose.
+ *
+ * The half of Robert's priority order that was missing is that OPENING an
+ * editor is editing. `noteEditingActivity` only ever heard a pointer, so the
+ * one moment the editor needs the machine most was the one moment it asked for
+ * nothing. This is the same brake with a different trigger: the window opens
+ * when the editor mounts and closes when its preview is on screen.
+ *
+ * BOUNDED, because the closing signal comes from the app and an app can fail to
+ * send it — a take whose stage never paints must not hold the render down for
+ * the rest of the session. Past the cap the window closes itself.
+ */
+export const EDITOR_OPENING_MAX_MS = 30_000
+
+/**
  * How long a take may be judged from a reading that has stopped arriving.
  *
  * The composite posts pressure every 250 ms. Nothing for four intervals means
@@ -151,6 +178,8 @@ const listeners = new Set<Listener>()
 
 let takeActive = false
 let editingAt: number | null = null
+/** When the editor started opening, or null when it is not opening. */
+let editorOpeningAt: number | null = null
 let level: PressureLevel | null = null
 let leaderWhy: string | null = null
 let readingAt = 0
@@ -174,6 +203,9 @@ function paceFor(t: number): { pace: WorkPace; why: string } {
     // frame) would read a zero here as a hand still on it.
     if (editingAt !== null && t - editingAt <= EDITING_QUIET_MS) {
       return { pace: 'trickle', why: 'a hand is on the editor' }
+    }
+    if (editorOpeningAt !== null && t - editorOpeningAt <= EDITOR_OPENING_MAX_MS) {
+      return { pace: 'trickle', why: 'the editor is opening' }
     }
     return { pace: 'full', why: 'no take is recording' }
   }
@@ -219,6 +251,9 @@ function scheduleRecheck(t: number): void {
   }
   const due: number[] = []
   if (editingAt !== null && t - editingAt <= EDITING_QUIET_MS) due.push(editingAt + EDITING_QUIET_MS)
+  if (editorOpeningAt !== null && t - editorOpeningAt <= EDITOR_OPENING_MAX_MS) {
+    due.push(editorOpeningAt + EDITOR_OPENING_MAX_MS)
+  }
   if (takeActive && level !== null && t - readingAt <= READING_STALE_AFTER_MS) {
     due.push(readingAt + READING_STALE_AFTER_MS)
   }
@@ -278,6 +313,25 @@ export function noteEditingActivity(): void {
 }
 
 /**
+ * The editor is opening, and stays ahead of a background render until it says
+ * it is on screen (see EDITOR_OPENING_MAX_MS). Idempotent: a re-render that
+ * calls it again must not restart the window and extend the hold.
+ */
+export function noteEditorOpening(): void {
+  if (editorOpeningAt !== null) return
+  editorOpeningAt = now()
+  publish(editorOpeningAt)
+}
+
+/** The editor has its preview on screen — or has been closed. Either way the
+ *  render may have the machine back. */
+export function noteEditorOpen(): void {
+  if (editorOpeningAt === null) return
+  editorOpeningAt = null
+  publish(now())
+}
+
+/**
  * One pressure reading from the take's own instrument (E1). Blind readings are
  * forwarded as blind — they are what "nobody could see" looks like, and this
  * broker must not launder them into health.
@@ -327,6 +381,7 @@ export function resetBackgroundWorkForTests(): void {
   recheck = null
   takeActive = false
   editingAt = null
+  editorOpeningAt = null
   level = null
   leaderWhy = null
   readingAt = 0

@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readPressure, type PressureSignals } from './pressure'
 import {
   EDITING_QUIET_MS,
+  EDITOR_OPENING_MAX_MS,
   RAMP_UP_AFTER_MS,
   backgroundWorkState,
   currentPace,
   noteEditingActivity,
+  noteEditorOpen,
+  noteEditorOpening,
   noteTakeActive,
   noteTakePressure,
   onBackgroundWorkChange,
@@ -131,6 +134,38 @@ describe('what a background job may spend', () => {
     expect(backgroundWorkState().why).toContain('hand')
     vi.advanceTimersByTime(EDITING_QUIET_MS + 50)
     expect(currentPace()).toBe('full')
+  })
+
+  /**
+   * The other half of the same rule, and the one Robert's black screen came
+   * from: at the end of a long take the at-stop pre-render is already running
+   * FULL, because the take is over and nobody has touched anything yet.
+   */
+  it('the editor OPENING steps the job down before any hand touches it', () => {
+    vi.useFakeTimers()
+    expect(currentPace()).toBe('full')
+    noteEditorOpening()
+    expect(currentPace()).toBe('trickle')
+    expect(backgroundWorkState().why).toContain('editor is opening')
+    noteEditorOpen()
+    expect(currentPace()).toBe('full')
+  })
+
+  it('a re-render cannot extend the opening window, and the window expires by itself', () => {
+    vi.useFakeTimers()
+    noteEditorOpening()
+    vi.advanceTimersByTime(EDITOR_OPENING_MAX_MS - 100)
+    // Idempotent: this must NOT restart the clock.
+    noteEditorOpening()
+    vi.advanceTimersByTime(200)
+    expect(currentPace()).toBe('full')
+  })
+
+  it('a take outranks the editor — an opening editor cannot lift the shed', () => {
+    noteTakeActive(true)
+    serious()
+    noteEditorOpening()
+    expect(currentPace()).toBe('paused')
   })
 
   it('a take outranks the editor — a hand on it cannot lift the shed', () => {

@@ -191,17 +191,18 @@ describe('the request Chrome receives, rung by rung', () => {
     })
   })
 
-  it('THE REAL FLOOR IS RUNG 3: nothing of ours is left in the request at all', () => {
-    // Robert's machine wedged FIVE times with the ladder already on rung 2, so
-    // whatever chokes is in what rung 2 still sends — and the only thing rung 2
-    // still sends is ours: three audio flags added in 2026-08-26 on the claim
-    // that they "cannot reject or hang a request", asserted and never measured.
+  it('THE FLOOR DROPS EVERY OPTION EXCEPT THE ONES THE SOUND DEPENDS ON', () => {
+    // Rung 3 was built on 2026-08-30 to ask whether the three raw-audio flags
+    // were what Chrome chokes on, and it asked by sending bare `audio: true`.
+    // It wedged three times anyway and docs/SCREEN_WEDGE.md closed the question
+    // ("our options are not the trigger"). Bare `audio: true` is Chromium's
+    // voice-processing default, the rung climbs back one per wedge-free DAY,
+    // and Robert reported the same mangled tab music from a machine living on
+    // it — so the experiment stops being paid for in sound.
     const o = displayMediaOptions(config, 3)
     expect(o.video).toBe(true)
-    // The user's ask survives — the tab-audio checkbox is still in the picker.
-    expect(o.audio).toBe(true)
-    // What moved is HOW the raw flags are applied: on the delivered track
-    // (repairDisplayAudio) instead of in the request, so the music is still raw.
+    // Everything that is only OURS is still gone: no bounds, no surface hint,
+    // no selfBrowserSurface / surfaceSwitching / systemAudio.
     expect(Object.keys(o)).toEqual(['video', 'audio'])
   })
 
@@ -299,7 +300,10 @@ describe('the request Chrome receives, rung by rung', () => {
    * rung 2 by the game wedges recorded every tab-audio take processed.
    */
   it('NO rung ever hands the user’s audio to voice processing', () => {
-    for (const level of [0, 1, 2] as const) {
+    // THE FLOOR IS IN THIS LIST NOW, and its absence was the bug: rung 3 was
+    // exempted when it was built as an experiment, so the one rung a wedging
+    // machine actually lives on was the one rung nothing checked.
+    for (const level of [0, 1, 2, 3] as const) {
       const audio = displayMediaOptions(config, level).audio as MediaTrackConstraints
       expect(audio.echoCancellation).toBe(false)
       expect(audio.noiseSuppression).toBe(false)
