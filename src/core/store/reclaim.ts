@@ -70,7 +70,7 @@ function isSweepable(key: string): boolean {
 }
 
 async function keepSet(): Promise<Set<string>> {
-  const keep = new Set<string>(pendingBlobKeys())
+  const keep = new Set<string>(await pendingBlobKeys())
   for (const r of await recordingsRepo.list()) {
     for (const c of r.channels) keep.add(c.blobKey)
     if (r.composite) keep.add(r.composite.blobKey)

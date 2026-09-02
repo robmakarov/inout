@@ -32,7 +32,7 @@ vi.mock('./index', () => ({
   },
   recordingsRepo: { list: () => Promise.resolve(recordings) },
 }))
-vi.mock('@core/capture/recovery', () => ({ pendingBlobKeys: () => pending }))
+vi.mock('@core/capture/recovery', () => ({ pendingBlobKeys: () => Promise.resolve(pending) }))
 vi.mock('@core/compose/scratch', () => ({ SCRATCH_PREFIX: 'xport-' }))
 
 const { orphanBlobBytes, reclaimOrphanBlobs } = await import('./reclaim')

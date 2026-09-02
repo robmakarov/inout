@@ -73,6 +73,7 @@ import type { LadderRung } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
+import { crashFloorEnabled, EARLY_FRAGMENT_S } from './crashFloor'
 import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 import type { LivenessEvent } from './sourceLiveness'
 
@@ -1670,6 +1671,10 @@ class Session implements CaptureSession {
         // only on the segment whose window the named instant falls inside.
         killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
         killWorkerInMs: faultDelayMs(ch.kind, 'killworker', performance.now() - this.epoch) ?? undefined,
+        // H2b(b): the first fragment closes at 1 s instead of at the 2 s GOP,
+        // so a crash in the first seconds leaves decodable picture rather than
+        // audio alone. `?crashfloor=0` restores the shipped cadence.
+        earlyFragmentSec: crashFloorEnabled() ? EARLY_FRAGMENT_S : undefined,
         /**
          * H1 — THE SEGMENT IS CONTAINED, NOT MOURNED. This used to be one
          * toast and a channel that quietly stopped writing while the take ran

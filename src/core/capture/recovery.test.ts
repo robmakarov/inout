@@ -71,6 +71,86 @@ function stubStorage() {
   })
 }
 
+/**
+ * H2b(a) — THE DURABLE COPY, STUBBED AT THE SAME SEAM localStorage IS.
+ *
+ * One row map for the whole file (the module caches its open connection, so a
+ * fresh map per test would be written to by a database nobody reads), plus the
+ * two switches the cases below need: what durability the transaction asked for,
+ * and a refusal that must cost the take nothing.
+ */
+const idbRows = new Map<string, string>()
+let idbDurability: string | undefined
+let idbRefuses = false
+
+type Req = { result?: unknown; error?: unknown; onsuccess?: () => void; onerror?: () => void }
+
+function fakeStore(ops: (() => void)[]) {
+  return {
+    put(v: string, key: string) {
+      const r: Req = {}
+      ops.push(() => {
+        idbRows.set(key, v)
+        r.onsuccess?.()
+      })
+      return r
+    },
+    delete(k: string) {
+      const r: Req = {}
+      ops.push(() => {
+        idbRows.delete(k)
+        r.onsuccess?.()
+      })
+      return r
+    },
+    get(k: string) {
+      const r: Req = {}
+      ops.push(() => {
+        r.result = idbRows.get(k)
+        r.onsuccess?.()
+      })
+      return r
+    },
+  }
+}
+
+function stubIndexedDB() {
+  idbDurability = undefined
+  vi.stubGlobal('indexedDB', {
+    open() {
+      const req: Req & { onupgradeneeded?: () => void } = {}
+      queueMicrotask(() => {
+        req.result = {
+          objectStoreNames: { contains: () => idbRows.size >= 0 && false },
+          createObjectStore: () => undefined,
+          close: () => undefined,
+          transaction(_name: string, _mode: string, opts?: { durability?: string }) {
+            if (idbRefuses) throw new Error('storage refused')
+            idbDurability = opts?.durability
+            const ops: (() => void)[] = []
+            const tx: { objectStore: () => unknown; oncomplete?: () => void; onerror?: () => void; onabort?: () => void; error: unknown } = {
+              objectStore: () => fakeStore(ops),
+              error: null,
+            }
+            queueMicrotask(() => {
+              for (const op of ops) op()
+              tx.oncomplete?.()
+            })
+            return tx
+          },
+        }
+        req.onupgradeneeded?.()
+        req.onsuccess?.()
+      })
+      return req
+    },
+  })
+}
+
+/** The durable writes are fire-and-forget from a synchronous caller; let the
+ *  microtask chain they run on drain before asserting on the row. */
+const settle = () => new Promise((r) => setTimeout(r, 0))
+
 function manifest(channels: { id: string; blobKey: string; startOffsetMs: number; media?: 'video' | 'audio' }[]) {
   return {
     v: 1 as const,
@@ -89,11 +169,14 @@ function manifest(channels: { id: string; blobKey: string; startOffsetMs: number
 
 beforeEach(() => {
   store.clear()
+  idbRows.clear()
+  idbRefuses = false
   probed.clear()
   removedBlobs.length = 0
   saved = []
   existing = null
   stubStorage()
+  stubIndexedDB()
 })
 
 afterEach(() => {
@@ -179,7 +262,7 @@ describe('salvaging a killed take', () => {
 })
 
 describe('the manifest the salvage hangs off', () => {
-  it('names exactly the blobs the orphan sweep must leave alone', () => {
+  it('names exactly the blobs the orphan sweep must leave alone', async () => {
     writePendingManifest(manifest([
       { id: 'a', blobKey: 'k_a', startOffsetMs: 0 },
       { id: 'b', blobKey: 'k_b', startOffsetMs: 0 },
@@ -187,18 +270,20 @@ describe('the manifest the salvage hangs off', () => {
     // These are unreferenced by any Recording ON PURPOSE — the row is written at
     // stop and this stands in for it until then. Reclaiming them would turn a
     // recoverable take into a lost one.
-    expect(pendingBlobKeys()).toEqual(['k_a', 'k_b'])
+    expect(await pendingBlobKeys()).toEqual(['k_a', 'k_b'])
   })
 
-  it('a clean stop clears only its own take', () => {
+  it('a clean stop clears only its own take', async () => {
     writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))
     clearPendingManifest('rec_someone_else')
-    expect(pendingBlobKeys()).toEqual(['k_a'])
+    await settle()
+    expect(await pendingBlobKeys()).toEqual(['k_a'])
     clearPendingManifest('rec_killed')
-    expect(pendingBlobKeys()).toEqual([])
+    await settle()
+    expect(await pendingBlobKeys()).toEqual([])
   })
 
-  it('a refused localStorage costs the take nothing at record time', () => {
+  it('a refused localStorage costs the take nothing at record time', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('denied')
@@ -209,6 +294,84 @@ describe('the manifest the salvage hangs off', () => {
       removeItem: () => undefined,
     })
     expect(() => writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))).not.toThrow()
-    expect(pendingBlobKeys()).toEqual([])
+    await settle()
+    // The DURABLE copy still has it: a browser that refuses localStorage is
+    // exactly the case the second home exists for.
+    expect(await pendingBlobKeys()).toEqual(['k_a'])
+  })
+})
+
+/**
+ * H2b(a) — THE FLOOR H2 MEASURED, PINNED FROM UNDERNEATH.
+ *
+ * The kills at 2.8 / 3.3 / 4.2 s lost the whole take because the only pointer
+ * to blobs already on disk was in a localStorage buffer inside the process that
+ * died. These cases are that crash, staged at the seam: the manifest is written,
+ * localStorage is then emptied as the kill emptied it, and the take must still
+ * come back.
+ */
+describe('the manifest survives a crash localStorage does not', () => {
+  it('salvages from the durable copy when localStorage lost the manifest', async () => {
+    writePendingManifest(manifest([
+      { id: 'a', blobKey: 'k_a', startOffsetMs: 200 },
+      { id: 'b', blobKey: 'k_b', startOffsetMs: 350 },
+    ]))
+    await settle()
+    probed.set('k_a', 4_000)
+    probed.set('k_b', 3_800)
+    // The crash: everything localStorage held is gone.
+    store.clear()
+
+    const rec = await salvagePendingRecording()
+    expect(rec?.channels.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(rec?.channels.map((c) => c.startOffsetMs)).toEqual([0, 150])
+  })
+
+  it('asks for a real flush, not a promise of one', async () => {
+    writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))
+    await settle()
+    // 'relaxed' is the default, and it is the property localStorage was already
+    // lost to: the commit event can fire before the bytes are anywhere.
+    expect(idbDurability).toBe('strict')
+  })
+
+  it('keeps the sweep off blobs only the durable copy claims', async () => {
+    writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))
+    await settle()
+    store.clear()
+    // Deleting these would turn the one recoverable take into a lost one.
+    expect(await pendingBlobKeys()).toEqual(['k_a'])
+  })
+
+  it('is one-shot in BOTH homes: a salvage consumes the durable copy too', async () => {
+    writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))
+    await settle()
+    probed.set('k_a', 5_000)
+    store.clear()
+    expect(await salvagePendingRecording()).not.toBeNull()
+    expect(await salvagePendingRecording()).toBeNull()
+    expect(await pendingBlobKeys()).toEqual([])
+  })
+
+  it('a refused IndexedDB costs the take nothing at record time', async () => {
+    idbRefuses = true
+    expect(() =>
+      writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }])),
+    ).not.toThrow()
+    await settle()
+    // The shipped path is untouched by the new one failing.
+    expect(await pendingBlobKeys()).toEqual(['k_a'])
+  })
+
+  it('?crashfloor=0 writes nothing durable — the shipped path, byte for byte', async () => {
+    store.set('inout.capture.crashfloor', '0')
+    writePendingManifest(manifest([{ id: 'a', blobKey: 'k_a', startOffsetMs: 0 }]))
+    await settle()
+    expect(idbRows.size).toBe(0)
+    store.clear()
+    store.set('inout.capture.crashfloor', '0')
+    // Nothing to fall back to: exactly what H2 measured at 2.8 s.
+    expect(await pendingBlobKeys()).toEqual([])
+    expect(await salvagePendingRecording()).toBeNull()
   })
 })
