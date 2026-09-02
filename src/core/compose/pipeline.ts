@@ -31,6 +31,8 @@ import { getLastRenderStats, renderExport, setLastRenderStats } from './render'
 import { isInlinePositionedWriterEnabled } from '@core/store'
 import { sourceFrameEnabled } from '@core/frame'
 import { constantQualityQp } from './constantQuality'
+import { chunkedRenderEnabled } from './chunkedFlag'
+import { ChunkedRenderUnavailable, getLastChunkedStats, renderChunked, type ChunkedRenderStats } from './chunkedRender'
 import { loudnessMode } from './loudnessMode'
 import { isExportScratchEnabled, setLastScratchStats } from './scratch'
 import type { ExportWorkerIn, ExportWorkerOut } from './export.worker'
@@ -103,7 +105,41 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
       }
     }
   }
+  /**
+   * J1 in the IN-THREAD FALLBACK too. It is the same code, not a second
+   * implementation — the frozen rule and the reason pipeline.ts exists at all.
+   */
+  if (chunkedRenderEnabled()) {
+    try {
+      const result = await renderChunked({
+        recording: opts.recording,
+        edit: opts.edit,
+        settings: opts.settings,
+        signal: opts.signal,
+        pace: opts.pace,
+        onProgress: opts.onProgress,
+        yieldEveryFrames: MAIN_THREAD_YIELD_EVERY_FRAMES,
+      })
+      lastChunkedStats = getLastChunkedStats()
+      return result
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err
+      if (!(err instanceof ChunkedRenderUnavailable)) throw err
+      console.info('[compose] chunked export declined, rendering unbroken —', err.message)
+    }
+  }
+  lastChunkedStats = null
   return renderExport({ ...opts, yieldEveryFrames: MAIN_THREAD_YIELD_EVERY_FRAMES })
+}
+
+/**
+ * What the chunk cache did on the most recent export, wherever it ran — the
+ * worker publishes its own through the 'done' message, exactly as the stage
+ * split and the scratch stats already travel. Null when the unbroken render ran.
+ */
+let lastChunkedStats: ChunkedRenderStats | null = null
+export function getLastChunkedRenderStats(): ChunkedRenderStats | null {
+  return lastChunkedStats
 }
 
 /** Thrown only while the worker has produced nothing — safe to retry in-thread. */
@@ -157,6 +193,7 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         // so getLastRenderStats() answers the same question wherever it ran.
         setLastRenderStats(msg.stats)
         setLastScratchStats(msg.scratch)
+        lastChunkedStats = msg.chunked ?? null
         finish(() => resolve(msg.result))
         return
       }
@@ -202,6 +239,7 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         cq: constantQualityQp(),
         loudness: loudnessMode(),
         sourceFrame: sourceFrameEnabled(),
+        chunked: chunkedRenderEnabled(),
       },
       paced: !!pace,
       pace: pace?.level(),

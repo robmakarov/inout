@@ -28,6 +28,13 @@ import type {
 import { setInlinePositionedWriterEnabled } from '@core/store'
 import { setSourceFrame } from '@core/frame'
 import { getLastRenderStats, renderExport, type RenderStats } from './render'
+import {
+  ChunkedRenderUnavailable,
+  getLastChunkedStats,
+  renderChunked,
+  type ChunkedRenderStats,
+} from './chunkedRender'
+import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from './chunkedFlag'
 import { setConstantQualityOverride } from './constantQuality'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
@@ -56,6 +63,8 @@ export type ExportWorkerIn =
         cq?: number | null
         loudness?: LoudnessMode
         sourceFrame?: boolean
+        /** J1's `?chunked=` — the render that remembers. Default off. */
+        chunked?: boolean
       }
       /**
        * F16b: this render is a BACKGROUND job and obeys the elastic brake.
@@ -74,7 +83,14 @@ export type ExportWorkerIn =
 
 export type ExportWorkerOut =
   | { type: 'progress'; progress: ExportProgress }
-  | { type: 'done'; result: ExportResult; stats: RenderStats | null; scratch: ScratchStats | null }
+  | {
+      type: 'done'
+      result: ExportResult
+      stats: RenderStats | null
+      scratch: ScratchStats | null
+      /** J1: what the chunk cache did, when it ran. Null on the unbroken path. */
+      chunked: ChunkedRenderStats | null
+    }
   | { type: 'error'; message: string; name: string }
 
 const abort = new AbortController()
@@ -123,9 +139,44 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if ('cq' in msg.flags) setConstantQualityOverride(msg.flags.cq)
     if (msg.flags.loudness) setLoudnessMode(msg.flags.loudness)
     if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
+    if (typeof msg.flags.chunked === 'boolean') setChunkedRenderOverride(msg.flags.chunked)
   }
   if (msg.pace) paceLevel = msg.pace
   try {
+    /**
+     * J1 — THE RENDER THAT REMEMBERS, tried first when it is armed and never
+     * the only path: anything it declines (no video to chunk, a chunk cache
+     * that will not open, an avcC that disagrees between chunks) falls through
+     * to the unbroken render below, which is the export that shipped.
+     *
+     * An ABORT is not a decline. A user who cancelled must not be answered
+     * with a second, slower render of the thing they cancelled.
+     */
+    if (chunkedActive()) {
+      try {
+        const result = await renderChunked({
+          recording: msg.recording,
+          edit: msg.edit,
+          settings: msg.settings,
+          signal: abort.signal,
+          pace: msg.paced ? paceSource : undefined,
+          yieldEveryFrames: 0,
+          onProgress: (progress) => post({ type: 'progress', progress }),
+        })
+        post({
+          type: 'done',
+          result,
+          stats: getLastRenderStats(),
+          scratch: getLastScratchStats(),
+          chunked: getLastChunkedStats(),
+        })
+        return
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err
+        if (!(err instanceof ChunkedRenderUnavailable)) throw err
+        console.info('[compose] chunked export declined, rendering unbroken —', err.message)
+      }
+    }
     const result = await renderExport({
       recording: msg.recording,
       edit: msg.edit,
@@ -136,7 +187,13 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
       yieldEveryFrames: 0,
       onProgress: (progress) => post({ type: 'progress', progress }),
     })
-    post({ type: 'done', result, stats: getLastRenderStats(), scratch: getLastScratchStats() })
+    post({
+      type: 'done',
+      result,
+      stats: getLastRenderStats(),
+      scratch: getLastScratchStats(),
+      chunked: null,
+    })
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err))
     post({ type: 'error', message: e.message, name: e.name })

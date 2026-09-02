@@ -35,18 +35,28 @@ import {
   BufferTarget,
   CanvasSource,
   Output,
+  type StreamTarget,
   type VideoSample,
 } from 'mediabunny'
 import { frameScale } from '@core/frame'
 import { blobStore } from '@core/store'
 
 /**
- * Above this much total work a render starts yielding — roughly a 1080p take of
- * four minutes, comfortably inside what a machine renders without noticing.
- * Everything smaller keeps O5's uninterrupted loop.
+ * One macrotask back to the browser per this many frames.
+ *
+ * IT USED TO BE CONDITIONAL ON THE SIZE OF THE JOB and it is not any more (J1).
+ * The old rule — yield only above 1920×1080×7200 pixels of total work — is
+ * exactly the shape Robert's ruling rejects: a policy that behaves differently
+ * at 2 minutes and at 2 hours. It also could not survive chunking, because a
+ * five-second chunk is small by that measure however long the take is, so the
+ * yield that stopped his machine freezing ("trying to export 1080 my computer
+ * froze, i had to restart it manually", 2026-08-30) would have quietly switched
+ * itself off on precisely the renders it exists for.
+ *
+ * So every render yields, at the same cadence, at every length. What it costs
+ * is measured, not assumed: `npm run oracle` export throughput, 4.78× before
+ * and after (baseline and chunked-off runs in the J1 handoff).
  */
-const PACE_ABOVE_PIXELS = 1920 * 1080 * 7_200
-/** One macrotask back to the browser per this many frames. */
 const PACE_EVERY_FRAMES = 30
 import {
   channelSourceTimeAt,
@@ -96,6 +106,7 @@ import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { createPaceGate } from './paceGate'
 import { openVideoChannel, type VideoChannelReader } from './video'
+export { openVideoChannel, type VideoChannelReader }
 import { exportFileName } from './fileName'
 import {
   constantQualityCodec,
@@ -112,6 +123,20 @@ import {
  */
 const JOIN_FADE_MS = 3
 
+/**
+ * A muxer target the CALLER owns (task J1) — one render chunk's file, or the
+ * one continuous audio artifact. Given one, this render bypasses the export
+ * scratch entirely: the caller decides where the bytes land and publishes them
+ * under whatever name it keeps them by.
+ */
+export interface RenderSink {
+  target: StreamTarget
+  /** After finalize: make the bytes visible and hand back a disk-backed view. */
+  publish(mimeType: string): Promise<Blob>
+  /** On any failure or abort: nothing is published. */
+  discard(): Promise<void>
+}
+
 export interface RenderOptions extends ExportOptions {
   /**
    * Yield to the event loop every N frames. 0 (the worker) never yields —
@@ -119,6 +144,40 @@ export interface RenderOptions extends ExportOptions {
    * this render did everywhere before O5.
    */
   yieldEveryFrames?: number
+  /**
+   * J1 — RENDER ONLY THESE OUTPUT FRAMES, [startFrame, endFrame).
+   *
+   * The frames are sampled at their GLOBAL output instants (so a chunk draws
+   * exactly what the unbroken render draws at that moment) and written at
+   * WINDOW-LOCAL timestamps (so the file stands on its own and concatenating it
+   * is a rebase, never a re-encode). Absent = the whole output, which is every
+   * caller that existed before J1.
+   */
+  window?: { startFrame: number; endFrame: number }
+  /**
+   * J1 — which tracks this call writes. 'both' is the unbroken render. The
+   * chunked path splits them: 'video' per chunk, 'audio' once for the take,
+   * because audio carries encoder priming and cannot be spliced at a chunk
+   * boundary without a click (chunkPlan.ts says why at length).
+   */
+  tracks?: 'both' | 'video' | 'audio'
+  /** J1 — see RenderSink. Absent = the export scratch, as before. */
+  sink?: RenderSink | null
+  /**
+   * J1 — video readers the CALLER opened and owns. A chunked render opens one
+   * set per contiguous run of missing chunks and walks it forward through them;
+   * opening a set per chunk would re-demux the take hundreds of times, and
+   * reusing one across a gap of cache hits would decode the gap. Absent = this
+   * render opens and disposes its own, as before.
+   */
+  readers?: VideoChannelReader[] | null
+  /**
+   * J1 — force the container/codec decision to match the file the chunks will
+   * be concatenated into. The ladder consults `needAudio` (codecs.ts), so a
+   * video-only chunk would be free to pick a different rung than the final
+   * file, and one avcC cannot describe two. Absent = derived, as before.
+   */
+  targetNeedsAudio?: boolean
 }
 
 /**
@@ -211,7 +270,7 @@ interface ActiveWindow {
  * mid-take cuts (F1) a channel's material is no longer one contiguous span of
  * the output, and each piece maps to source with its own offset.
  */
-function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): ActiveWindow[] {
+export function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): ActiveWindow[] {
   const ce = edit.channels.find((c) => c.channelId === channel.id)
   if (!ce || !ce.enabled) return []
   const localStartMs = Math.max(0, ce.trimStartMs)
@@ -292,7 +351,18 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
   const durationSec = durationMs / 1000
 
   const waveformMode = !hasEnabledVideo(recording, edit)
-  const videoReaders: VideoChannelReader[] = []
+  // J1: which tracks this call is responsible for. 'both' is every caller that
+  // existed before the chunked path, and every branch below reads exactly as it
+  // did for them.
+  const tracks = opts.tracks ?? 'both'
+  const wantVideo = tracks !== 'audio'
+  const wantAudio = tracks !== 'video'
+  const sink = opts.sink ?? null
+  /** Chunk files are internal and thrown away by the concatenation — they do not
+   *  carry certification tags, size summaries or a stats line of their own. */
+  const quiet = sink !== null
+  const borrowedReaders = opts.readers ?? null
+  const videoReaders: VideoChannelReader[] = borrowedReaders ? [...borrowedReaders] : []
   const audioMixers: MixSource[] = []
   let output: Output | null = null
   let scratch: ExportScratch | null = null
@@ -306,6 +376,8 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
   try {
     for (const channel of recording.channels) {
       if (channel.media !== 'video' || waveformMode) continue
+      // J1: the caller brought its own, already positioned at this window.
+      if (borrowedReaders || !wantVideo) continue
       throwIfAborted()
       // Video is sampled per frame through channelSourceTimeAt, which already
       // understands cuts — the reader only needs the channel's last kept
@@ -322,8 +394,15 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       if (reader) videoReaders.push(reader)
     }
 
-    audioMixers.push(...(await openAudioMixers(recording, edit, throwIfAborted)))
+    if (wantAudio) audioMixers.push(...(await openAudioMixers(recording, edit, throwIfAborted)))
     const needAudio = audioMixers.length > 0
+    /**
+     * J1: the ladder's rung must be the FINAL FILE'S rung, not this call's. A
+     * video-only chunk asked with needAudio=false could land on a chain the
+     * final file (which has audio) would have skipped, and a track carries one
+     * avcC — half the file would then decode to garbage. Told, never guessed.
+     */
+    const targetNeedsAudio = opts.targetNeedsAudio ?? needAudio
     const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
     // Headroom for the render sum: a single source stays full-scale (gain 1,
     // never limited); multiple sources (mic + system audio) mix equal-power so
@@ -401,7 +480,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     // F2: same zero-cost rule as the camera track — no track, no per-frame work.
     const viewportMoves = viewportTrackIsActive(edit.viewport)
-    const target = await pickEncodingTarget(width, height, needAudio, videoBitrate)
+    const target = await pickEncodingTarget(width, height, targetNeedsAudio, videoBitrate)
     throwIfAborted()
 
     const canvas = new OffscreenCanvas(width, height)
@@ -427,15 +506,19 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
 
     // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
     // the fallback for platforms where the scratch can't be opened.
-    scratch = await createExportScratch()
-    const bufferTarget = scratch ? null : new BufferTarget()
+    // J1: the caller's sink wins — a chunk file, or the audio artifact. Nobody
+    // else has one, so the scratch stays exactly what it was for every export.
+    if (!sink) scratch = await createExportScratch()
+    const bufferTarget = sink || scratch ? null : new BufferTarget()
     const out = new Output({
       format: target.format,
-      target: scratch ? scratch.target : bufferTarget!,
+      target: sink ? sink.target : scratch ? scratch.target : bufferTarget!,
     })
     output = out
-    // Certified-export metadata (O8): how this file was actually made.
-    out.setMetadataTags({
+    // Certified-export metadata (O8): how this file was actually made. A J1
+    // chunk carries none: it is an internal file whose tags the concatenation
+    // discards, and writing them 1,400 times would only cost bytes and time.
+    if (!quiet) out.setMetadataTags({
       title: 'INOUT recording',
       comment: certificationComment(
         buildCertification({
@@ -462,7 +545,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // O11a: every encoded packet is handed back anyway — count it. Costs one
     // addition per packet and turns "where do the bytes go" into a number.
     const bits = new BitsAudit(videoBitrate, gopSec)
-    const videoSource = new CanvasSource(canvas, {
+    const videoSource = wantVideo ? new CanvasSource(canvas, {
       codec: target.videoCodec,
       bitrate: videoBitrate,
       keyFrameInterval: gopSec,
@@ -474,8 +557,8 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         ? { fullCodecString: cqCodec, onEncoderConfig: markConstantQuality(qp) }
         : {}),
       onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
-    })
-    out.addVideoTrack(videoSource, { frameRate: fps })
+    }) : null
+    if (videoSource) out.addVideoTrack(videoSource, { frameRate: fps })
     let audioSource: AudioSampleSource | null = null
     if (needAudio) {
       audioSource = new AudioSampleSource({
@@ -494,34 +577,37 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     )
     const totalFrames = Math.max(1, Math.ceil(durationSec * fps - 1e-9))
     /**
-     * LET THE MACHINE BREATHE ON A BIG RENDER — Robert, 2026-08-30: "trying to
-     * export 1080 my computer froze, i had to restart it manually".
-     *
-     * O5 deleted the old yield hacks and was right to: at 1080p a render is
-     * seconds long and a sleep every few frames is pure waste. But a 3024x1964
-     * take at 60 fps for four minutes is FOURTEEN THOUSAND frames, each one a
-     * 5.9 Mpx decode and a re-encode, and driving that flat out is what took his
-     * whole machine down — not the tab, the machine, to a manual restart.
-     *
-     * So the pace is decided by the SIZE OF THE JOB, not applied always: a
-     * render whose total work is small keeps O5's throughput exactly, and one
-     * big enough to hold the media engine for minutes gives a slice back
-     * regularly. Yielding to the macrotask queue is what lets the compositor,
-     * the GPU process and everything else on the machine have a turn.
-     *
-     * It costs wall time on exactly the renders that were unusable anyway. A
-     * slower export that finishes beats a faster one that requires a restart.
+     * J1 — THE WINDOW. Frames are SAMPLED at their global output instants (a
+     * chunk draws exactly what the unbroken render draws at that moment) and
+     * WRITTEN at window-local timestamps (the file stands on its own, so
+     * concatenating it is a rebase and never a re-encode). Without a window
+     * these are 0 and totalFrames and `windowStartSec` is 0, which is the loop
+     * that shipped, arithmetic included.
      */
-    const jobPixels = width * height * totalFrames
-    const paceEvery = jobPixels > PACE_ABOVE_PIXELS ? PACE_EVERY_FRAMES : 0
-    if (paceEvery > 0) {
-      console.info(
-        `[compose] big render (${totalFrames} frames of ${width}x${height}) — yielding every ` +
-          `${paceEvery} frames so the export cannot monopolise the machine`,
-      )
-    }
+    const windowStartFrame = Math.max(0, opts.window?.startFrame ?? 0)
+    const windowEndFrame = Math.min(totalFrames, opts.window?.endFrame ?? totalFrames)
+    const windowStartSec = windowStartFrame / fps
+    const windowFrames = Math.max(0, windowEndFrame - windowStartFrame)
+    /**
+     * LET THE MACHINE BREATHE — Robert, 2026-08-30: "trying to export 1080 my
+     * computer froze, i had to restart it manually".
+     *
+     * A 3024x1964 take at 60 fps for four minutes is FOURTEEN THOUSAND frames,
+     * each a 5.9 Mpx decode and a re-encode, and driving that flat out is what
+     * took his whole machine down — not the tab, the machine, to a manual
+     * restart. Yielding to the macrotask queue is what lets the compositor, the
+     * GPU process and everything else on the machine have a turn.
+     *
+     * IT USED TO BE CONDITIONAL ON THE SIZE OF THE JOB (J1 deleted that): a
+     * render "big enough" yielded and a small one did not. Two things are wrong
+     * with a threshold there. It is a policy that behaves differently at two
+     * minutes and at two hours, which is the ruling; and once the output is cut
+     * into five-second chunks, EVERY chunk is small by that measure however long
+     * the take is, so the protection would have switched itself off on exactly
+     * the renders it exists for. One cadence, every length.
+     */
     const breathe = async (n: number): Promise<void> => {
-      if (paceEvery > 0 && n % paceEvery === 0) await new Promise((r) => setTimeout(r, 0))
+      if (n % PACE_EVERY_FRAMES === 0) await new Promise((r) => setTimeout(r, 0))
     }
     const audioChunks = Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE)
     const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
@@ -611,7 +697,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // 23-45 ms out of a ~1900 ms render — 1.5 %. An extra lookahead window
       // on top of it was built, measured, and removed for buying nothing.
       const tEncode = performance.now()
-      await videoSource.add(tSec, 1 / fps)
+      await videoSource!.add(tSec - windowStartSec, 1 / fps)
       stats.encodeMs += performance.now() - tEncode
       stats.frames++
       await breathe(stats.frames)
@@ -651,6 +737,32 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         if (pace && f % BRAKE_EVERY_FRAMES === 0) await pace.wait()
         if (yieldEveryFrames && f % yieldEveryFrames === 0) await yieldToUi()
       }
+    } else if (!wantVideo) {
+      /**
+       * J1 — THE AUDIO ARTIFACT: one continuous encode of the whole output,
+       * cached under its own key. It exists because AAC and opus both carry
+       * encoder priming, so audio cut into chunks and spliced back together
+       * clicks at every boundary. Same mixers, same loudness, same join fade as
+       * the interleaved loop below — this is that loop with the video removed,
+       * not a second audio path.
+       */
+      for (let c = 0; c < audioChunks; c++) {
+        throwIfAborted()
+        await writeAudioChunk(c)
+        report('rendering', 0.05 + 0.9 * ((c + 1) / audioChunks))
+        if (pace) await pace.wait()
+        if (yieldEveryFrames) await yieldToUi()
+      }
+      audioSource?.close()
+    } else if (!wantAudio) {
+      /** J1 — ONE CHUNK: the window's frames, and nothing else. */
+      for (let f = windowStartFrame; f < windowEndFrame; f++) {
+        throwIfAborted()
+        await renderFrame(f, null)
+        report('rendering', 0.05 + 0.9 * ((f + 1 - windowStartFrame) / Math.max(1, windowFrames)))
+        if (pace && (f - windowStartFrame) % BRAKE_EVERY_FRAMES === 0) await pace.wait()
+        if (yieldEveryFrames && (f - windowStartFrame) % yieldEveryFrames === 0) await yieldToUi()
+      }
     } else {
       // Alternate ~1s of audio with that second's video frames (interleaving).
       let frameIndex = 0
@@ -685,7 +797,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       }
       audioSource?.close()
     }
-    videoSource.close()
+    videoSource?.close()
 
     // A cancel that lands during the last frames must not spend the flush:
     // finalize() cannot be interrupted once entered.
@@ -694,9 +806,13 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const tFinalize = performance.now()
     await out.finalize()
     stats.finalizeMs = performance.now() - tFinalize
-    console.info(formatBits(bits.summarize(durationSec), `render ${width}×${height} ${target.videoCodec}`))
+    if (!quiet) {
+      console.info(formatBits(bits.summarize(durationSec), `render ${width}×${height} ${target.videoCodec}`))
+    }
     let blob: Blob
-    if (scratch) {
+    if (sink) {
+      blob = await sink.publish(target.mimeType)
+    } else if (scratch) {
       blob = await scratch.finish(target.mimeType)
     } else {
       const buffer = bufferTarget?.buffer
@@ -706,13 +822,16 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     report('finalizing', 1)
     stats.totalMs = performance.now() - t0
     setLastRenderStats(stats)
-    console.info(formatStats(stats))
+    if (!quiet) console.info(formatStats(stats))
 
     return {
       blob,
       mimeType: target.mimeType,
       fileName: exportFileName(recording.createdAt, target.fileExtension),
-      durationMs: Math.round(durationMs),
+      // J1: a windowed call describes ITS window; the whole output otherwise.
+      durationMs: Math.round(
+        wantVideo && opts.window ? (windowFrames / fps) * 1000 : durationMs,
+      ),
       width,
       height,
       scratchKey: scratch?.key,
@@ -723,6 +842,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     }
     // Aborted or failed export leaves nothing behind on disk.
     await scratch?.discard().catch(() => undefined)
+    await sink?.discard().catch(() => undefined)
     throw err
   } finally {
     if (pace) {
@@ -732,7 +852,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       }
       pace.dispose()
     }
-    for (const reader of videoReaders) reader.dispose()
+    // J1: borrowed readers belong to the caller, which walks them on into the
+    // next chunk. Disposing them here would re-demux the take per chunk.
+    if (!borrowedReaders) for (const reader of videoReaders) reader.dispose()
     for (const mixer of audioMixers) mixer.dispose()
   }
 }

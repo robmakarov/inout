@@ -466,6 +466,47 @@ export const blobStore = {
     return out
   },
 
+  /**
+   * PUBLISH A FILE UNDER ITS FINAL NAME, ATOMICALLY (task J1).
+   *
+   * A content-addressed cache is only correct if a key that EXISTS means bytes
+   * that are COMPLETE: a render chunk half-written when the tab was killed, left
+   * under the name its content would have had, is not a slow cache — it is a
+   * corrupt file served as a hit forever after. So a chunk is written to a
+   * staging key and moved here once it has finalized.
+   *
+   * OPFS `move()` is a rename: no bytes are read or copied, so publishing an
+   * hour of chunks costs nothing. The fallback is a stream copy for any engine
+   * that lacks it, which is correct but pays for the file twice — and it is
+   * never the path Chromium takes.
+   */
+  async move(from: string, to: string): Promise<void> {
+    const dir = await blobsDir()
+    const handle = await dir.getFileHandle(assertKey(from))
+    const movable = handle as FileSystemFileHandle & {
+      move?: (dest: FileSystemDirectoryHandle | string, name?: string) => Promise<void>
+    }
+    if (typeof movable.move === 'function') {
+      await movable.move(assertKey(to))
+      return
+    }
+    const source = await handle.getFile()
+    const writer = await createPositionedWriter(assertKey(to))
+    const reader = source.stream().getReader()
+    let position = 0
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        await writer.write(value, position)
+        position += value.byteLength
+      }
+    } finally {
+      await writer.close()
+    }
+    await dir.removeEntry(assertKey(from)).catch(() => undefined)
+  },
+
   async usageBytes(): Promise<number> {
     const dir = (await blobsDir()) as FileSystemDirectoryHandle & AsyncIterableDirectory
     let total = 0

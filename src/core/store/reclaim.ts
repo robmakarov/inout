@@ -2,6 +2,7 @@ import { blobStore, recordingsRepo } from './index'
 import { pendingBlobKeys } from '@core/capture/recovery'
 import { SCRATCH_PREFIX } from '@core/compose/scratch'
 import { PRERENDER_PREFIX } from '@core/compose/prerender'
+import { CHUNK_PART_PREFIX, CHUNK_PREFIX } from '@core/compose/chunkStore'
 import { EXPORTJOB_PREFIX } from './recordingsRepo'
 
 /**
@@ -38,6 +39,11 @@ import { EXPORTJOB_PREFIX } from './recordingsRepo'
  *    yet. prerender.ts owns these and sweeps its own at boot, before any job
  *    starts — so a leftover from a previous page session is gone by the time
  *    this runs, and one belonging to a LIVE job must not be touched.
+ *  · a RENDER CHUNK (`rchunk-*`, `rchunkpart-*`, J1). Unreferenced by any
+ *    Recording on purpose — a chunk is a piece of an export nobody has asked
+ *    for yet, and it is exactly what makes the next export cheap. Deleting them
+ *    here would silently restore the behaviour J1 exists to remove: a render
+ *    thrown away. chunkStore.ts owns them and expires them by age;
  *  · an EXPORT JOB's finished file (`xjob-*`). Referenced by a jobsRepo row,
  *    which this sweep does not read; exportJobs.ts owns these and sweeps its
  *    own unclaimed ones at resume. One fact, one home.
@@ -65,6 +71,8 @@ function isSweepable(key: string): boolean {
     !key.startsWith('__') &&
     !key.startsWith(SCRATCH_PREFIX) &&
     !key.startsWith(PRERENDER_PREFIX) &&
+    !key.startsWith(CHUNK_PREFIX) &&
+    !key.startsWith(CHUNK_PART_PREFIX) &&
     !key.startsWith(EXPORTJOB_PREFIX)
   )
 }
