@@ -541,3 +541,10 @@ path as fallback per the frozen rule. (3) H5 (promoted from H1's rig finding, sa
 whose stop misses the 5 s budget keeps what reached disk — bytes are read off DISK before anything
 is deleted; the current code deletes megabytes under a warning that says the opposite, which is a
 data-loss bug and not a behaviour anyone chose.
+2026-09-02 robert (2) — M1 UNBLOCKED FOR BUILD ("you can work on it, just dont turn on elastic for
+max in app untill i say so, thats what i meant"). The 2026-09-01 "but not until i say" gate was
+always about the DEFAULT, not the work: M1 builds now, ships behind a flag, OFF — elastic never
+engages at max in the app until Robert flips it, which is the house pattern (frozen rule) anyway.
+And his architectural note stands as a requirement: max-elastic is part of the ONE elastic system,
+not a fork — same detector, same actuator dial, same seam machinery as E1; M1 is where that system
+is worked through at max (the rawVideo.worker.ts sampling lift), never a second implementation.
