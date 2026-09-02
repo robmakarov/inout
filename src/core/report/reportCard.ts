@@ -30,6 +30,7 @@
  * outside the take (the wedge journal) is passed IN, so this stays testable
  * without a browser.
  */
+import { auditElastic } from '@core/elasticLog'
 import { REVIVE_BASE_SEC, REVIVE_CEILING_SEC } from '@core/capture/reviveSchedule'
 import { WARN_SECONDS_LEFT } from '@core/capture/diskGuard'
 import type { ChannelKind, ChannelRecording, Recording } from '@core/types'
@@ -42,6 +43,7 @@ export type DimensionId =
   | 'rescue'
   | 'picture'
   | 'rate'
+  | 'elastic'
   | 'sync'
   | 'storage'
   | 'memory'
@@ -497,6 +499,60 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
         status: 'pass',
         detail: `${list(notes)} — nothing degraded (no ladder step, no composite give-up)`,
       })
+    }
+  }
+
+  /* 6b. ELASTIC — DID THE ORDER OF DEFENCE HOLD? (task E2.)
+
+        `rate` above says only THAT something was given up. Robert's ruling of
+        2026-09-02 is about the ORDER: shed the unseen work first, absorb the
+        burst second, move the picture last. So this grades the take's own
+        ledger, and it grades the ORDERING and not the stepping — a take that
+        shed and recovered did exactly what elastic is for, and failing it for
+        that is the G6(g) defect (the `rescue` dimension reds every honest long
+        take by grading attempts instead of loss). The only failure here is a
+        picture step taken while the free things were still running. */
+  {
+    const events = recording.stopStats?.elastic
+    if (!events) {
+      dims.push({
+        id: 'elastic',
+        status: 'pass',
+        detail:
+          'nothing was shed and nothing had to recover — this take carried its plan ' +
+          'the whole way (or predates the ledger, in which case there is nothing to grade)',
+      })
+    } else {
+      const audit = auditElastic({
+        events,
+        droppedEvents: recording.stopStats?.elasticDropped ?? 0,
+      })
+      const recovery = audit.pictureRecoveryMs.length
+        ? ` · picture back up after ${audit.pictureRecoveryMs
+            .map((ms) => `${(ms / 1000).toFixed(1)} s`)
+            .join(', ')}`
+        : ''
+      if (audit.ok) {
+        dims.push({
+          id: 'elastic',
+          status: 'pass',
+          detail: `${audit.line}${recovery} — the unseen work went before the picture, every time`,
+        })
+      } else {
+        const first = audit.outOfOrder[0]
+        dims.push({
+          id: 'elastic',
+          status: 'fail',
+          headline: `the picture stepped before the free work was shed at ${(
+            (first?.atMs ?? 0) / 1000
+          ).toFixed(1)} s`,
+          detail:
+            `${audit.line}${recovery} — ${audit.outOfOrder.length} picture step(s) were taken ` +
+            `while the background work was still running: ${audit.outOfOrder
+              .map((e) => `${(e.atMs / 1000).toFixed(1)} s ${e.what}`)
+              .join('; ')}`,
+        })
+      }
     }
   }
 

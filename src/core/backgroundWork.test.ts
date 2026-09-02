@@ -34,9 +34,11 @@ function signalsAt(queueMean: number | null): PressureSignals {
     workerLateMeanMs: null,
     workerLateMaxMs: null,
     perFrameCostMs: null,
+    gpuPerFrameMs: null,
     stale: null,
     arrivals: null,
     dropped: 0,
+    burst: 0,
     platform: null,
   }
 }

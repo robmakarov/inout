@@ -457,6 +457,18 @@ export interface TakeStopStats {
    *  stepped, or the live composite degraded. Absent on a take that carried
    *  its plan the whole way. */
   degradedWhy?: string
+  /**
+   * E2 — every shed and every recovery this take made, in order, on the take's
+   * own clock (core/elasticLog.ts). Absent on a take that gave up nothing, and
+   * on every take made before E2. The report card's `elastic` dimension grades
+   * the ORDER: the ruling of 2026-09-02 is that unseen work goes first, the
+   * burst absorber second and the picture last, and only a ledger can say
+   * whether that held.
+   */
+  elastic?: ElasticEvent[]
+  /** Ledger lines dropped off the front of the ring (bounded at 400). 0 or
+   *  absent on every ordinary take. */
+  elasticDropped?: number
 }
 
 export interface ChannelEdit {
@@ -895,6 +907,50 @@ export interface ExportResult {
  * itself. The levels and the policy behind them live in `core/backgroundWork.ts`.
  */
 export type WorkPace = 'full' | 'half' | 'trickle' | 'paused'
+
+/**
+ * E1's pressure vocabulary — Compute Pressure's own words, on purpose (see
+ * core/pressure.ts). Here rather than there because a take PERSISTS them: an
+ * ElasticEvent below carries the level that decided it, so the contract file
+ * owns the spelling and `core/pressure.ts` re-exports it.
+ */
+export type PressureLevel = 'nominal' | 'fair' | 'serious' | 'critical'
+
+/**
+ * E2 — the hardware blocks a take contends for, and the unit it sheds by. A
+ * block is something that can be unloaded independently of the others: on Apple
+ * silicon the video encoder is its own block and CPU load does not reach it,
+ * which is why "the machine is busy" is not an answer to "what should stop".
+ */
+export type HardwareBlock = 'encoder' | 'cpu' | 'gpu' | 'disk'
+
+/**
+ * E2 — the three layers of the order of defence, cheapest to give up first.
+ * `unseen` = work nobody is looking at (background render, prerender,
+ * filmstrips, UI effects). `burst` = the encoder's memory-bounded absorber.
+ * `picture` = the frame rate, which is the LAST dial that may move.
+ */
+export type ElasticLayer = 'unseen' | 'burst' | 'picture'
+
+/**
+ * One line of a take's elastic ledger (core/elasticLog.ts), persisted in
+ * `stopStats.elastic`. Robert's 2026-09-02 ruling gave elastic an ORDER, and an
+ * order is a claim about what happened — this is what makes it readable after
+ * the fact instead of asserted.
+ */
+export interface ElasticEvent {
+  /** ms since the take started. */
+  atMs: number
+  layer: ElasticLayer
+  action: 'shed' | 'restore'
+  /** What moved, in a few words — `background work full → paused`, `60 → 30 fps`. */
+  what: string
+  /** Why, quoting the signal that decided it. */
+  why: string
+  /** The hardware block the deciding signal was about, when there was one. */
+  block?: HardwareBlock
+  level?: PressureLevel
+}
 
 /**
  * The throttle a background render reads. A function pair rather than a value

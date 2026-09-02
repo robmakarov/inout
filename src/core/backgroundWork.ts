@@ -39,7 +39,8 @@
  * job as the positive control). A number that harms the take is a number that
  * changes, and the handoff carries the run.
  */
-import { atLeast, type PressureLevel, type PressureReading } from './pressure'
+import { elasticLogOpen, noteElastic } from './elasticLog'
+import { atLeast, type HardwareBlock, type PressureLevel, type PressureReading } from './pressure'
 import type { WorkPace } from './types'
 
 export type { WorkPace }
@@ -182,6 +183,7 @@ let editingAt: number | null = null
 let editorOpeningAt: number | null = null
 let level: PressureLevel | null = null
 let leaderWhy: string | null = null
+let leaderBlock: HardwareBlock | null = null
 let readingAt = 0
 let clearSince: number | null = null
 let state: BackgroundWorkState = {
@@ -277,6 +279,28 @@ function publish(t: number): void {
   }
   const previous = state
   state = { pace: next.pace, why: next.why, takeActive, level }
+  // E2 — THE TAKE'S LEDGER. Layer one of the order of defence is this file, and
+  // the ruling is about ORDER, so the moment it moves has to be recorded on the
+  // take's clock or "the unseen work went first" is an assertion rather than a
+  // fact. Only during a take: the same broker paces the editor, and an editor
+  // drag is not a shed.
+  if (previous.pace !== state.pace && elasticLogOpen()) {
+    const before = PACE_DUTY[previous.pace]
+    const after = PACE_DUTY[state.pace]
+    if (after !== before) {
+      noteElastic(
+        {
+          layer: 'unseen',
+          action: after < before ? 'shed' : 'restore',
+          what: `background work ${previous.pace} → ${state.pace}`,
+          why: state.why,
+          ...(leaderBlock ? { block: leaderBlock } : null),
+          ...(level ? { level } : null),
+        },
+        t,
+      )
+    }
+  }
   // Said out loud only when something is actually listening — i.e. when a
   // background job is pacing itself against this. Every take changes the pace
   // whether or not a job exists, and a console line for a brake nobody is
@@ -296,6 +320,7 @@ export function noteTakeActive(active: boolean): void {
   if (!active) {
     level = null
     leaderWhy = null
+    leaderBlock = null
     clearSince = null
   }
   publish(now())
@@ -342,10 +367,12 @@ export function noteTakePressure(reading: PressureReading): void {
   if (reading.blind) {
     level = null
     leaderWhy = null
+    leaderBlock = null
     clearSince = null
   } else {
     level = reading.level
     leaderWhy = reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : null
+    leaderBlock = reading.leader?.block ?? null
     if (atLeast(reading.level, 'fair')) clearSince = null
     else clearSince = clearSince ?? t
   }
@@ -384,6 +411,7 @@ export function resetBackgroundWorkForTests(): void {
   editorOpeningAt = null
   level = null
   leaderWhy = null
+  leaderBlock = null
   readingAt = 0
   clearSince = null
   state = { pace: 'full', why: 'no take is recording', takeActive: false, level: null }

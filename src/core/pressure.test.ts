@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest'
 import {
   CRITICAL_AT,
   FAIR_AT,
+  HARDWARE_BLOCKS,
   SERIOUS_AT,
+  SIGNAL_BLOCK,
   atLeast,
   readPressure,
   type PressureSignals,
@@ -27,9 +29,11 @@ const healthy: PressureSignals = {
   workerLateMeanMs: 0.32,
   workerLateMaxMs: 1.55,
   perFrameCostMs: 1.0,
+  gpuPerFrameMs: null,
   stale: 0,
   arrivals: 22,
   dropped: 0,
+  burst: 0,
   platform: null,
 }
 
@@ -138,5 +142,63 @@ describe('readPressure', () => {
     expect(SERIOUS_AT).toBeLessThan(CRITICAL_AT)
     expect(atLeast('serious', 'fair')).toBe(true)
     expect(atLeast('fair', 'serious')).toBe(false)
+  })
+})
+
+describe('E2 — the reading is also PER HARDWARE BLOCK', () => {
+  it('names the block that is under pressure, and leaves the others alone', () => {
+    const r = readPressure({ ...healthy, queueMean: 6, encodeLatencyMs: 11.3 })
+    expect(r.level).toBe('critical')
+    expect(r.blocks.encoder.level).toBe('critical')
+    expect(r.blocks.encoder.leader?.signal).toBe('encoder-queue')
+    // The CPU signals in `healthy` are idle: unloading the CPU would not help.
+    expect(r.blocks.cpu.level).toBe('nominal')
+    expect(r.blocks.cpu.measured).toBe(true)
+  })
+
+  it('reports an unread block as UNMEASURED, never as nominal (R1)', () => {
+    const r = readPressure(healthy)
+    // gpuPerFrameMs is null unless the worker was asked to fence, and no disk
+    // signal exists at all — saying "fine" about either would be a lie.
+    expect(r.blocks.gpu.measured).toBe(false)
+    expect(r.blocks.disk.measured).toBe(false)
+    expect(r.unmeasured).toContain('gpu-cost')
+  })
+
+  it('puts a dropped frame on the ENCODER, which is what refused it', () => {
+    const r = readPressure({ ...healthy, dropped: 3 })
+    expect(r.blocks.encoder.level).toBe('critical')
+    expect(r.blocks.cpu.level).toBe('nominal')
+  })
+
+  it('A1s lesson: a machine critical ELSEWHERE is not this take being critical', () => {
+    // `platform` is the browser's whole-machine hint. It reds the reading — the
+    // unseen work genuinely should be shed for it — but `ownLevel` stays low,
+    // and `ownLevel` is what the frame rate answers to (captureLadder rule 8b).
+    const r = readPressure({ ...healthy, platform: 'critical' })
+    expect(r.level).toBe('critical')
+    expect(r.ownLevel).toBe('nominal')
+    expect(r.ownLeader?.signal).not.toBe('platform')
+  })
+
+  it('…and our OWN encoder at the cliff moves ownLevel too', () => {
+    const r = readPressure({ ...healthy, queueMean: 6 })
+    expect(r.ownLevel).toBe('critical')
+    expect(r.ownLeader?.signal).toBe('encoder-queue')
+  })
+
+  it('scores the GPU block when the fence is on', () => {
+    const r = readPressure({ ...healthy, gpuPerFrameMs: 20 })
+    expect(r.blocks.gpu.measured).toBe(true)
+    expect(r.blocks.gpu.level).toBe('critical')
+    expect(r.leader?.signal).toBe('gpu-cost')
+  })
+
+  it('every signal declares a block — a new one cannot slip in unclassified', () => {
+    const r = readPressure({ ...healthy, gpuPerFrameMs: 1, platform: 'nominal' })
+    for (const c of r.contributions) {
+      expect(SIGNAL_BLOCK[c.signal]).toBeDefined()
+      expect(HARDWARE_BLOCKS).toContain(c.block)
+    }
   })
 })

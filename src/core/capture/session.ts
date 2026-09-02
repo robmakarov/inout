@@ -4,6 +4,7 @@ import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { loadQualityStep } from '@core/qualityStep'
 import { noteTakeActive } from '@core/backgroundWork'
+import { startElasticLog, takeElasticLog } from '@core/elasticLog'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
@@ -1150,6 +1151,10 @@ class Session implements CaptureSession {
     if (this.stateInternal !== 'armed') return
     this.epoch = performance.now()
     const startT0 = performance.now()
+    // E2 — the take's elastic ledger opens with the take, on the take's own
+    // clock, so every shed and every recovery is stamped relative to a press
+    // rather than to a page load.
+    startElasticLog(this.epoch)
 
     for (const ch of this.channels) this.activateChannel(ch, startT0)
     console.info(
@@ -3189,6 +3194,9 @@ class Session implements CaptureSession {
     try {
       const mem = (performance as unknown as { memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number } })
         .memory
+      // Closes the ledger: whatever the take did is now the take's, and the
+      // next press starts an empty one.
+      const elastic = takeElasticLog()
       const stats: NonNullable<Recording['stopStats']> = {
         requestedFps: this.requestedRate,
         ...(mem?.usedJSHeapSize !== undefined ? { heapBytes: mem.usedJSHeapSize } : null),
@@ -3200,6 +3208,12 @@ class Session implements CaptureSession {
             }
           : null),
         ...(this.collapseWhy ? { degradedWhy: this.collapseWhy } : null),
+        // E2 — THE ELASTIC LEDGER. Every shed and every recovery, in order, on
+        // the take's clock. `degradedWhy` above says only THAT something was
+        // given up; the ruling of 2026-09-02 is about the ORDER things are
+        // given up in, and an order cannot be read off one string.
+        ...(elastic.events.length ? { elastic: elastic.events } : null),
+        ...(elastic.droppedEvents ? { elasticDropped: elastic.droppedEvents } : null),
       }
       recording.stopStats = stats
     } catch {

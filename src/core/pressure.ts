@@ -58,6 +58,21 @@
  * same defect R1 found in the chroma score and G1 found in the sync band. The
  * level is the worst strain, and the reading NAMES the signal that produced it,
  * so every step this causes can say what it saw.
+ *
+ * ── AND THE READING IS ALSO PER HARDWARE BLOCK (E2) ──
+ * Robert, 2026-09-02: down "just not let user loose his data because of
+ * overload", and the block under pressure is the one that must be unloaded. A1
+ * is the evidence: a starved CPU lost tab audio while the video encoders sat
+ * idle, and every response available at the time moved the encoders. One
+ * whole-machine number cannot tell those apart, so every signal declares which
+ * block it is a signal ABOUT, and the reading carries a level per block beside
+ * the worst-wins one. Consumers that only want "how bad is it" read `level` and
+ * are unchanged; consumers that have to choose WHAT to shed read `blocks`.
+ *
+ * `disk` is declared and, today, never measured: no per-interval disk signal
+ * exists in the compositor (B5's guard samples storage growth on the main
+ * thread, once a second, for a different question). It reads `unmeasured`
+ * rather than `nominal`, which is R1's rule and is also the honest answer.
  */
 
 /**
@@ -65,8 +80,15 @@
  * to a recording take (see the probe) but it is the right shape, and a visible
  * consumer (the editor) can hand its records straight in as one more input
  * rather than needing a second scale to be invented for it.
+ *
+ * The spelling lives in `core/types.ts` because a take PERSISTS it (E2's
+ * elastic ledger carries the level that decided each event), and the contract
+ * file is where a persisted vocabulary belongs. Re-exported here so every
+ * existing consumer keeps importing it from the instrument.
  */
-export type PressureLevel = 'nominal' | 'fair' | 'serious' | 'critical'
+import type { HardwareBlock, PressureLevel } from './types'
+
+export type { HardwareBlock, PressureLevel }
 
 /** Ordering, so consumers can compare levels without a lookup table. */
 export const PRESSURE_ORDER: Record<PressureLevel, number> = {
@@ -79,6 +101,51 @@ export const PRESSURE_ORDER: Record<PressureLevel, number> = {
 export function atLeast(level: PressureLevel, min: PressureLevel): boolean {
   return PRESSURE_ORDER[level] >= PRESSURE_ORDER[min]
 }
+
+/**
+ * The four blocks, in the order a reading reports them. The type itself is in
+ * `core/types.ts` — see above. Deliberately four and not "every signal": a
+ * block is something that can be unloaded independently of the others. On Apple
+ * silicon the video encoder is its own block and CPU load does not reach it
+ * (measured in pressureLead: six spinning cores plus 4K paints moved this
+ * machine's encode latency from 11.0 ms to 13.4 — i.e. not at all), which is
+ * exactly why "the machine is busy" is not an answer to "what should stop".
+ */
+export const HARDWARE_BLOCKS: readonly HardwareBlock[] = ['encoder', 'cpu', 'gpu', 'disk']
+
+/**
+ * Which block each signal is a signal ABOUT. One table, so a signal cannot be
+ * added without answering the question.
+ */
+export const SIGNAL_BLOCK: Record<string, HardwareBlock> = {
+  'encoder-queue': 'encoder',
+  'encode-latency': 'encoder',
+  'worker-lateness': 'cpu',
+  'frame-cost': 'cpu',
+  'stale-arrivals': 'cpu',
+  'gpu-cost': 'gpu',
+  platform: 'cpu',
+}
+
+/**
+ * …AND WHETHER IT IS A SIGNAL ABOUT THIS TAKE'S OWN WORK — rule 7, generalised,
+ * and the reason the picture step is not simply "the machine is at critical".
+ *
+ * A rate step removes work THIS TAKE is doing: fewer encodes, fewer paints,
+ * fewer bytes. Every signal below is measured on the take's own pipeline and so
+ * answers to it. `platform` is the browser's whole-machine hint — it can read
+ * critical because of a build in another window, and halving Robert's frame
+ * rate does not help that. It still counts towards the level (the unseen work
+ * genuinely should be shed for it); it may not move the picture alone.
+ */
+export const OWN_WORK_SIGNALS: readonly string[] = [
+  'encoder-queue',
+  'encode-latency',
+  'worker-lateness',
+  'frame-cost',
+  'stale-arrivals',
+  'gpu-cost',
+]
 
 /**
  * One interval's worth of leading signals. EVERY FIELD IS NULLABLE and null
@@ -131,6 +198,16 @@ export interface PressureSignals {
   /** Synchronous cost the worker spends per encoded frame (paint + frame +
    *  encode call), ms. At one frame budget the thread is fully spent. */
   perFrameCostMs: number | null
+  /**
+   * GPU time per encoded frame, ms — the `gpu` block's only signal, and it is
+   * null unless the worker was asked to fence (`?probegpu=1`).
+   *
+   * NOT MEASURED BY DEFAULT ON PURPOSE: reading it costs a `gl.finish()` per
+   * frame, which is a synchronous stall on the thread this detector exists to
+   * keep free. So the honest default is that the GPU block reads `unmeasured`,
+   * not `nominal` — an unread dimension is never a passed one (R1).
+   */
+  gpuPerFrameMs: number | null
   /** Arrivals stamped BEFORE the last encode this interval — the source is
    *  already ahead of the worker. */
   stale: number | null
@@ -140,6 +217,15 @@ export interface PressureSignals {
    *  the loss itself, kept so a reading can never say "nominal" while the file
    *  is losing frames. */
   dropped: number | null
+  /**
+   * E2 — frames this interval that were only kept because the burst absorber
+   * was there (queue past its steady bound, under the burst bound). NOT scored:
+   * the queue depth that admitted them is already the signal, and counting the
+   * consequence as well would double it. It is here because it is the ONE event
+   * that says layer two of the order of defence actually did something, and
+   * that has to reach the take's ledger.
+   */
+  burst: number | null
   /** A visible consumer's PressureObserver record, if it has one. Null during
    *  a take: measured silent in a hidden tab (see the header). */
   platform: PressureLevel | null
@@ -150,6 +236,20 @@ export interface PressureContribution {
   /** 0 = idle, 1 = at the point where loss begins. */
   strain: number
   detail: string
+  /** Which hardware block this is a signal about (E2). */
+  block: HardwareBlock
+  /** True when it measures work THIS take is doing — see OWN_WORK_SIGNALS. */
+  ownWork: boolean
+}
+
+/** One block's own reading. `measured` false means nothing about this block
+ *  could be read: it is `nominal` by necessity and is not evidence of health. */
+export interface BlockReading {
+  block: HardwareBlock
+  level: PressureLevel
+  strain: number
+  leader: PressureContribution | null
+  measured: boolean
 }
 
 export interface PressureReading {
@@ -159,6 +259,18 @@ export interface PressureReading {
   /** The signal that produced the level, or null when nothing was readable. */
   leader: PressureContribution | null
   contributions: PressureContribution[]
+  /** E2 — the same reading split by hardware block, so a consumer can unload
+   *  the block that is actually under pressure instead of everything. */
+  blocks: Record<HardwareBlock, BlockReading>
+  /**
+   * E2 — the worst strain across the signals that measure THIS TAKE'S OWN work,
+   * and the level that goes with it. A rate step answers to this number and not
+   * to `strain`, because halving the frame rate cannot relieve a machine that is
+   * busy in another window.
+   */
+  ownLevel: PressureLevel
+  ownStrain: number
+  ownLeader: PressureContribution | null
   unmeasured: string[]
   /** True when NOT ONE signal could be read. A blind reading is 'nominal' by
    *  necessity and must never be treated as evidence of health. */
@@ -194,6 +306,13 @@ const PLATFORM_STRAIN: Record<PressureLevel, number> = {
   critical: CRITICAL_AT,
 }
 
+function tagsFor(signal: string): { block: HardwareBlock; ownWork: boolean } {
+  return {
+    block: SIGNAL_BLOCK[signal] ?? 'cpu',
+    ownWork: OWN_WORK_SIGNALS.includes(signal),
+  }
+}
+
 /**
  * Read the pressure. Pure, so the bands are testable without a machine and the
  * same function answers for capture, for a background render and for max's
@@ -206,7 +325,7 @@ export function readPressure(s: PressureSignals): PressureReading {
 
   const add = (signal: string, value: number | null, strain: number, detail: string): void => {
     if (value === null) unmeasured.push(signal)
-    else contributions.push({ signal, strain, detail })
+    else contributions.push({ signal, strain, detail, ...tagsFor(signal) })
   }
 
   const cliff = s.queueCliff > 0 ? s.queueCliff : 1
@@ -235,11 +354,18 @@ export function readPressure(s: PressureSignals): PressureReading {
     (s.perFrameCostMs ?? 0) / budget,
     `${(s.perFrameCostMs ?? 0).toFixed(1)} ms of work per ${budget.toFixed(1)} ms frame`,
   )
+  add(
+    'gpu-cost',
+    s.gpuPerFrameMs ?? null,
+    (s.gpuPerFrameMs ?? 0) / budget,
+    `${(s.gpuPerFrameMs ?? 0).toFixed(1)} ms on the GPU per ${budget.toFixed(1)} ms frame`,
+  )
   if (s.stale !== null && s.arrivals !== null && s.arrivals > 0) {
     contributions.push({
       signal: 'stale-arrivals',
       strain: s.stale / s.arrivals,
       detail: `${s.stale} of ${s.arrivals} arrivals were already behind`,
+      ...tagsFor('stale-arrivals'),
     })
   } else unmeasured.push('stale-arrivals')
   if (s.platform !== null) {
@@ -247,6 +373,7 @@ export function readPressure(s: PressureSignals): PressureReading {
       signal: 'platform',
       strain: PLATFORM_STRAIN[s.platform],
       detail: `the browser reports ${s.platform}`,
+      ...tagsFor('platform'),
     })
   } else unmeasured.push('platform')
 
@@ -256,13 +383,47 @@ export function readPressure(s: PressureSignals): PressureReading {
   const dropped = s.dropped ?? 0
   const lossFloor = dropped > 0 ? CRITICAL_AT : 0
 
+  const worst = (list: PressureContribution[]): PressureContribution | null =>
+    list.reduce<PressureContribution | null>(
+      (best, c) => (best === null || c.strain > best.strain ? c : best),
+      null,
+    )
+
   const blind = contributions.length === 0
-  const leader = contributions.reduce<PressureContribution | null>(
-    (best, c) => (best === null || c.strain > best.strain ? c : best),
-    null,
-  )
+  const leader = worst(contributions)
   const strain = Math.max(leader?.strain ?? 0, lossFloor)
   const level = blind && dropped === 0 ? 'nominal' : levelFor(strain)
+
+  // E2 — THE SAME MATH, PER BLOCK. Worst-wins inside a block for the same reason
+  // it wins across them: a blend hides the one signal that is failing.
+  const blocks = Object.fromEntries(
+    HARDWARE_BLOCKS.map((b) => {
+      const own = contributions.filter((c) => c.block === b)
+      const blockLeader = worst(own)
+      // The loss floor belongs to the block that does the dropping — the
+      // encoder refuses the frame (compositor.worker's MAX_ENCODER_QUEUE), so a
+      // dropped interval is an encoder-block fact and must not red the CPU.
+      const floor = b === 'encoder' ? lossFloor : 0
+      const s2 = Math.max(blockLeader?.strain ?? 0, floor)
+      return [
+        b,
+        {
+          block: b,
+          level: levelFor(s2),
+          strain: s2,
+          leader: blockLeader,
+          measured: own.length > 0,
+        } satisfies BlockReading,
+      ]
+    }),
+  ) as Record<HardwareBlock, BlockReading>
+
+  // E2 — and the same math again over the take's OWN work alone. This is the
+  // number the picture answers to.
+  const ownContributions = contributions.filter((c) => c.ownWork)
+  const ownLeader = worst(ownContributions)
+  const ownStrain = Math.max(ownLeader?.strain ?? 0, lossFloor)
+  const ownLevel = levelFor(ownStrain)
 
   const line = blind
     ? 'pressure UNREADABLE — no signal available'
@@ -270,7 +431,19 @@ export function readPressure(s: PressureSignals): PressureReading {
       ? `pressure ${level} — ${dropped} frame(s) already dropped this interval`
       : `pressure ${level} (${strain.toFixed(2)}) — ${leader?.signal}: ${leader?.detail}`
 
-  return { level, strain, leader, contributions, unmeasured, blind, line }
+  return {
+    level,
+    strain,
+    leader,
+    contributions,
+    blocks,
+    ownLevel,
+    ownStrain,
+    ownLeader,
+    unmeasured,
+    blind,
+    line,
+  }
 }
 
 // ---------------------------------------------------------------------------

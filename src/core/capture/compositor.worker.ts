@@ -41,6 +41,7 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import type { PressureSignals } from '../pressure'
+import { burstFramesFor } from './burstBudget'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
@@ -48,8 +49,51 @@ const ROOT_DIR = 'blobs'
 /** Keyframe cadence — the smart-cut prerequisite (O5) and the salvage anchor. */
 const KEYFRAME_INTERVAL_S = 2
 /** Beyond this the encoder is behind; drop rather than queue (a queued frame
- * is latency the user pays for at stop). */
+ * is latency the user pays for at stop). ALSO the denominator E1's bands were
+ * measured against — `queueCliff` in the pressure signals is this number and
+ * not the burst bound below, deliberately: see BURST_BUDGET_BYTES. */
 const MAX_ENCODER_QUEUE = 6
+/**
+ * E2's SECOND LAYER OF DEFENCE — ABSORB THE BURST BEFORE MOVING THE PICTURE.
+ *
+ * Robert, 2026-09-02: the order is shed the unseen → absorb a burst in a
+ * memory-bounded queue → the smallest picture step. Layer two did not exist:
+ * the seventh frame behind a busy encoder was simply DROPPED, so a 200 ms hiccup
+ * — a keyframe, a window drag, another tab starting — came out of the file as
+ * lost frames rather than out of a buffer.
+ *
+ * WHAT IT IS: the drop threshold is `MAX_ENCODER_QUEUE + burstFrames` instead of
+ * `MAX_ENCODER_QUEUE`. Nothing new is allocated and no second queue exists — the
+ * frames sit in the VideoEncoder's own queue, which is the only place that can
+ * hold them without a copy. The size is `burstBudget.ts`'s, sized in BYTES to
+ * this machine and capped in frames for latency.
+ *
+ * MEASURED SIZES at 8 GB: 4 frames at 1080p, 2 at 3024x1964, 2 at 4K — at most
+ * the 24 MB budget, whatever the geometry.
+ *
+ * WHY THE STRAIN DENOMINATOR STAYS AT 6: the burst allowance is the ABSORBER,
+ * and using the absorber IS the pressure signal. A queue in burst territory
+ * reads strain > 1.0, i.e. `critical`, which is precisely "the queue is about to
+ * overflow on the next tick" — the ruling's own definition of when the picture
+ * may finally move. Sizing the denominator to the burst instead would hide the
+ * absorber's engagement, which is the one event that matters.
+ */
+/** Sized once at configure, from the geometry the encoder was opened with. */
+let burstFrames = 0
+/** `?burst=0` — the shipped behaviour, and the A/B control the gate is read
+ *  against. Set from the start message before the encoder is configured. */
+let burstEnabled = true
+
+function sizeBurst(width: number, height: number): void {
+  if (!burstEnabled) {
+    burstFrames = 0
+    stats.burstFrames = 0
+    return
+  }
+  const nav = (globalThis as { navigator?: { deviceMemory?: number } }).navigator
+  burstFrames = burstFramesFor(width, height, nav?.deviceMemory ?? null)
+  stats.burstFrames = burstFrames
+}
 /** A static composition still needs a frame occasionally or the timeline
  * stalls and players show nothing between events. */
 const KEEPALIVE_MS = 1000
@@ -116,6 +160,13 @@ export interface CompositorStartMsg {
    */
   followSource?: boolean
   longEdge?: number
+  /**
+   * E2 — may the encoder's burst absorber run? The frozen rule asks every new
+   * engine to keep the old one reachable at runtime, and here the old one is
+   * "the seventh frame behind a busy encoder is dropped". The main thread reads
+   * `?burst=0` and passes the answer in; a worker cannot see the page's URL.
+   */
+  burst?: boolean
 }
 
 export interface CompositorFrameMsg {
@@ -233,6 +284,16 @@ export interface CompositorStats {
   outHeight: number
   /** Largest number of frames the encoder was behind at any point. */
   peakQueue: number
+  /**
+   * E2 — frames that were only kept because the burst absorber was there: the
+   * queue was past its steady bound and under the burst bound when they were
+   * submitted. Every one of these is a frame the shipped worker DROPPED, so
+   * this is the absorber's own evidence and the number the E2 gate quotes.
+   */
+  framesBurst: number
+  /** The absorber's size for this take, frames. Sized from the geometry and the
+   *  machine's memory (burstFramesFor); 0 means it never applied. */
+  burstFrames: number
   /**
    * E1's leading signals, accumulated here and differenced per interval by the
    * pressure tick below. peakQueue is a since-start extreme — the same shape of
@@ -581,6 +642,8 @@ const stats: CompositorStats = {
   outWidth: 0,
   outHeight: 0,
   peakQueue: 0,
+  framesBurst: 0,
+  burstFrames: 0,
   queueSum: 0,
   queueSamples: 0,
   lateTicks: 0,
@@ -872,6 +935,9 @@ async function reconfigureEncoder(): Promise<void> {
     const { config, hardware } = await pickVideoConfig(W, H, videoBitrate, FPS)
     if (stopped || fatal || enc.state === 'closed') return
     enc.configure(config)
+    // F13 changes the geometry, so the absorber is re-sized with it: four 1080p
+    // frames and four 4K frames are not the same promise about memory.
+    sizeBurst(config.width, config.height)
     stats.codec = config.codec
     stats.hardware = hardware
     stats.configJson = JSON.stringify(config)
@@ -899,11 +965,15 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
   // next source frame (a few ms later at 60 fps) passes the cadence gate and
   // attempts again, so a busy encoder gets hammered at the SOURCE rate and the
   // drop counter reports a catastrophe that is really just a spin.
-  if (enc.encodeQueueSize >= MAX_ENCODER_QUEUE) {
+  if (enc.encodeQueueSize >= MAX_ENCODER_QUEUE + burstFrames) {
     stats.framesDropped++
     lastEncodedMs = atMs
     return
   }
+  // E2's absorber. Past the steady bound the frame is KEPT — the encoder holds
+  // it — and the fact is counted, because a frame that only survived because
+  // the buffer was there is the evidence that the buffer is load-bearing.
+  if (enc.encodeQueueSize >= MAX_ENCODER_QUEUE) stats.framesBurst++
   if (enc.encodeQueueSize > stats.peakQueue) stats.peakQueue = enc.encodeQueueSize
   // E1: sampled at SUBMIT, which is the only moment the depth means
   // "distance to the drop above" — the drop is `>= MAX_ENCODER_QUEUE` on this
@@ -959,6 +1029,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   FPS = msg.fps
   videoBitrate = msg.videoBitrate
   followSource = msg.followSource === true
+  burstEnabled = msg.burst !== false
   longEdge = msg.longEdge && msg.longEdge > 0 ? msg.longEdge : Math.max(W, H)
   startedWorkerAtMs = performance.now()
   shapeSettled = false
@@ -1061,6 +1132,11 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     error: fail,
   })
   videoEncoder.configure(config)
+  // E2's absorber is sized here and only here: the geometry the encoder was
+  // opened with is the geometry every queued frame will have, and it cannot
+  // change afterwards (a frame size cannot move mid-file — see captureLadder's
+  // rule 1). One computation per take.
+  sizeBurst(config.width, config.height)
 
   if (msg.sampleRate) {
     const audioConfig = await pickAudioConfig(msg.sampleRate, msg.channelCount, msg.audioBitrate)
@@ -1260,6 +1336,8 @@ interface PressureSnapshot {
   encodeLatencyMs: number
   outputs: number
   workMs: number
+  gpuMs: number
+  framesBurst: number
 }
 
 function snapshotForPressure(): PressureSnapshot {
@@ -1268,6 +1346,8 @@ function snapshotForPressure(): PressureSnapshot {
     framesEncoded: stats.framesEncoded,
     framesDropped: stats.framesDropped,
     framesStale: stats.framesStale,
+    gpuMs: stats.gpuMs,
+    framesBurst: stats.framesBurst,
     queueSum: stats.queueSum,
     queueSamples: stats.queueSamples,
     encodeLatencyMs: stats.encodeLatencyMs,
@@ -1305,9 +1385,14 @@ function readSignals(now: number): PressureSignals {
     workerLateMaxMs: lateMaxWindowMs,
     workerLateMeanMs: lateTicksWindow > 0 ? lateSumWindowMs / lateTicksWindow : null,
     perFrameCostMs: encoded > 0 ? (s.workMs - p.workMs) / encoded : null,
+    // E2's `gpu` block. PROBE_GPU is off by default and gl.finish() is what
+    // makes gpuMs mean anything, so on an ordinary take this is null and the
+    // block reads `unmeasured` — which is the honest answer, not `nominal`.
+    gpuPerFrameMs: PROBE_GPU && encoded > 0 ? (s.gpuMs - p.gpuMs) / encoded : null,
     stale: arrivals > 0 ? s.framesStale - p.framesStale : null,
     arrivals: arrivals > 0 ? arrivals : null,
     dropped: s.framesDropped - p.framesDropped,
+    burst: s.framesBurst - p.framesBurst,
     platform: null,
   }
   pressurePrev = s

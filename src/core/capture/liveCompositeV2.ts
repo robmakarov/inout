@@ -29,18 +29,22 @@ import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import {
   DELIVERY_FLOOR_RATIO,
+  FAILED_CLIMB_MS,
   RECOVERY_RATIO,
-  ladderVerdict,
+  ladderDecision,
   type LadderRung,
 } from './captureLadder'
 import {
   pressureDetectorEnabled,
   readPressure,
+  type HardwareBlock,
   type PressureLevel,
   type PressureReading,
   type PressureSignals,
 } from '../pressure'
-import { noteTakePressure } from '../backgroundWork'
+import { backgroundPaceEnabled, currentPace, noteTakePressure } from '../backgroundWork'
+import { noteElastic } from '../elasticLog'
+import { burstAbsorberEnabled } from './burstBudget'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -188,7 +192,11 @@ export interface LiveCompositeV2Options {
    * constraint is applied there. Absent = the ladder never runs, which is the
    * default.
    */
-  onDegradeStep?: (rung: LadderRung, reason: string, from: 'predicted' | 'measured') => void
+  onDegradeStep?: (
+    rung: LadderRung,
+    reason: string,
+    from: 'predicted' | 'measured' | 'probe',
+  ) => void
   /**
    * E1 — every pressure sample, four times a second, as read. The product does
    * not need this (the ladder consumes the reading in here); the RIG does, and
@@ -251,7 +259,15 @@ export interface LiveCompositeV2Handle {
    * The gap between them is the lead. Read by the rig; nothing in the product
    * consults it.
    */
-  pressureMarks(): { firstSeriousAtMs: number | null; firstUnderFloorAtMs: number | null; startedAtMs: number }
+  pressureMarks(): {
+    firstSeriousAtMs: number | null
+    firstCriticalAtMs: number | null
+    firstUnderFloorAtMs: number | null
+    startedAtMs: number
+    /** E2 — every refusal to move the picture, counted by reason. The ordering
+     *  ruling is as much about the steps NOT taken as the ones taken. */
+    holds: Record<string, number>
+  }
   /**
    * Hand the compositor a canvas to paint the live preview into (O4-polish).
    * Resolves TRUE only once a frame has actually landed on it, so the caller
@@ -395,12 +411,27 @@ export async function startLiveCompositeV2(
   let lastDeliveredFps = 0
   let lastArrivedFps = 0
   let pressureLevel: PressureLevel | null = null
+  let pressureOwnLevel: PressureLevel | null = null
   let pressureWhy: string | null = null
+  let pressureBlock: HardwareBlock | null = null
   let seriousSince: number | null = null
   let clearSince: number | null = null
   /** Lead-time evidence: the first instant each side of the question fired. */
   let firstSeriousAt: number | null = null
+  let firstCriticalAt: number | null = null
   let firstUnderFloorAt: number | null = null
+  /**
+   * E2 — rule 5's replacement. A climb undone within FAILED_CLIMB_MS was a
+   * climb into headroom that was not there; each one widens the next climb's
+   * confirmation window, and one that holds resets the count.
+   */
+  let failedClimbs = 0
+  let lastUpAt: number | null = null
+  /** E2 — every refusal to move the picture, by reason, for the certification. */
+  const holds: Record<string, number> = {}
+  /** E2 — the burst absorber's engagement, deduplicated: one ledger line per
+   *  episode, not one per interval, or a loaded minute writes 240 lines. */
+  let burstOpen = false
 
   function notePressure(signals: PressureSignals): void {
     const now = performance.now()
@@ -420,17 +451,46 @@ export async function startLiveCompositeV2(
     // taken whether or not the detector is allowed to act on it.
     if (!reading.blind && (reading.level === 'serious' || reading.level === 'critical')) {
       firstSeriousAt ??= now
+      if (reading.level === 'critical') firstCriticalAt ??= now
+    }
+    // E2's LAYER TWO, on the take's ledger. The absorber is inside the worker
+    // and has no other voice; without this line the one layer that keeps frames
+    // instead of giving something up would be the only invisible one.
+    const absorbed = signals.burst ?? 0
+    if (absorbed > 0 && !burstOpen) {
+      burstOpen = true
+      noteElastic(
+        {
+          layer: 'burst',
+          action: 'shed',
+          what: `encoder burst absorber engaged (${absorbed} frame(s) held this interval)`,
+          why: reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : reading.line,
+          ...(reading.leader ? { block: reading.leader.block } : null),
+          level: reading.level,
+        },
+        now,
+      )
+    } else if (absorbed === 0 && burstOpen) {
+      burstOpen = false
+      noteElastic(
+        { layer: 'burst', action: 'restore', what: 'encoder queue back inside its steady bound', why: reading.line },
+        now,
+      )
     }
     if (!pressureOn) return
     // A blind reading is not a nominal one — it is no reading at all, and
     // feeding it in as 'nominal' would let the ladder climb on nothing.
     if (reading.blind) {
       pressureLevel = null
+      pressureOwnLevel = null
+      pressureBlock = null
       seriousSince = null
       clearSince = null
       return
     }
     pressureLevel = reading.level
+    pressureOwnLevel = reading.ownLevel
+    pressureBlock = reading.leader?.block ?? null
     pressureWhy = reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : null
     if (reading.level === 'serious' || reading.level === 'critical') {
       seriousSince = seriousSince ?? now
@@ -451,7 +511,13 @@ export async function startLiveCompositeV2(
    */
   function evaluateLadder(now: number): void {
     if (!options.onDegradeStep || degraded) return
-    const verdict = ladderVerdict({
+    // E2, rule 8(c) — has layer one already gone? TRUE when there is nothing to
+    // shed: `?bgpace=0` turns the brake off entirely, and a take must not be
+    // left unprotected because the thing that was supposed to go first does not
+    // exist. What this forbids is stepping the picture WHILE the background
+    // render is still running flat out.
+    const unseenWorkShed = !backgroundPaceEnabled() || currentPace() !== 'full'
+    const { verdict, hold } = ladderDecision({
       nowMs: now,
       startedAtMs: startedAt,
       firstOutputAtMs: firstOutputAt,
@@ -463,12 +529,29 @@ export async function startLiveCompositeV2(
       requestedFps: outFps,
       currentFps,
       pressureLevel,
+      pressureOwnLevel,
+      unseenWorkShed,
       pressureSeriousForMs: seriousSince === null ? 0 : now - seriousSince,
       pressureClearForMs: clearSince === null ? 0 : now - clearSince,
       pressureWhy,
+      pressureBlock,
+      failedClimbs,
     })
-    if (!verdict) return
+    if (!verdict) {
+      if (hold) holds[hold] = (holds[hold] ?? 0) + 1
+      return
+    }
+    const previousFps = currentFps
     currentFps = verdict.rung.fps
+    // Rule 5's replacement: a climb undone within FAILED_CLIMB_MS widens the
+    // next one's window; a climb that survives it resets the count. Read BEFORE
+    // lastStepAt moves, because the interval being measured ends here.
+    if (verdict.direction === 'down') {
+      if (lastUpAt !== null && now - lastUpAt < FAILED_CLIMB_MS) failedClimbs++
+    } else {
+      if (lastUpAt !== null && now - lastUpAt >= FAILED_CLIMB_MS) failedClimbs = 0
+      lastUpAt = now
+    }
     lastStepAt = now
     underFloorSince = null
     aboveRecoverySince = null
@@ -477,6 +560,20 @@ export async function startLiveCompositeV2(
     console.warn(
       `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'} ` +
         `(${verdict.from}): ${verdict.reason}`,
+    )
+    // E2's LAYER THREE, on the ledger. The picture is the last dial that may
+    // move and the one the ordering gate is about, so it is written with the
+    // block that decided it and the level that was read.
+    noteElastic(
+      {
+        layer: 'picture',
+        action: verdict.direction === 'down' ? 'shed' : 'restore',
+        what: `${previousFps} → ${verdict.rung.fps} fps (${verdict.from})`,
+        why: verdict.reason,
+        ...(verdict.block ? { block: verdict.block as HardwareBlock } : null),
+        ...(pressureLevel ? { level: pressureLevel } : null),
+      },
+      now,
     )
     options.onDegradeStep?.(verdict.rung, verdict.reason, verdict.from)
   }
@@ -670,6 +767,10 @@ export async function startLiveCompositeV2(
     height: outH,
     fps: outFps,
     followSource: options.followSource === true,
+    // E2's runtime fallback (the frozen rule): `?burst=0` is the shipped
+    // "drop the seventh frame" behaviour, and the A/B control its gate is read
+    // against. Read here because a worker cannot see the page's URL.
+    burst: burstAbsorberEnabled(),
     longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,
@@ -738,8 +839,10 @@ export async function startLiveCompositeV2(
     stats: () => latestStats,
     pressureMarks: () => ({
       firstSeriousAtMs: firstSeriousAt,
+      firstCriticalAtMs: firstCriticalAt,
       firstUnderFloorAtMs: firstUnderFloorAt,
       startedAtMs: startedAt,
+      holds: { ...holds },
     }),
 
     setCameraPose(pose: CameraPose | null): void {

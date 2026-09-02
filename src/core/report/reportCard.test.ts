@@ -159,6 +159,43 @@ describe('the take report card', () => {
     expect(card.line).not.toContain('Not measured')
   })
 
+  it('E2: a take that shed the unseen work and got its rate back is GREEN', () => {
+    // The ruling is about the ORDER, and a shed that recovered is elastic doing
+    // its job. Failing it for that is the G6(g) defect one dimension over.
+    const take = cleanTake()
+    take.stopStats!.elastic = [
+      { atMs: 8_000, layer: 'unseen', action: 'shed', what: 'background work full → paused', why: 'pressure serious' },
+      { atMs: 8_400, layer: 'burst', action: 'shed', what: 'encoder burst absorber engaged (2 frames held)', why: 'encoder-queue' },
+      { atMs: 8_900, layer: 'picture', action: 'shed', what: '60 → 30 fps (predicted)', why: 'pressure critical' },
+      { atMs: 14_000, layer: 'picture', action: 'restore', what: '30 → 60 fps (predicted)', why: 'pressure clear' },
+      { atMs: 14_200, layer: 'unseen', action: 'restore', what: 'background work paused → half', why: 'nominal' },
+    ]
+    const card = buildReportCard(take, { wedgeJournal: [] })
+    const dim = card.dimensions.find((d) => d.id === 'elastic')!
+    expect(dim.status).toBe('pass')
+    expect(dim.detail).toContain('order held')
+    expect(dim.detail).toContain('5.1 s')
+    expect(card.verdict).toBe('green')
+  })
+
+  it('E2: a picture step taken while the free work was still running is RED', () => {
+    const take = cleanTake()
+    take.stopStats!.elastic = [
+      { atMs: 9_000, layer: 'picture', action: 'shed', what: '60 → 30 fps (measured)', why: 'delivery floor' },
+      { atMs: 9_500, layer: 'unseen', action: 'shed', what: 'background work full → paused', why: 'pressure serious' },
+    ]
+    const card = buildReportCard(take, { wedgeJournal: [] })
+    const dim = card.dimensions.find((d) => d.id === 'elastic')!
+    expect(dim.status).toBe('fail')
+    expect(dim.headline).toContain('9.0 s')
+    expect(card.verdict).toBe('red')
+  })
+
+  it('E2: a take that gave up nothing has nothing to grade, and passes', () => {
+    const card = buildReportCard(cleanTake(), { wedgeJournal: [] })
+    expect(card.dimensions.find((d) => d.id === 'elastic')!.status).toBe('pass')
+  })
+
   it('never cries wolf: a take whose sound ended before the stop button', () => {
     // The 240 s take that made the user-facing banner learn this (channels.ts):
     // six quiet seconds at the end is a person reaching for stop.

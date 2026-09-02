@@ -13,13 +13,15 @@ import {
   DELIVERY_FLOOR_RATIO,
   PREDICT_SUSTAINED_MS,
   PRESSURE_CLEAR_MS,
-  VETO_MAX_MS,
+  PROBE_UP_AFTER_MS,
   RATE_RUNGS,
   RECOVERY_MS,
   RECOVERY_RATIO,
   SETTLE_MS,
   SUSTAINED_MS,
   WARMUP_MS,
+  clearWindowMs,
+  ladderDecision,
   ladderVerdict,
   rungsFor,
   type LadderInput,
@@ -41,6 +43,10 @@ const base: LadderInput = {
   // that does not mention pressure is asserting the ladder still behaves
   // exactly as it did — which is what `?pressure=0` gives a user.
   pressureLevel: null,
+  pressureOwnLevel: null,
+  unseenWorkShed: true,
+  pressureBlock: null,
+  failedClimbs: 0,
   pressureSeriousForMs: 0,
   pressureClearForMs: 0,
   pressureWhy: null,
@@ -184,18 +190,32 @@ describe('the pressure path (E1)', () => {
   /** Healthy delivery, so nothing here can be the old floor firing. */
   const well: LadderInput = { ...base, deliveredFps: 58, arrivedFps: 60 }
 
-  it('steps down on sustained SERIOUS pressure, before any frame is lost', () => {
-    const v = ladderVerdict({
+  it('RULE 8 (E2): SERIOUS never moves the picture, however long it holds', () => {
+    // Robert 2026-09-02: "going down is compromise that we must try to prevent
+    // whenever possible ... down ... trigger is DISTANCE TO LOSS, not busy."
+    // `serious` is heading-for-trouble and buys exactly one thing — the unseen
+    // work is shed (backgroundWork.ts pauses at `serious`). The frame rate is
+    // the last dial and it waits for `critical`.
+    for (const held of [PREDICT_SUSTAINED_MS, 5_000, 60_000]) {
+      expect(
+        ladderVerdict({
+          ...well,
+          pressureLevel: 'serious',
+          pressureSeriousForMs: held,
+          pressureWhy: 'encoder-queue: 4.50 of 6 frames queued',
+        }),
+      ).toBeNull()
+    }
+  })
+
+  it('…and says WHY it held, so the ordering can be certified', () => {
+    const { verdict, hold } = ladderDecision({
       ...well,
       pressureLevel: 'serious',
-      pressureSeriousForMs: PREDICT_SUSTAINED_MS,
-      pressureWhy: 'encoder-queue: 4.50 of 6 frames queued',
+      pressureSeriousForMs: 5_000,
     })
-    expect(v?.direction).toBe('down')
-    expect(v?.from).toBe('predicted')
-    expect(v?.rung.fps).toBe(30)
-    expect(v?.reason).toContain('BEFORE frames are lost')
-    expect(v?.reason).toContain('encoder-queue')
+    expect(verdict).toBeNull()
+    expect(hold).toBe('serious-but-not-critical')
   })
 
   it('waits out a short serious blip — four samples, not one', () => {
@@ -286,10 +306,24 @@ describe('the pressure path (E1)', () => {
     expect(v?.from).toBe('measured')
   })
 
-  it('…and a corroborating reading lets the floor through', () => {
-    const v = ladderVerdict({
+  it('E2 raised the second opinion: FAIR is a steady state, not a corroboration', () => {
+    // `fair` is what a 1080p60 take with three encoders open reads at rest on
+    // this machine. A delivery collapse the detector reads as merely `fair` is
+    // E1's measured false positive, and stepping for it cost that take half its
+    // rate for nothing.
+    const { verdict, hold } = ladderDecision({
       ...failing,
       pressureLevel: 'fair',
+      pressureSeriousForMs: 0,
+    })
+    expect(verdict).toBeNull()
+    expect(hold).toBe('not-serious')
+  })
+
+  it('…and a SERIOUS reading lets the floor through', () => {
+    const v = ladderVerdict({
+      ...failing,
+      pressureLevel: 'serious',
       pressureSeriousForMs: 0,
     })
     expect(v?.direction).toBe('down')
@@ -312,10 +346,77 @@ describe('the up-path needs the detector too (E1)', () => {
     ).toBeNull()
   })
 
-  it('will not climb in the first seconds after pressure clears', () => {
+  it('E2: climbs as soon as the tick shows headroom — one confirming sample', () => {
+    // Robert 2026-09-02: "elastic purpose more to go up when possible than
+    // down". One clear sample starts the clock, the second climbs: ~500 ms
+    // after the load lifts on a 250 ms instrument.
     expect(
-      ladderVerdict({ ...recovered, pressureLevel: 'nominal', pressureClearForMs: 500 }),
+      ladderVerdict({
+        ...recovered,
+        aboveRecoveryForMs: 0,
+        pressureLevel: 'nominal',
+        pressureClearForMs: 0,
+      }),
     ).toBeNull()
+    const v = ladderVerdict({
+      ...recovered,
+      aboveRecoveryForMs: 0,
+      pressureLevel: 'nominal',
+      pressureClearForMs: PRESSURE_CLEAR_MS,
+    })
+    expect(v?.direction).toBe('up')
+    expect(v?.from).toBe('predicted')
+  })
+
+  it('…and a climb that was undone widens the next one, additively', () => {
+    // Rule 5's slowness, spent on the take that cannot recover instead of the
+    // one that can. Two failed climbs = a 1000 ms window.
+    expect(
+      ladderVerdict({
+        ...recovered,
+        aboveRecoveryForMs: 0,
+        failedClimbs: 2,
+        pressureLevel: 'nominal',
+        pressureClearForMs: 900,
+      }),
+    ).toBeNull()
+    expect(clearWindowMs(2)).toBe(1000)
+    const v = ladderVerdict({
+      ...recovered,
+      aboveRecoveryForMs: 0,
+      failedClimbs: 2,
+      pressureLevel: 'nominal',
+      pressureClearForMs: 1000,
+    })
+    expect(v?.direction).toBe('up')
+  })
+
+  const healthyDelivery: LadderInput = { ...base, deliveredFps: 58, arrivedFps: 60, currentFps: 60 }
+
+  it('RULE 8(b): a machine critical elsewhere does not cost this take its rate', () => {
+    // A1s lesson: the CPU was starved while the encoders sat idle. `platform`
+    // is the browser's whole-machine hint and halving Robert's frame rate does
+    // not answer it.
+    const { verdict, hold } = ladderDecision({
+      ...healthyDelivery,
+      pressureLevel: 'critical',
+      pressureOwnLevel: 'fair',
+      pressureSeriousForMs: 0,
+    })
+    expect(verdict).toBeNull()
+    expect(hold).toBe('not-our-work')
+  })
+
+  it('RULE 8(c): the picture does not move while the unseen work is still running', () => {
+    const { verdict, hold } = ladderDecision({
+      ...healthyDelivery,
+      pressureLevel: 'critical',
+      pressureOwnLevel: 'critical',
+      unseenWorkShed: false,
+      pressureSeriousForMs: 0,
+    })
+    expect(verdict).toBeNull()
+    expect(hold).toBe('unseen-work-still-running')
   })
 
   it('climbs from FAIR once it has been clear a while — a busy steady state is not a veto', () => {
@@ -331,25 +432,38 @@ describe('the up-path needs the detector too (E1)', () => {
   })
 })
 
-describe('the veto cannot hold a take down forever (E1)', () => {
+describe('rule 9 — a reading cannot hold a take down (E2 replaces E1s veto clock)', () => {
+  // The take stepped down 4 s ago and the reading has been stuck at `serious`
+  // ever since: the exact shape that used to pin a take for the rest of an hour.
   const stuck: LadderInput = {
     ...base,
     currentFps: 30,
     arrivedFps: 30,
     deliveredFps: 30,
+    lastStepAtMs: 56_000,
     pressureLevel: 'serious',
     pressureClearForMs: 0,
   }
 
-  it('holds while delivery has only been healthy a little while', () => {
+  it('holds while the reading is serious and the probe is not yet due', () => {
     expect(ladderVerdict({ ...stuck, aboveRecoveryForMs: RECOVERY_MS + 1 })).toBeNull()
   })
 
-  it('climbs anyway after three recoveries of unbroken healthy delivery', () => {
-    // Being wrong this way costs one step pair every ~20 s. Being wrong the
-    // other way costs the rest of the take at half its rate.
-    const v = ladderVerdict({ ...stuck, aboveRecoveryForMs: VETO_MAX_MS })
+  it('probes back up once the take has been below its rate for PROBE_UP_AFTER_MS', () => {
+    // Being wrong this way costs one step pair per probe. Being wrong the other
+    // way costs the rest of the take at half its rate.
+    const v = ladderVerdict({ ...stuck, lastStepAtMs: 60_000 - PROBE_UP_AFTER_MS })
     expect(v?.direction).toBe('up')
+    expect(v?.from).toBe('probe')
     expect(v?.rung.fps).toBe(60)
+  })
+
+  it('will not probe into loss that is happening right now', () => {
+    const v = ladderVerdict({
+      ...stuck,
+      lastStepAtMs: 60_000 - PROBE_UP_AFTER_MS,
+      underFloorForMs: 900,
+    })
+    expect(v).toBeNull()
   })
 })

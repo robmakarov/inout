@@ -76,6 +76,7 @@ let fpsBand = 10
 // line below which the source is no longer offering what the bands judge.
 let sourceBand = 20
 let headed = false
+let query = ''
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--runs=')) runs = Number(a.slice(7))
   else if (a.startsWith('--takeMs=')) takeMs = Number(a.slice(9))
@@ -83,6 +84,10 @@ for (const a of process.argv.slice(2)) {
   else if (a.startsWith('--fpsBand=')) fpsBand = Number(a.slice(10))
   else if (a.startsWith('--sourceBand=')) sourceBand = Number(a.slice(13))
   else if (a === '--headed') headed = true
+  // E2: pass a URL query through to the page under test, so a capture flag can
+  // be A/B'd on ONE build (`--query=burst=0`). Without it a flag can only be
+  // compared across builds, which compares the machine as much as the flag.
+  else if (a.startsWith('--query=')) query = a.slice(8)
 }
 
 function runExp(id, args, marker) {
@@ -92,6 +97,7 @@ function runExp(id, args, marker) {
       id,
       JSON.stringify(args),
       '--timeout=900',
+      ...(query ? [`--query=${query}`] : []),
       ...(headed ? ['--headed'] : []),
     ]
     const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
@@ -121,6 +127,7 @@ function runOnce() {
       // the gate is about the file the user gets under that real load.
       JSON.stringify({ takeMs, sizes: [[3840, 2160]], engines: ['v1'], rawLane: true }),
       '--timeout=900',
+      ...(query ? [`--query=${query}`] : []),
       ...(headed ? ['--headed'] : []),
     ]
     const child = spawn(process.execPath, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })

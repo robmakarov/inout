@@ -19,7 +19,7 @@ await __inoutReport(recordingObject) // grades a pasted object without storing i
 | `red` | at least one dimension failed — `line` names it, with its numbers |
 | `incomplete` | nothing failed, but something could not be measured — NOT a soft pass (R1's ruling, generalised: an unread dimension is not a passed one): a take recorded before a witness existed, an Apple WebKit take whose audio lane counts no silence, a card built without the wedge journal. The line says which |
 
-## The ten dimensions — bands and their reasons live in `src/core/report/reportCard.ts`; each detail line quotes what it measured, so a stricter gate (A1's `silentTailMs < 1 s`) is readable off a card that passed
+## The eleven dimensions — bands and their reasons live in `src/core/report/reportCard.ts`; each detail line quotes what it measured, so a stricter gate (A1's `silentTailMs < 1 s`) is readable off a card that passed
 | id | fails when | read off |
 |---|---|---|
 | `channels` | a requested channel never arrived, or one ended early | `missing`, per-channel length |
@@ -28,6 +28,7 @@ await __inoutReport(recordingObject) // grades a pasted object without storing i
 | `rescue` | the dead-tap revival fired after the first 60 s | `events`, regrouped into runs |
 | `picture` | a video source froze mid-take | `stalled` |
 | `rate` | the take gave something up to keep up | `stopStats.degradedWhy` |
+| `elastic` | a PICTURE step was taken while the unseen work was still running — the order of defence, violated (E2). NOT a failure: shedding and recovering, or ending a take still shed. The detail line carries the whole ledger's shape and how long the picture took to come back | `stopStats.elastic` (core/elasticLog.ts `auditElastic`) |
 | `sync` | a channel carries no B7 anchor while others do | `diagnostics.anchor` |
 | `storage` | it ended with under 2 min of headroom at its own write rate | `stopStats` storage + bytes |
 | `memory` | heap at stop ≥ 70 % of the engine's limit | `stopStats.heapBytes` |

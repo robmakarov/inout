@@ -28,6 +28,8 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { setPressureDetector, type PressureReading, type PressureSignals } from '@core/pressure'
+import { auditElastic, startElasticLog, takeElasticLog, type ElasticAudit, type ElasticEvent } from '@core/elasticLog'
+import { noteTakeActive } from '@core/backgroundWork'
 import { warmRigEncoder } from '../rigWarm'
 import { makeRig } from './compositorEngine'
 
@@ -171,6 +173,11 @@ interface Sample {
   perFrameCostMs: number | null
   staleRatio: number | null
   dropped: number
+  burst: number
+  /** E2 — the level each hardware block read this tick. */
+  blocks: Record<string, string>
+  ownLevel: string
+  fps: number
   /** The audio counters as of this tick — the seam evidence, sampled all along
    *  rather than only around a step, so "unchanged" is a series and not a pair. */
   audioPadded: number
@@ -182,7 +189,7 @@ interface StepEvent {
   /** ms since the load switched, positive after — the responsiveness number. */
   sinceLoadChangeMs: number
   direction: 'down' | 'up'
-  from: 'predicted' | 'measured'
+  from: 'predicted' | 'measured' | 'probe'
   fps: number
   reason: string
 }
@@ -243,8 +250,44 @@ export interface PressureLaneReport {
   /** The first interval that actually LOST a frame. This is the honest end of
    *  the lead: pressure seen → frames genuinely gone. */
   firstDropAtMs: number | null
+  /** E2 — when the reading first said `critical`, which is the ONLY level that
+   *  may now move the picture (captureLadder rule 8). */
+  firstCriticalAtMs: number | null
   /** firstDrop − firstSerious. THE GATE'S NUMBER. */
   leadMs: number | null
+  /** E2's version of the same: firstDrop − firstCritical. The lead the PICTURE
+   *  step actually gets, now that `serious` only sheds the unseen work. */
+  leadFromCriticalMs: number | null
+  /** ms from the load switching ON to the first DOWN step (null = never). */
+  downLatencyMs: number | null
+  /** ms from the load switching OFF to the first UP step. Null when the take
+   *  had already climbed back before the load lifted — which is a pass, not a
+   *  gap, and is why `upAfterHeadroomMs` below is the gate's real number. */
+  upLatencyMs: number | null
+  /**
+   * E2's UP GATE, measured where it actually happens: ms from the FIRST reading
+   * that showed headroom (the first sample below `serious` after the last one
+   * at or above it) to the climb that followed. Independent of when a synthetic
+   * load happens to stop, so it answers "up within 600 ms of headroom" on any
+   * cell where the ladder ever climbed.
+   */
+  upAfterHeadroomMs: number[]
+  /** The longest unbroken stretch the take spent below the rate it asked for.
+   *  E2's gate: a wrong reading may not hold a take down > 20 s. */
+  maxBelowRequestedMs: number
+  /** Every refusal to move the picture, by reason — the ordering rule's other
+   *  half, and the only way to see that `serious` was READ and DECLINED. */
+  holds: Record<string, number>
+  /** E2's layer two: frames kept only because the absorber was there, and how
+   *  many frames deep it was allowed to be on this machine. */
+  framesBurst: number | null
+  burstFrames: number | null
+  /** Each step paired with the reading that was standing when it was taken —
+   *  the ONLY way to check "no picture step below critical" after the fact. */
+  stepLevels: { atMs: number; direction: 'down' | 'up'; from: string; level: string; ownLevel: string }[]
+  /** THE TAKE'S OWN LEDGER, and the ordering gate read off it. */
+  elastic: ElasticEvent[]
+  elasticAudit: ElasticAudit
   /** The old ruler's version of the same, for comparison. */
   leadVsFloorMs: number | null
   /** What the file lost, from the worker's own counters. */
@@ -276,6 +319,8 @@ export interface PressureLeadReport {
   cores: number
   lanes: PressureLaneReport[]
   verdict: string
+  /** E2's gates, answered as numbers off the detector-on lane. */
+  e2: unknown
 }
 
 async function audioGaps(blob: Blob): Promise<{ maxMs: number | null; atSec: number | null }> {
@@ -320,12 +365,25 @@ async function runLane(opts: {
   // a first-VideoEncoder init DURING the recording and every signal in phase 1
   // reads like a starving machine (note 10: check the instrument first).
   await warmRigEncoder()
+  // E2 — the ledger is the SESSION's job in the product; the rig has no session,
+  // so it opens and closes one itself. Without it every shed is dropped on the
+  // floor and the ordering gate has nothing to read. `noteTakeActive` is the
+  // other half: the background broker only sheds while a take is running, and
+  // "the unseen work went first" is a claim about that broker.
+  startElasticLog(performance.now())
+  noteTakeActive(true)
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
   const rig = makeRig(width, height, audioCtx)
   const key = `exp-pressure-${detector ? 'on' : 'off'}-${Date.now()}.mp4`
   const samples: Sample[] = []
   const steps: StepEvent[] = []
+  // The rig owns the rate here because there is no session; E2's report needs
+  // to know what rung each sample was taken at.
+  let currentFps = fps
+  /** E2's pin gate: the longest unbroken stretch spent below the requested rate. */
+  let belowSince: number | null = null
+  let maxBelowRequestedMs = 0
   const audioAcrossSteps: PressureLaneReport['audioAcrossSteps'] = []
   let degradeReason: string | null = null
   let loadHandle: LoadHandle | null = null
@@ -344,6 +402,12 @@ async function runLane(opts: {
     onDegradeStep: (rung, reason, from) => {
       const atMs = performance.now() - t0
       const ref = atMs < loadOffAtMs ? loadOnAtMs : loadOffAtMs
+      currentFps = rung.fps
+      if (rung.fps < fps) belowSince ??= atMs
+      else if (belowSince !== null) {
+        maxBelowRequestedMs = Math.max(maxBelowRequestedMs, atMs - belowSince)
+        belowSince = null
+      }
       steps.push({
         atMs: Math.round(atMs),
         sinceLoadChangeMs: Math.round(atMs - ref),
@@ -364,6 +428,12 @@ async function runLane(opts: {
         atMs: Math.round(atMs),
         phase: phaseAt(atMs),
         level: reading.level,
+        ownLevel: reading.ownLevel,
+        blocks: Object.fromEntries(
+          Object.values(reading.blocks).map((b) => [b.block, b.measured ? b.level : 'unmeasured']),
+        ),
+        burst: signals.burst ?? 0,
+        fps: currentFps,
         strain: Math.round(reading.strain * 1000) / 1000,
         leader: reading.leader?.signal ?? null,
         queueMean: signals.queueMean,
@@ -394,10 +464,15 @@ async function runLane(opts: {
   loadHandle = null
   await sleep(takeMs - loadOffAtMs)
 
+  if (belowSince !== null) {
+    maxBelowRequestedMs = Math.max(maxBelowRequestedMs, takeMs - belowSince)
+  }
   const marks = handle.pressureMarks()
   void marks.firstSeriousAtMs
   const stats = handle.stats()
   const recording = await handle.stop()
+  noteTakeActive(false)
+  const elasticLog = takeElasticLog()
   rig.stop()
   await audioCtx.close().catch(() => undefined)
 
@@ -425,6 +500,9 @@ async function runLane(opts: {
   }
 
   const firstDrop = samples.find((x) => x.dropped > 0)?.atMs ?? null
+  const firstCritical = samples.find((x) => x.level === 'critical')?.atMs ?? null
+  const firstDown = steps.find((x) => x.direction === 'down') ?? null
+  const firstUpAfterLoad = steps.find((x) => x.direction === 'up' && x.atMs >= loadOffAtMs) ?? null
 
   const byPhase = (p: Phase): Sample[] => samples.filter((s) => s.phase === p)
   const levelCounts = (p: Phase): Record<string, number> => {
@@ -457,9 +535,40 @@ async function runLane(opts: {
     levels: Object.fromEntries(phases.map((p) => [p, levelCounts(p)])) as PressureLaneReport['levels'],
     steps,
     firstSeriousAtMs: firstSerious,
+    firstCriticalAtMs: firstCritical,
     firstUnderFloorAtMs: firstUnderFloor,
     firstDropAtMs: firstDrop,
     leadMs: firstSerious !== null && firstDrop !== null ? firstDrop - firstSerious : null,
+    leadFromCriticalMs:
+      firstCritical !== null && firstDrop !== null ? firstDrop - firstCritical : null,
+    downLatencyMs: firstDown ? firstDown.atMs - loadOnAtMs : null,
+    upLatencyMs: firstUpAfterLoad ? firstUpAfterLoad.atMs - loadOffAtMs : null,
+    maxBelowRequestedMs: Math.round(maxBelowRequestedMs),
+    holds: marks.holds,
+    upAfterHeadroomMs: steps
+      .filter((st) => st.direction === 'up')
+      .map((st) => {
+        const before = samples.filter((x) => x.atMs < st.atMs)
+        let i = before.length - 1
+        while (i >= 0 && before[i]!.level !== 'serious' && before[i]!.level !== 'critical') i--
+        const firstClear = before[i + 1]
+        return firstClear ? st.atMs - firstClear.atMs : -1
+      })
+      .filter((x) => x >= 0),
+    stepLevels: steps.map((st) => {
+      const near = [...samples].reverse().find((x) => x.atMs <= st.atMs) ?? samples[0]
+      return {
+        atMs: st.atMs,
+        direction: st.direction,
+        from: st.from,
+        level: near?.level ?? 'unread',
+        ownLevel: near?.ownLevel ?? 'unread',
+      }
+    }),
+    framesBurst: stats?.framesBurst ?? null,
+    burstFrames: stats?.burstFrames ?? null,
+    elastic: elasticLog.events,
+    elasticAudit: auditElastic(elasticLog),
     leadVsFloorMs:
       firstSerious !== null && firstUnderFloor !== null ? firstUnderFloor - firstSerious : null,
     framesIn: stats?.framesIn ?? null,
@@ -520,10 +629,41 @@ export async function runPressureLead(opts?: {
   const on = lanes.find((l) => l.detector)
   const verdict =
     off && on
-      ? `lead ${off.leadMs === null ? 'UNMEASURED' : `${off.leadMs} ms`} · ` +
+      ? `lead ${off.leadMs === null ? 'UNMEASURED' : `${off.leadMs} ms`} ` +
+        `(from critical ${off.leadFromCriticalMs === null ? 'UNMEASURED' : `${off.leadFromCriticalMs} ms`}) · ` +
         `dropped ${off.framesDropped ?? '?'} (detector off) → ${on.framesDropped ?? '?'} (on) · ` +
         `steps ${on.steps.map((s) => `${s.direction}@${s.sinceLoadChangeMs}ms/${s.from}`).join(', ') || 'NONE'}`
       : 'single lane — no comparison'
 
-  return { load, cores: navigator.hardwareConcurrency || 0, lanes, verdict }
+  // E2's OWN GATES, answered as numbers off the detector-on lane rather than
+  // left to a reader to compute. Each line is one of the task's gates.
+  const e2 = on
+    ? {
+        // THE GATE: "no picture step below `critical`". Every DOWN step is
+        // paired with the reading that was standing when it was taken, and any
+        // step whose reading was not `critical` is a failure. The autopsy path
+        // ('measured') is listed separately: it is the delivery ruler reporting
+        // loss that has already happened, not a prediction.
+        pictureStepsBelowCritical: on.stepLevels.filter(
+          (x) => x.from === 'predicted' && x.direction === 'down' && x.level !== 'critical',
+        ),
+        stepLevels: on.stepLevels,
+        upLatencyMs: on.upLatencyMs,
+        upAfterHeadroomMs: on.upAfterHeadroomMs,
+        downLatencyMs: on.downLatencyMs,
+        leadFromCriticalMs: off?.leadFromCriticalMs ?? null,
+        maxBelowRequestedMs: on.maxBelowRequestedMs,
+        holds: on.holds,
+        burst: { framesBurst: on.framesBurst, burstFrames: on.burstFrames },
+        ordering: on.elasticAudit.line,
+        orderingOk: on.elasticAudit.ok,
+        audio: {
+          paddedFrames: on.audioPaddedFrames,
+          droppedNotReady: on.audioDroppedNotReady,
+          acrossSteps: on.audioAcrossSteps,
+        },
+      }
+    : null
+
+  return { load, cores: navigator.hardwareConcurrency || 0, lanes, verdict, e2 }
 }
