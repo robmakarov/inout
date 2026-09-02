@@ -55,10 +55,13 @@ async function writeTake(opts: { minimumFragmentDuration: number; keyEverySec: n
   let early = opts.earlySec
   for (let i = 0; i < 4 * FPS; i++) {
     const t = i * DT
-    const earlyDue = early !== null && t >= early
-    const key = i === 0 || earlyDue || t - lastKey >= opts.keyEverySec
-    if (earlyDue) early = null
-    if (key) lastKey = t
+    // The worker's own rule: the GOP grid decides first, the early keyframe is
+    // ADDED to it, and only a GOP keyframe moves the grid.
+    const gopDue = i === 0 || t - lastKey >= opts.keyEverySec
+    const earlyDue = !gopDue && early !== null && t >= early
+    const key = gopDue || earlyDue
+    if (early !== null && t >= early) early = null
+    if (gopDue) lastKey = t
     await source.add(
       new EncodedPacket(new Uint8Array(64), key ? 'key' : 'delta', t, DT),
       i === 0
@@ -95,10 +98,22 @@ describe('the first video fragment', () => {
       keyEverySec: 2,
       earlySec: EARLY_FRAGMENT_S,
     })
-    // 1 s, then the 2 s cadence off it. The minimum is halved so the early
-    // keyframe can close a fragment at all; it never becomes the binding
-    // constraint, because keyframes stay two seconds apart.
-    expect(take.fragmentsAtSec).toEqual([1, 3])
+    // 1 s, and then EXACTLY the fragments the shipped cadence would have had.
+    // That is the point: the early keyframe is added to the GOP grid, never
+    // inserted into it, so this file is the shipped one plus one fragment
+    // boundary — strictly more decodable at every instant, never less.
+    expect(take.fragmentsAtSec).toEqual([1, 2])
+  })
+
+  it('is strictly a superset of the shipped cadence, boundary for boundary', async () => {
+    const early = await writeTake({
+      minimumFragmentDuration: EARLY_FRAGMENT_S / 2,
+      keyEverySec: 2,
+      earlySec: EARLY_FRAGMENT_S,
+    })
+    const shipped = await writeTake({ minimumFragmentDuration: 1, keyEverySec: 2, earlySec: null })
+    for (const at of shipped.fragmentsAtSec) expect(early.fragmentsAtSec).toContain(at)
+    expect(early.fragmentsAtSec.length).toBe(shipped.fragmentsAtSec.length + 1)
   })
 
   it('?crashfloor=0 is the shipped cadence: nothing decodable before 2 s', async () => {

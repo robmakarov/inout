@@ -507,17 +507,26 @@ function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   // a keyframe — while the COMPOSITE in the very same take, whose cadence has
   // never had this term, encoded 6 frames with 1 keyframe. Same machine, same
   // second, one correct and one not.
+  const gopDue = encodeCalls === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
   // H2b(b): ... plus ONE early keyframe, which is what closes the first
   // fragment before the GOP would have. It fires once and then this is null.
-  const earlyDue = earlyKeySec !== null && tSec >= earlyKeySec
-  const keyFrame = encodeCalls === 0 || earlyDue || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
-  if (earlyDue) earlyKeySec = null
+  //
+  // IT IS ADDED TO THE GRID, NOT INSERTED INTO IT, and that distinction is the
+  // whole value of the change. Letting it move `lastKeySec` shifts every later
+  // keyframe by a second — keyframes at 1/3/5 instead of 0/2/4 — so the first
+  // fragment arrives a second sooner and every fragment after it a second
+  // LATER, which is a wash at best. Measured on prod 2026-09-02 at a 5 s kill:
+  // shifted, 3.0-3.7 s of picture survived; unshifted, 4.0 s, the same as the
+  // shipped cadence. The GOP stays where it was; this is one extra keyframe.
+  const earlyDue = !gopDue && earlyKeySec !== null && tSec >= earlyKeySec
+  const keyFrame = gopDue || earlyDue
+  if (earlyKeySec !== null && tSec >= earlyKeySec) earlyKeySec = null
   let stamped: VideoFrame | null = null
   try {
     stamped = new VideoFrame(picture, { timestamp: tUs })
     encoder.encode(stamped, { keyFrame })
     encodeCalls++
-    if (keyFrame) lastKeySec = tSec
+    if (gopDue) lastKeySec = tSec
     lastEncodedTsUs = tUs
     lastEncodeOkMs = atMs
     if (keepAlive) stats.keepAliveFrames++
