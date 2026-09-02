@@ -19,12 +19,21 @@
  */
 
 import { rememberEncoderThroughput } from './encoderBudget'
+import { encoderWarmYielded } from './encoderWarmYield'
 
 /** Enough to time, few enough to be invisible: ~0.2 s on the machine this was
  *  written on, and the warm above has already paid the initialization. */
 const MEASURE_FRAMES = 40
 
 let started: Promise<void> | null = null
+/**
+ * The measurement below is INSTRUMENTATION and the init above it is not, so
+ * they are owed separately. A take that starts mid-warm gets the machine and
+ * this is deferred to the moment the take ends — the number is cached across
+ * launches, so deferring it costs at most the first take of a fresh profile the
+ * encoder budget it would have had.
+ */
+let meterOwed = true
 
 export function warmVideoEncoder(): Promise<void> {
   started ??= (async () => {
@@ -59,6 +68,18 @@ export function warmVideoEncoder(): Promise<void> {
         }
       }
       await encoder.flush()
+      // CLOSED THE INSTANT THE INIT IS PAID, and it used to stay open through
+      // the whole measurement below. Two 1080p encoders alive here plus the
+      // three a take opens is five hardware sessions competing, which is the
+      // fight this file's companion module documents. The init is a property of
+      // the PROCESS, not of this object: closing it keeps every millisecond of
+      // what the warm bought.
+      encoder.close()
+
+      // A TAKE IS STARTING — STOP. Everything above was the point; everything
+      // below is a number, and a number is not worth a second of somebody's
+      // recording. runOwedEncoderMeasurement() picks it up when the take ends.
+      if (encoderWarmYielded()) return
 
       // …AND NOW THAT IT IS WARM, MEASURE WHAT IT CAN DO (2026-08-30).
       //
@@ -81,36 +102,71 @@ export function warmVideoEncoder(): Promise<void> {
       // it is near-constant and RISES slightly with frame size. Measuring at
       // 1080p therefore under-states a bigger frame, which is the safe
       // direction for a number that decides what to attempt.
-      const t0 = performance.now()
-      let out = 0
-      const meter = new VideoEncoder({ output: () => (out += 1), error: () => undefined })
-      meter.configure(config)
-      const still = new VideoFrame(canvas, { timestamp: 0 })
-      for (let i = 0; i < MEASURE_FRAMES; i++) {
-        const frame = new VideoFrame(still, { timestamp: Math.round((i * 1e6) / 30) })
-        try {
-          meter.encode(frame, { keyFrame: i === 0 })
-        } finally {
-          frame.close()
-        }
-      }
-      await meter.flush()
-      still.close()
-      meter.close()
-      const seconds = (performance.now() - t0) / 1000
-      if (out > 0 && seconds > 0) {
-        const mpxPerSec = (config.width * config.height * (out / seconds)) / 1e6
-        rememberEncoderThroughput(mpxPerSec)
-        console.info(
-          `[capture] this machine's video encoder: ${Math.round(out / seconds)} fps at ` +
-            `${config.width}x${config.height} = ${mpxPerSec.toFixed(0)} Mpx/s (measured at mount, ` +
-            `idle — what a take may attempt is decided from this rather than from a constant)`,
-        )
-      }
-      encoder.close()
+      await runMeter(config, canvas)
     } catch {
       /* a failed warm costs nothing — the take pays the init instead */
     }
   })()
   return started
+}
+
+/**
+ * The deferred half. Called when a take ends: if the warm stood down for it,
+ * this is the measurement it owes, run where it was always meant to run —
+ * with nothing recording.
+ */
+export async function runOwedEncoderMeasurement(): Promise<void> {
+  if (!meterOwed || encoderWarmYielded()) return
+  try {
+    if (typeof VideoEncoder === 'undefined' || typeof OffscreenCanvas === 'undefined') return
+    const config: VideoEncoderConfig = {
+      codec: 'avc1.4D402A',
+      width: 1920,
+      height: 1080,
+      bitrate: 8_000_000,
+      framerate: 30,
+      latencyMode: 'realtime',
+      hardwareAcceleration: 'prefer-hardware',
+    }
+    const support = await VideoEncoder.isConfigSupported(config).catch(() => null)
+    if (!support?.supported) return
+    const canvas = new OffscreenCanvas(config.width, config.height)
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) return
+    ctx.fillStyle = '#202028'
+    ctx.fillRect(0, 0, config.width, config.height)
+    await runMeter(config, canvas)
+  } catch {
+    /* the budget simply goes unmeasured this launch, as it did before O15 */
+  }
+}
+
+async function runMeter(config: VideoEncoderConfig, canvas: OffscreenCanvas): Promise<void> {
+  const t0 = performance.now()
+  let out = 0
+  const meter = new VideoEncoder({ output: () => (out += 1), error: () => undefined })
+  meter.configure(config)
+  const still = new VideoFrame(canvas, { timestamp: 0 })
+  for (let i = 0; i < MEASURE_FRAMES; i++) {
+    const frame = new VideoFrame(still, { timestamp: Math.round((i * 1e6) / 30) })
+    try {
+      meter.encode(frame, { keyFrame: i === 0 })
+    } finally {
+      frame.close()
+    }
+  }
+  await meter.flush()
+  still.close()
+  meter.close()
+  const seconds = (performance.now() - t0) / 1000
+  meterOwed = false
+  if (out > 0 && seconds > 0) {
+    const mpxPerSec = (config.width * config.height * (out / seconds)) / 1e6
+    rememberEncoderThroughput(mpxPerSec)
+    console.info(
+      `[capture] this machine's video encoder: ${Math.round(out / seconds)} fps at ` +
+        `${config.width}x${config.height} = ${mpxPerSec.toFixed(0)} Mpx/s (measured while nothing ` +
+        `was recording — what a take may attempt is decided from this rather than from a constant)`,
+    )
+  }
 }

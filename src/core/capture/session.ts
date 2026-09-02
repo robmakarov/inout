@@ -76,6 +76,7 @@ import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, probeDurationMs, writePendingManifest } from './recovery'
 import { crashFloorEnabled, EARLY_FRAGMENT_S } from './crashFloor'
 import { keepChannel } from './keptOnDisk'
+import { releaseEncoderWarmYield, yieldEncoderWarmToTake } from './encoderWarmYield'
 import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 import type { LivenessEvent } from './sourceLiveness'
 
@@ -555,6 +556,13 @@ class Session implements CaptureSession {
    */
   async arm(): Promise<void> {
     const armT0 = performance.now()
+    // H6 — THE WARM STANDS DOWN, HERE, SYNCHRONOUSLY, BEFORE ANY AWAIT.
+    // encoderWarm.ts pays the process's first-VideoEncoder cost at mount so a
+    // take does not; press record while it is still paying and the two fight
+    // over the same hardware instead, which is how a take pressed at app load
+    // ended up with no picture on disk at all for six seconds. This costs a
+    // boolean and it is the earliest instant a take is committed.
+    yieldEncoderWarmToTake()
     // Long takes write GBs to OPFS; ask the browser never to evict us mid-take
     // (silent eviction truncates the recording). Best-effort, never blocks arming.
     try {
@@ -3190,6 +3198,11 @@ class Session implements CaptureSession {
     if (this.manifestTimer) clearTimeout(this.manifestTimer)
     clearPendingManifest(this.recordingId)
     this.setState('stopped')
+    // H6: the take is over, so the encoder measurement the warm stood down for
+    // can run — where it was always meant to, with nothing recording. A no-op
+    // on every launch where it already ran, which is most of them.
+    releaseEncoderWarmYield()
+    void import('./encoderWarm').then((m) => m.runOwedEncoderMeasurement()).catch(() => undefined)
     return recording
   }
 
@@ -3202,6 +3215,8 @@ class Session implements CaptureSession {
     this.resuming.clear()
     this.clearTick()
     this.releaseWakeLock()
+    // H6: a take that never happened still stood the warm down. Give it back.
+    releaseEncoderWarmYield()
     // DEVICES OFF FIRST — before a single await. A cancel throws the take away,
     // so nothing downstream (a recorder that never fires onstop, an
     // AudioWorklet that never delivers a first sample, an OPFS writer that
