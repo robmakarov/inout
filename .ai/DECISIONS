@@ -717,3 +717,13 @@ almost interactive" — the recorded screen becomes selectable and clickable, no
 is the same underlying capability as idea 10 (the page's own description, not just its pixels), which
 is why 10 survived. Reminder from him, already on file in BACKLOG's approved shapes: the screenshot /
 image capture channel is coming too.
+
+2026-09-02 robert (14) — NO GUESSING ABOUT THE RENDER; ANY LENGTH, ANY EDIT. Asked to choose between
+bounding the at-stop pre-render by predicted length, building resumable renders, or leaving it: "i
+feel like its all bullshit way to try to guess for render, we need to expect and be ready for any
+lenght take and any edits after". So every heuristic about take length is REJECTED — no "don't
+pre-render a long take", no predicted-duration budget, no policy that behaves differently at 2 minutes
+and at 2 hours. The architecture has to make length and edits IRRELEVANT: work proportional to what
+actually changed, never to how long the take is. That is J1/RENDER-CACHE, and it is now the shape the
+export must take rather than one option among three. Same family as robert (8): the answer is never a
+guess about what the user will do.
