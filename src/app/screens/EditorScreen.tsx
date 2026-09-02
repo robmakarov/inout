@@ -14,6 +14,7 @@ import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { cancelPrerender, editBindsPrerender, exportWouldRender, startPrerender } from '@core/compose'
 import { noteEditingActivity, noteEditorOpen, noteEditorOpening } from '@core/backgroundWork'
+import { startEditorLateness } from '@core/lateness'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { loadRecovery } from '@core/capture'
 import { editsRepo, recordingsRepo } from '@core/store'
@@ -57,6 +58,15 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     noteEditorOpening()
     return noteEditorOpen
   }, [recording.id])
+  /**
+   * G7 — HOW LATE THIS THREAD RUNS IN THE EDITOR'S FIRST 15 SECONDS.
+   *
+   * The window Phase 1's "no editor stall > 30 ms" is claimed over, and the one
+   * B10 lives in: the export panel encodes 300 frames on THIS thread about 11 s
+   * after the editor opens. Stops itself; read afterwards with
+   * `__inoutEditorReport()`. Agent/dev surface only — nothing here renders.
+   */
+  useEffect(() => startEditorLateness(), [recording.id])
   useEffect(() => {
     if (!pb.ready) return
     // Two frames: one for React to commit the elements, one for the browser to

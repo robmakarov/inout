@@ -55,6 +55,7 @@ createRoot(document.getElementById('root')!).render(
  *   await __inoutReportAll()       every take still on this machine, newest first
  *   __inoutTakeLog()               the verdict line of every take, including
  *                                  ones since deleted (localStorage ring)
+ *   await __inoutEditorReport()    the editor's first 15 s, graded (G7)
  *
  * The playbook is docs/TAKE_REPORT.md.
  */
@@ -97,6 +98,19 @@ createRoot(document.getElementById('root')!).render(
    *   __inoutDoor()   every decision this session has made, newest last
    */
   g.__inoutDoor = async () => (await import('@core/door')).readDoorLog()
+  /**
+   * G7 — THE EDITOR'S OWN CARD. The editor samples its first 15 seconds of
+   * main-thread lateness on mount (EditorScreen) and keeps the summary; this
+   * grades it against the same band the take's card uses, so "no editor stall
+   * > 30 ms" is one number a session can read instead of a claim.
+   *
+   *   await __inoutEditorReport()   the last editor open, graded
+   */
+  g.__inoutEditorReport = async () => {
+    const { buildEditorCard } = await import('@core/report')
+    const { lastEditorLateness } = await import('@core/lateness')
+    return buildEditorCard(lastEditorLateness())
+  }
 }
 
 // Offline start (task P2). PRODUCTION ONLY: a service worker in front of the

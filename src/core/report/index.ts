@@ -1,5 +1,7 @@
 export {
+  buildEditorCard,
   buildReportCard,
+  latenessDimension,
   reviveBursts,
   CLOCK_FAIL_RATIO,
   HEAP_FAIL_RATIO,
@@ -12,6 +14,7 @@ export {
 export type {
   DimensionId,
   DimensionStatus,
+  EditorCard,
   ReportCard,
   ReportDimension,
   ReportEvidence,
