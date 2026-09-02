@@ -61,7 +61,8 @@ THE THREE CONTENDED PATHS after the 09-02 promotions — inside each, ONE sessio
  · CAPTURE AUDIO (measuredAudio.ts and the mix): B12 measure → X11a → B13/X14 → X11 → A2 → O10b/c. M1(a) is the same defect as B13(1); whichever runs first, the other reads its result instead of re-fixing it. Six Phase-1 tasks now queue on one file — this is the roadmap's tightest bottleneck and it is not parallelisable by taking more sessions.
  · EXPORT LOOP (render, draw, codec): J1 → O9(a) → R1's overlap lever → O4. O9(b) and O11d are the codec ladder and are disjoint from the draw.
  · CAPTURE WORKER + ELASTIC: E2 → M1 → E3. M1 owns all seven; nothing else enters while it is open.
-Everything else (T1 · B10 · B11 · U1 · H7 · G7 · M4 · X17 · Q1 · G6) is genuinely parallel and disjoint.
+Everything else (B10 · B11 · U1 · H7 · G7 · M4 · X17 · Q1 · G6 · E2) is genuinely parallel and disjoint. ORDER INSIDE IT: G7 BEFORE B10 — G7 is the instrument B10's claim is read against ("the known 35-201 ms stall reproduced as a number before B10 lands and gone after it"), so doing B10 first leaves the fix unprovable. E2 BEFORE M1 — M1 owns the ladder E2 retunes and inherits its bias.
+Since T1 (2026-09-02) a task session starts with `scripts/worktree.sh <id>`; `npm run drill` proves the hook rules still hold.
 STILL OWED ROBERT (his machine, his eyes, his ears): O6 4K game-tab re-verify (`?nativeres=1` is default now; report the console) · O10a attenuation ruling · X5 text question (~/Downloads/x15-text-truth) · B7 video half (one command with Screen Recording granted) · the wording of H4's four and H1's two sentences · E1's up-step seen in a visible window · M1's flip · AI1 re-test on a real file · `?singlegen=capture` flip · the wedge second-address test · a Safari artifact (P8) · B13's A/B once it has one.
 READ AND CLOSED 2026-09-02: A1's long take (rec_gpsoujs2sydf, 124.8 min — capture green, DECISIONS robert (18)) · B2's listen (answered in the same exchange → B13).
 
