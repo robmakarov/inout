@@ -465,26 +465,26 @@ it is built combine-ready:
           this fix's only regression gate and it reaches the case about one run in six.
           NEXT, and it is the same territory: the smart-cut negative timestamp at 120 s (BACKLOG
           P1) — same copy paths, same oracle:long, one owner.
- 12. H2b  the two crash floors            [light-medium · APPROVED 2026-09-02, READY · additive,
-          capability-gated per the frozen rule · evidence in BACKLOG P1 2026-09-01] (a) the pending
-          manifest goes through a writer with a REAL COMMIT (durable positioned writer or
-          IndexedDB) instead of localStorage, so a kill in the first ~5 s no longer erases the only
-          pointer to the take's blobs; (b) the first video fragment closes early, so a ~5-7 s take
-          salvages with picture instead of audio-only. GATES: the same eight killAt cells
-          (`node scripts/crash-bound.mjs --killAt=2000,...,20000`) with NOTHING unrecoverable at
-          any instant and picture from <=5 s kills · the 2.1 s steady-state bound unmoved ·
-          fallback path proven (flag off = today's behaviour byte-for-byte) · oracle green.
- 13. H5   stop keeps what reached disk    [light-medium · APPROVED 2026-09-02, READY · promoted
-          from H1's rig finding, evidence in BACKLOG P1 2026-09-02] `session.ts doStop` deletes a
-          channel whose stop reply missed the 5 s budget — megabytes on disk removed under a
-          warning that says "keeping what reached disk". Read the bytes off DISK before deleting
-          anything; keep any channel whose blob is non-empty. GATES: the contain-check cell that
-          caught it (fourth back-to-back Chrome, loaded) re-run until the timeout case fires and
-          the channel SURVIVES with its true length · a genuinely empty channel is still removed ·
-          the warning's words match what happens · oracle green.
-          RUN H2b AND H5 IN ONE SESSION, SEQUENTIALLY — both live in session.ts's stop/write
-          family and share the crash rigs; two worktrees editing that file is a conflict nobody
-          needs.
+ 12. H2b  the two crash floors            DONE 2026-09-02, shipped on, `?crashfloor=0` reverts.
+          A crash is now survivable from the second second of a take, not the eighth: eight kill
+          points 2.3-20.3 s, nothing unrecoverable at any of them, every channel back at every one,
+          PICTURE at every one (2.03 s of it at a 2.3 s kill), worst trail 2143 ms. The manifest's
+          second home — its own `inout-pending` IndexedDB database, `durability: 'strict'` — was
+          the copy that survived all eight while localStorage survived none. One extra keyframe
+          closes the first video fragment at 1 s, ADDED to the 2 s GOP grid rather than inserted
+          into it (inserting it measured WORSE at 5 s; the table is in the handoff). Bound unmoved
+          (60 s -> 1902 ms, 300 s -> 1670 ms against H2's 1010/2120). Handoff under the task.
+ 13. H5   stop keeps what reached disk    DONE 2026-09-02, shipped on, no flag. A channel whose
+          stop reply misses the 5 s budget is asked of the DISK instead of being deleted: its bytes
+          from the file, its length from the demux, and neither a locked file nor a refused demux
+          is grounds for removing anything. A channel the disk agrees is EMPTY — the 28-byte `ftyp`
+          a dead camera writes — is still removed. `?slowstop=kind:ms` makes the failure
+          arrangeable instead of waited for, and two contain-check cells stand on it. Handoff under
+          the task.
+          BOTH RAN IN ONE SESSION as the map asked. What they found underneath, and it is now
+          BACKLOG P2: press record within a second of the app loading and the first ~6 seconds of
+          a take have NO PICTURE ON DISK AT ALL — a Chrome process's first VideoEncoder is still
+          initialising, so there is nothing encoded to write and no fragment policy can help.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
 ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
@@ -495,7 +495,7 @@ STILL OWED ROBERT: B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a 
 X5 text question · B7 video half (one command) · H4's four sentences (a channel that died or never
 delivered now says so live and in the editor; the words are proposals, the paths are measured) ·
 the A1 long take · E1's watched up-step · M1's word. (B9's yes and the crash-floor yeses LANDED
-2026-09-02; B9 is DONE, the crash-floor tasks are above.)
+2026-09-02; B9, H2b and H5 are all DONE — the map above carries their results.)
 
 ## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
    [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
@@ -1264,6 +1264,72 @@ the liveness poll was added for. At 1920x1080@60 the same take holds 60.0 fps fo
 and grades GREEN, and every point above is from a take that was alive. Filed to BACKLOG with its
 caveat: the rig's synthetic source is a canvas the PAGE paints, which a real screen share is not.
 
+## H2b the two crash floors [light-medium · DONE 2026-09-02 · additive, capability-gated]
+H2 priced a crash at 2.1 s and then found the floor where that price does not hold: at 2.8 / 3.3 /
+4.2 s NOTHING was recoverable and at 5.4 s the take came back as audio only. (a) the pending
+manifest goes through a writer with a REAL COMMIT so a kill in the first ~5 s no longer erases the
+only pointer to the take's blobs; (b) the first video fragment closes early so a ~5-7 s take
+salvages with picture instead of audio-only.
+GATES: the same eight killAt cells with NOTHING unrecoverable at any instant and picture from
+<=5 s kills · the 2.1 s steady-state bound unmoved · fallback path proven (flag off = today's
+behaviour byte-for-byte) · oracle green.
+
+HANDOFF 2026-09-02. DONE, all four gates. SHIPPED ON, `?crashfloor=0` reverts.
+THE FLOOR IS GONE, AND THE TABLE IS THE WHOLE ANSWER. Eight `kill -9`s on Chrome's whole process
+group, one max60 take each on the deployed build, every take verified still recording at the kill:
+
+  killed at   2.3 s   3.3 s   4.3 s   5.3 s   7.3 s   8.3 s   10.3 s   20.3 s
+  recovered   ALL     ALL     ALL     ALL     ALL     ALL     ALL      ALL
+  picture     2.03 s  2.00 s  4.05 s  4.02 s  6.03 s  8.07 s  10.13 s  20.07 s
+  worst trail 1.31 s  1.35 s  1.28 s  1.29 s  1.30 s  1.29 s  0.30 s   2.14 s
+
+Nothing unrecoverable at any instant, every channel back at every instant, two video channels with
+material at every instant, worst channel trail 2143 ms < 5000. THE SAME EIGHT CELLS BEFORE THIS
+TASK: nothing at all at 2.8/3.3/4.2 s, audio only at 5.4 s.
+(a) THE MANIFEST HAS A SECOND HOME AND IT IS THE ONE THAT SURVIVES. Its own `inout-pending`
+IndexedDB database — never a version bump of `inout`, which recordingsRepo.ts explains at length —
+written with `durability: 'strict'`, beside the localStorage copy that shipped. In all eight cells
+the IndexedDB copy survived and the localStorage copy survived NONE; from 60 s on both survive.
+The row is the same JSON string localStorage holds under an out-of-line key, which is what lets
+the rig read it with the page's scripts disabled. The orphan sweep honours both homes now — a
+crash that leaves only the durable copy must not have its blobs swept before salvage runs.
+(b) ONE EXTRA KEYFRAME, ADDED TO THE GOP GRID AND NOT INSERTED INTO IT, and that distinction is
+the whole value of the change. Measured on prod, settled app, three video channels per cell, files
+read out of the profile after a SIGKILL and demuxed in node:
+
+  kill at    floors OFF        early key SHIFTING the grid   early key ADDED to it
+    2 s      header only       —                             1.0 s
+    3 s      2.0 s of picture  1.0-2.2 s                     2.0 s
+    4 s      2.0 s             2.2-3.0 s                     2.0 s
+    5 s      4.0 s             3.0-3.7 s                     4.0 s
+
+Letting it move `lastKeySec` moved every LATER keyframe with it — 1/3/5 instead of 0/2/4 — so the
+first fragment came a second sooner and every one after it a second later, which at 5 s is a LOSS.
+Unshifted, fragments close at 1, 2, 4, 6 s where they used to close at 2, 4, 6: strictly a
+superset, pinned by a test that asserts exactly that against the shipped configuration.
+THE BOUND IS UNMOVED: 60 s -> 1902 ms, 300 s -> 1670 ms, against H2's 1010 / 2120 ms at the same
+two lengths. Worst across all ten cells of the day 2143 ms, which is H2's 2116 ms.
+THE FALLBACK IS TODAY'S BEHAVIOUR AND IT IS ONE URL AWAY: `?crashfloor=0` at 3.2 s and 4.3 s ->
+`salvaged=false`, manifest NOWHERE, the whole take lost, exactly what H2 measured. In the code the
+flag off means the manifest is localStorage-only, `minimumFragmentDuration` is omitted, and the
+keyframe expression reduces to the shipped one term for term.
+THE RIG NOW WAITS BEFORE PRESSING RECORD, and that is a MEASUREMENT correction, not a convenience.
+It used to press ~200 ms after first paint, which no user does, and that races the app's own
+encoder-warm probe: on the identical build, pressing immediately put NOTHING on disk for any video
+channel at 2/3/4/5 s and then dropped all three files at once at 7 s carrying the whole take. A
+Chrome process's first VideoEncoder pays a multi-second init, so there are no chunks to write and
+no fragment policy can help. `--settleBeforeRecordMs` (default 10 s, 0 reproduces the cold cell).
+The state is real for a user who presses record a second after load — BACKLOG P2, with the repro.
+THE RIG ALSO READS THE MANIFEST TWO WAYS with the page's scripts off: CDP's IndexedDB domain, and
+independently out of the profile's own LevelDB files. Only the second answered on this Chrome, and
+it is the better of the two anyway — no browser is involved in the answer at all.
+GATE EVIDENCE: 8/8 cells, all five rig gates true (`fivePoints`, `everyKillSalvaged`,
+`manifestSurvived`, `worstUnder5s`, `pictureAtEveryKill`) · bound 1902/1670 ms at 60 s/300 s ·
+control `?crashfloor=0` nothing recoverable at 3.2/4.3 s · typecheck clean, 995 tests at the gate
+run — 27 of them new here, across H2b and H5 (1006 on main afterwards, a parallel session's) ·
+oracle 1/1 PASS sync 39.1/53.5 ms, instant 74.7 ms, smartcut 76.2 ms · LONG
+CELL (mandatory, G4 — this touches the raw channel the instant path packet-copies) PASS at 120 s:
+instant maxAbs 53.6 ms, smartcut 55.0 ms, BELOW the recorded 94.2/94.2/95.3/100.5 baseline.
 ## H3 memory slope at hour scale [light · rig cell · HEAVY RUN, announced, overnight]
 Nothing measures memory past minutes. One cell: synthetic max60 soak, 60 min, memory sampled per
 minute. Band: slope ~0 after warmup — this is the 8 GB machine's take-length ceiling in disguise.
@@ -1406,6 +1472,53 @@ Worth ten minutes in whoever's next max session on real hardware.
 KNOBS: `?dead=<screen|camera>` and `?die=<kind>:<ms>` (from the record press, any kind, comma
 separated). docs/FLAGS.md carries both.
 
+## H5 stop keeps what reached disk [light-medium · DONE 2026-09-02 · promoted from H1's rig finding]
+`session.ts doStop` deleted a channel whose stop reply missed the 5 s budget — megabytes on disk
+removed under a warning that says "keeping what reached disk". Read the bytes off DISK before
+deleting anything; keep any channel whose blob is non-empty.
+GATES: the contain-check cell that caught it re-run until the timeout case fires and the channel
+SURVIVES with its true length · a genuinely empty channel is still removed · the warning's words
+match what happens · oracle green.
+
+HANDOFF 2026-09-02. DONE, all four gates. SHIPPED ON, no flag — this is a correctness fix on the
+default path, and its "off" is a stop reply arriving on time, which costs nothing.
+THE GATE SAID "RE-RUN UNTIL THE TIMEOUT CASE FIRES", AND THAT IS THE ONE THING NOT WORTH DOING.
+The failure was a coincidence of load — the fourth back-to-back Chrome, both raw channels ~184
+frames behind — and a gate that waits for a coincidence is a gate that passes by luck. `?slowstop=
+kind:ms` holds a channel's stop reply back on purpose: the file is written exactly as a healthy
+take writes it and only the message saying so is late, which is precisely the failure. Held in
+session.ts rather than in the worker so the disk state is identical to a healthy take's — that is
+what makes the cell mean anything. Two contain-check cells stand on it, and both pass:
+  slowstop        screen IN the take · 16100 of 16113 ms (its TRUE length, demuxed) · 1.9 MB ·
+                  its file still on disk · not reported missing · not certified lost · camera and
+                  mic full length · console: "H5 screen never answered its stop, but 1.8 MB of it
+                  is on disk — kept at 16100 ms (demuxed)".
+  slowstop-empty  `?dead=camera&slowstop=camera:9000` — the camera is NOT in the take, the take
+                  says it delivered nothing (missing + never-delivered at 0 ms), its 28-byte
+                  header was REMOVED rather than orphaned, screen and mic full length.
+THE RULE IS THREE ANSWERS, NOT TWO, and the second cell is why. A channel that never delivered a
+frame still writes a 28-byte `ftyp`; reading that as "bytes on disk, keep it" would turn every
+dead camera into a zero-length channel in the take. So: a demux that RETURNS ZERO is believed and
+the channel goes; a demux that REFUSES (threw, or ran past its 5 s deadline) is not, and its
+megabytes are kept at the wall clock rather than deleted on the word of a reader that gave up. The
+size read is treated the same way — `blobStore.size` returns 0 only for a file that is genuinely
+absent and THROWS for one that will not open (locked by a writer that has not finished dying), and
+nothing is deleted on the strength of a question the disk refused to answer.
+THE DEMUX OUTRANKS THE WALL CLOCK, and that is not cosmetic: a stop that timed out may have left
+its last seconds unflushed, so a clock-derived length would claim material the file does not have
+and slide every other channel against this one. The clock is the fallback, and only for a file
+nothing could read.
+THE WARNING'S WORDS NOW MATCH: "a recorder did not stop in budget — its file is read off disk and
+kept if it has bytes", and the rescue prints what it kept, how much, and which witness answered.
+THE RULE HAS ITS OWN HOME AND ELEVEN CASES ON IT: `keptOnDisk.ts`, pure, with session.ts keeping
+only the part that has to touch a platter. The measured defect is in the test file as its own case.
+GATE EVIDENCE: contain-check 2/2 on the new cells, 14 checks, all PASS · H1's own four cells
+re-run: healthy, killworker and killenc-audio green; killenc read 2421 ms once — H1's own handoff
+records that outlier (2602 ms, "the seam IS the drain of the segment that died, so a backlogged
+encoder pays for its backlog"; its segment 1 held 60 KB against 361 KB on the clean run) — and 31
+ms on re-run, inside the 250 ms band · typecheck clean, 995 tests at the gate run · oracle 1/1 PASS sync
+39.1/53.5 ms, instant 74.7 ms, smartcut 76.2 ms · long cell PASS at 120 s, instant 53.6 ms,
+smartcut 55.0 ms, below the recorded baseline.
 ## M1 THE COMBINE — max + emergency elastic [READY TO BUILD 2026-09-02, DECISIONS robert (2):
    the "but not until i say" gate was the DEFAULT, not the work — build now, ship flag-gated
    OFF, elastic never engages at max in the app until Robert flips it · Robert 2026-09-01:
