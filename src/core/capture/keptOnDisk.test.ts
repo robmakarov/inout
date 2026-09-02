@@ -33,17 +33,32 @@ describe('what a finished take keeps', () => {
     expect(v.durationMs).toBe(119_800)
   })
 
-  it('falls back to the clock only when the file will not say how long it is', () => {
-    const v = keepChannel({ replyBytes: 0, diskBytes: 7_000_000, probedMs: 0, wallClockMs: 61_000 })
+  it('falls back to the clock only when the reader REFUSED the file', () => {
+    const v = keepChannel({ replyBytes: 0, diskBytes: 7_000_000, probedMs: 0, unreadable: true, wallClockMs: 61_000 })
     expect(v).toEqual({ keep: true, bytes: 7_000_000, durationMs: 61_000, source: 'wall clock' })
   })
 
   it('prefers a length the channel already knew over the clock', () => {
     // The MediaRecorder path stamps durationMs at the last live frame, before
     // the drain; that is a better answer than "now minus the start".
-    const v = keepChannel({ replyBytes: 0, diskBytes: 5, probedMs: 0, knownMs: 9_900, wallClockMs: 11_500 })
+    const v = keepChannel({ replyBytes: 0, diskBytes: 5, probedMs: 0, unreadable: true, knownMs: 9_900, wallClockMs: 11_500 })
     expect(v.durationMs).toBe(9_900)
     expect(v.source).toBe('wall clock')
+  })
+
+  it('removes a file the reader got through and found EMPTY', () => {
+    // A channel that never delivered a frame still writes a 28-byte `ftyp` and
+    // nothing else. That reads as zero, not as a refusal, and it is not a take
+    // — so the header goes with the verdict rather than sitting on the disk.
+    const v = keepChannel({ replyBytes: 0, diskBytes: 28, probedMs: 0, wallClockMs: 16_000 })
+    expect(v).toEqual({ keep: false, bytes: 0, durationMs: 0, source: 'empty' })
+  })
+
+  it('never deletes megabytes on the word of a reader that gave up', () => {
+    const v = keepChannel({ replyBytes: 0, diskBytes: 48_000_000, probedMs: 0, unreadable: true, wallClockMs: 120_000 })
+    expect(v.keep).toBe(true)
+    expect(v.bytes).toBe(48_000_000)
+    expect(v.durationMs).toBe(120_000)
   })
 
   it('still removes a channel the disk agrees is empty', () => {
@@ -55,7 +70,7 @@ describe('what a finished take keeps', () => {
   })
 
   it('never reports a negative length, whatever the clocks did', () => {
-    const v = keepChannel({ replyBytes: 0, diskBytes: 10, probedMs: 0, wallClockMs: -5 })
+    const v = keepChannel({ replyBytes: 0, diskBytes: 10, probedMs: 0, unreadable: true, wallClockMs: -5 })
     expect(v.durationMs).toBe(0)
   })
 })

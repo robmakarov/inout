@@ -49,7 +49,11 @@ const SEAM_BAND_MS = 250
 const TAKE_MS = 16_000
 const FAULT_AT_MS = 6_000
 
-const CELLS = ['healthy', 'killenc', 'killworker', 'killenc-audio']
+/** How late a held stop reply is, for the H5 cells. Past STOP_BUDGET_MS (5 s)
+ *  by enough that the budget is certainly what expires. */
+const SLOW_STOP_MS = 9_000
+
+const CELLS = ['healthy', 'killenc', 'killworker', 'killenc-audio', 'slowstop', 'slowstop-empty']
 
 function parseArgs(argv) {
   const o = { url: PROD_URL, headed: true, only: null, out: null, keepProfile: false }
@@ -91,7 +95,8 @@ function takeUrl(fault) {
   const u = new URL(opts.url)
   u.searchParams.set('synthetic', '1')
   u.searchParams.set('screensize', '1920x1080')
-  if (fault) u.searchParams.set(fault.knob, `${fault.kind}:${FAULT_AT_MS}`)
+  if (fault) u.searchParams.set(fault.knob, `${fault.kind}:${fault.atMs ?? FAULT_AT_MS}`)
+  for (const [k, v] of fault?.extra ?? []) u.searchParams.set(k, v)
   return u.toString()
 }
 
@@ -213,7 +218,7 @@ async function runCell(name, fault) {
     out.recording = take.recording
     out.files = take.files
     out.card = await s.evalJson(READ_CARD)
-    out.consoleTail = s.consoleLines.filter((l) => /contain|H1 seams|H4 losses|did not stop in budget|did not drain/.test(l))
+    out.consoleTail = s.consoleLines.filter((l) => /contain|H1 seams|H4 losses|H5 |slowstop|did not stop in budget|did not drain/.test(l))
   } catch (err) {
     out.error = String(err)
   } finally {
@@ -233,7 +238,7 @@ function judge(out) {
   }
   const rec = out.recording
   const seams = rec.seams ?? []
-  const contained = out.cell !== 'healthy'
+  const contained = out.cell !== 'healthy' && !out.cell.startsWith('slowstop')
   const kind = out.cell === 'killenc-audio' ? 'mic' : 'screen'
 
   ok('the take completed and reached the store', rec.durationMs > 0, `${rec.durationMs} ms`)
@@ -251,6 +256,54 @@ function judge(out) {
     )
     ok('no live band', !out.bandAtFault, JSON.stringify(out.bandAtFault))
     ok('the report card grades it clean', out.card?.channels?.status === 'pass', out.card?.line)
+    return checks
+  }
+
+  /**
+   * H5 — THE STOP REPLY WAS LATE AND THE FILE WAS NOT. `?slowstop=` holds the
+   * reply past doStop's 5 s budget with the take written exactly as a healthy
+   * one is, which is the failure H1's rig hit by accident under load: `bytes`
+   * still 0 when the budget expired, read as "recorded nothing", and megabytes
+   * deleted under a warning that said "keeping what reached disk".
+   */
+  if (out.cell === 'slowstop') {
+    const held = segmentsOf(rec, 'screen')
+    ok('the held channel is IN the take at all', held.length > 0,
+      (rec.channels ?? []).map((c) => c.kind).join(' ') || 'nothing')
+    ok('it has its true length', held.length > 0 && rec.durationMs - lastEnd(rec, 'screen') < 1_500,
+      `screen ends at ${Math.round(lastEnd(rec, 'screen'))} of ${rec.durationMs} ms`)
+    ok('it has its bytes', held.some((c) => (c.bytes ?? 0) > 100_000),
+      held.map((c) => `${c.bytes ?? '?'}B`).join(' '))
+    ok('its file is still on disk', held.every((c) => (out.files?.[c.blobKey] ?? 0) > 100_000),
+      held.map((c) => `${c.blobKey}=${out.files?.[c.blobKey] ?? 'GONE'}`).join(' '))
+    ok('the take does NOT report it missing', !rec.missing?.includes('screen'),
+      JSON.stringify(rec.missing ?? []))
+    ok('every other channel is full length',
+      ['camera', 'mic'].every((k) => segmentsOf(rec, k).length > 0 && rec.durationMs - lastEnd(rec, k) < 1_500),
+      ['camera', 'mic'].map((k) => `${k} ${Math.round(lastEnd(rec, k))}`).join(' · '))
+    ok('the rescue said so on the console',
+      (out.consoleTail ?? []).some((l) => /H5 screen never answered its stop/.test(l)),
+      (out.consoleTail ?? []).find((l) => /H5/.test(l)) ?? 'nothing said')
+    return checks
+  }
+
+  /**
+   * H5, THE OTHER HALF: a channel that genuinely recorded nothing is STILL
+   * removed. `?dead=camera` delivers zero frames — its file is a 28-byte `ftyp`
+   * and nothing else — and holding its reply too must not turn a header into a
+   * channel, nor leave the header on the disk.
+   */
+  if (out.cell === 'slowstop-empty') {
+    ok('the empty channel is NOT in the take', segmentsOf(rec, 'camera').length === 0,
+      (rec.channels ?? []).map((c) => c.kind).join(' '))
+    ok('the take says the camera delivered nothing',
+      !!rec.missing?.includes('camera') || !!rec.lost?.some((l) => l.kind === 'camera'),
+      JSON.stringify({ missing: rec.missing ?? [], lost: rec.lost ?? [] }))
+    const tiny = Object.entries(out.files ?? {}).filter(([, n]) => n < 1024)
+    ok('its header was removed, not orphaned', tiny.length === 0, JSON.stringify(tiny))
+    ok('every other channel is full length',
+      ['screen', 'mic'].every((k) => segmentsOf(rec, k).length > 0 && rec.durationMs - lastEnd(rec, k) < 1_500),
+      ['screen', 'mic'].map((k) => `${k} ${Math.round(lastEnd(rec, k))}`).join(' · '))
     return checks
   }
 
@@ -299,6 +352,8 @@ const plan = [
   ['killenc', { knob: 'killenc', kind: 'screen' }],
   ['killworker', { knob: 'killworker', kind: 'screen' }],
   ['killenc-audio', { knob: 'killenc', kind: 'mic' }],
+  ['slowstop', { knob: 'slowstop', kind: 'screen', atMs: SLOW_STOP_MS }],
+  ['slowstop-empty', { knob: 'slowstop', kind: 'camera', atMs: SLOW_STOP_MS, extra: [['dead', 'camera']] }],
 ].filter(([name]) => !opts.only || opts.only.includes(name))
 
 const results = []

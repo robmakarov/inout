@@ -26,8 +26,18 @@ export interface DiskTruth {
   replyBytes: number
   /** Bytes actually on the platter under this channel's key. */
   diskBytes: number
-  /** Length demuxed from those bytes. Zero when the probe could not answer. */
+  /** Length demuxed from those bytes. Zero when the file holds no media. */
   probedMs: number
+  /**
+   * The demux REFUSED — it threw, or it ran past its deadline. Different from
+   * a zero length, and the difference decides the channel: a file that reads
+   * as empty IS empty (a 28-byte `ftyp` and nothing else is what a channel
+   * that never delivered a frame writes), while one that cannot be read at all
+   * may be megabytes of real take that a truncated last fragment confused the
+   * reader about. The first is removed; the second is never deleted on the
+   * word of a reader that gave up.
+   */
+  unreadable?: boolean
   /** Length the channel already knew — a reply, or a pre-stop wall-clock stamp. */
   knownMs?: number
   /** How long the channel ran, by this page's clock. The last resort. */
@@ -55,17 +65,21 @@ export function keepChannel(t: DiskTruth): KeepVerdict {
     // THE PROBE OUTRANKS THE CLOCK, and the difference is not cosmetic: a stop
     // that timed out may have left its last seconds unflushed, so the wall
     // clock would claim material the file does not have and slide every other
-    // channel against this one. Demux first; fall back only when it cannot say.
+    // channel against this one. Demux first; fall back only when it REFUSED.
     if (t.probedMs > 0) {
       return { keep: true, bytes: t.diskBytes, durationMs: t.probedMs, source: 'demuxed' }
     }
-    const fallback = t.knownMs && t.knownMs > 0 ? t.knownMs : t.wallClockMs
-    return {
-      keep: true,
-      bytes: t.diskBytes,
-      durationMs: Math.max(0, fallback),
-      source: 'wall clock',
+    if (t.unreadable) {
+      const fallback = t.knownMs && t.knownMs > 0 ? t.knownMs : t.wallClockMs
+      return {
+        keep: true,
+        bytes: t.diskBytes,
+        durationMs: Math.max(0, fallback),
+        source: 'wall clock',
+      }
     }
   }
+  // Nothing on disk, or a file the reader got through and found empty. Both are
+  // "this channel recorded nothing", and the file goes with the verdict.
   return { keep: false, bytes: 0, durationMs: 0, source: 'empty' }
 }

@@ -16,7 +16,7 @@ import {
   type SegmentGeometry,
 } from './resolutionStep'
 import { containVerdict, exhaustedWhy, type ContainCause } from './segmentContain'
-import { faultDelayMs } from './faultInject'
+import { faultDelayMs, slowStopMs } from './faultInject'
 import {
   budgetVerdict,
   describePlan,
@@ -2550,6 +2550,20 @@ class Session implements CaptureSession {
             }
             if (ch.measured) {
               const r = await ch.measured.stop()
+              /**
+               * H5 HARNESS (`?slowstop=`). The file is already written and the
+               * reply is already in hand; what is late is this line. That is
+               * the whole failure — doStop's 5 s budget expires with `bytes`
+               * still 0, and the take used to read that as "recorded nothing"
+               * and delete megabytes. Held HERE rather than in the worker so
+               * the disk state is identical to a healthy take's, which is what
+               * makes the gate mean something.
+               */
+              const hold = slowStopMs(ch.kind)
+              if (hold > 0) {
+                console.warn(`[capture] ?slowstop — holding ${ch.kind}'s stop reply ${hold}ms`)
+                await new Promise((resolve) => setTimeout(resolve, hold))
+              }
               ch.bytes = r.bytes
               ch.durationMs = r.durationMs
               ch.startOffsetMs = r.startOffsetMs
@@ -2791,18 +2805,26 @@ class Session implements CaptureSession {
       const diskBytes = await blobStore.size(ch.blobKey).catch(() => 0)
       // The probe is only ever run against bytes that exist, and it is bounded:
       // a truncated fragmented MP4 is exactly the file a reader can get lost in.
-      const probedMs =
-        diskBytes > 0
-          ? await withTimeout(
-              probeDurationMs(ch.blobKey),
-              DISK_TRUTH_BUDGET_MS,
-              `${ch.kind} length probe`,
-            ).catch(() => 0)
-          : 0
+      // A REFUSAL AND A ZERO ARE KEPT APART — see DiskTruth.unreadable, which is
+      // the difference between a header and a take the reader gave up on.
+      let probedMs = 0
+      let unreadable = false
+      if (diskBytes > 0) {
+        try {
+          probedMs = await withTimeout(
+            probeDurationMs(ch.blobKey),
+            DISK_TRUTH_BUDGET_MS,
+            `${ch.kind} length probe`,
+          )
+        } catch {
+          unreadable = true
+        }
+      }
       const verdict = keepChannel({
         replyBytes: ch.bytes,
         diskBytes,
         probedMs,
+        unreadable,
         knownMs: ch.durationMs,
         wallClockMs: ch.startAbs !== undefined ? performance.now() - ch.startAbs : 0,
       })
