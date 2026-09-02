@@ -762,3 +762,14 @@ work (ideas 1/16) · and the disk guard, which is the only honest ceiling becaus
 storage instead of a typed constant. Consequence accepted by him: motion-heavy exports get bigger and
 render slower. Still content is unaffected (1.84 of 8 Mbps achieved) and the instant/smart-cut paths
 never touched this code. The cumulative-average defect in the same governor dies with the ceiling.
+
+2026-09-02 robert (17) — S1 IS FOLDED INTO M1. "fold S1 into M1 then". The decision log stops being a
+task of its own and becomes M1's structural half, because M1 cannot unify seven adaptive systems
+without a single place their decisions pass through. Also settled in the same exchange, and it is the
+mechanism that matters: a WRITTEN RULE is not structural prevention — it decays. The door is: every
+change to quality, rate, resolution or which channels run goes through ONE function that IS the
+recorder, so degrading anything invisibly is not forbidden but impossible, and a test proves the door
+is the only way in. And the audit's findings split three ways, his distinction: some behaviours are
+CORRECT and only their silence is wrong (the composite drop, the codec fallbacks — do not change them,
+make them announce) · some are simply wrong (zero audio latency, the tail drain, the For-AI truncation)
+· some are underived constants that earn a measurement or go.
