@@ -41,53 +41,50 @@ F19 continue from the playhead (button says "roadmap") · F20 the timeline closi
 ## Project
 Phase 2 (TASKS): provision Supabase + Google OAuth and prove login → upload → link in a second browser · domain + product email · public deploy · first users + feedback channel. Robert records daily; friction becomes bounded decisions, UX changes are his.
 
-## Ideas — the 45 of 2026-09-02, for a SEPARATE session (Robert: "keep it to consider later")
-Verdicts so far: 1 = "try it but skeptical" (the For-AI keyframe picker dropped frames whose only change
-was small — cursor, text fields — so change detection must be designed WITH the export-for-AI problem);
-everything else = later, not rejected. Tag UX = user sees/hears a change → Robert's yes; eng = invisible.
-1 screen-is-not-a-video: lossless changed-tile master for work screens; perfect text, far smaller, frees the screen encoder; hybrid with the encoder for motion · UX · heavy · measure on Robert's real screen first
-2 self-manifesting media files: each file carries take id + role in its metadata; recovery scans OPFS, no manifest to lose · eng · light
-3 speculative seams: pre-encode smart cut's [cut→next keyframe] pieces at silence edges in idle time → edited exports are copies · eng · light-medium
-4 self-measured lip-sync: (a) anchor from VideoFrame.metadata().captureTime / AudioData.timestamp instead of read-time performance.now() (measuredVideo.ts:222); (b) speaker-echo of tab audio in the mic as the mic-latency ruler (cross-correlation) · eng · light + light-medium
-5 audio never on the main thread: transfer the track processor's ReadableStream into the raw worker · eng · light (tapstarve rig = gate)
-6 constant-quality capture: quantizer mode + the export's governor on the raw screen encoder · UX (file sizes) · medium
-7 cloud player composites screen+camera from two packet copies + the camera track as data → instant max+camera SHARE · UX · medium
-8 idle consolidation: re-encode raw channels at export QP once the export exists; extends disk hours · UX (what is kept) · medium
+## Ideas — the 45 of 2026-09-02. REVIEWED 2026-09-02 (Robert: "yes, tidy it"); 23 of them were already tasks.
+Numbers are PERMANENT ids (.ai/TASKS cites them). Rule for this block: an idea whose work has a home
+elsewhere is ONE POINTER LINE here, never a second copy of the spec. Tags: UX = a user sees or hears a
+change → Robert's yes · eng = invisible.
+
+### Owned elsewhere — do not re-plan here
+4 → X14 · 5 → X11 (idea 5 IS its light first step, now X11a) · 11 → SIZE-CODEC lane · 15 → AI1's delta
+detector, measured by X17 · 17 → P4 · 20 → E2 · 28 → J1 · 29 → C1 · 30 → C2 · 31 → C1 · 32 → C5 ·
+33 → C3/C8 signalling · 34 → C4 · 35 → the FROZEN RULE constraints in .ai/TASKS · 36-42 → CONTINUOUS
+LANE + T1 (40 also ruled: the report card is an agent/dev surface, never a user one) · 43 · 44 · 45 → C7.
+
+### Promoted to Phase 1 by this review — specs and gates in .ai/TASKS
+2 → H7 self-manifesting media files · 3 → X16 speculative seams · 21 → E3 deadline-paced background work ·
+22 → G7 main-thread lateness on the report card · 25 → M4 temporal-layers probe. Plus two probes that were
+buried inside heavy tasks and each answer an OPEN Phase-1 bug: X14a (`VideoFrame.metadata().captureTime` —
+the string appears NOWHERE in src/; the anchor is still read-time `performance.now()`, measuredVideo.ts:229)
+and X11a (transfer the track processor's readable into the worker — the standing suspect for B12).
+
+### The one measurement — ideas 1, 15, 16 and AI1's known miss are ONE number, not four projects
+X17 the changed-tile census (.ai/TASKS, Phase 5): how much of Robert's REAL work screen changes per second,
+at what tile size, measured BEFORE anything is built. It decides 1 (lossless changed-tile master for work
+screens; perfect text, far smaller, frees the screen encoder; hybrid with the encoder for motion · UX ·
+heavy), 16 (the lossy sibling: an atlas of changed rectangles through the hardware encoder · eng · heavy),
+15 (zoom proposals from pixel change, like Tighten · UX proposals · medium) and why AI1's keyframe picker
+dropped frames whose only change was small (cursor, text fields). Robert on 1: "try it but skeptical" —
+the census IS the cheap half of trying it.
+
+### Still only ideas — phase-gated, nothing owed until their gate opens
+6 constant-quality capture: quantizer mode + the export's governor on the raw screen encoder · UX (file sizes) · medium · measure the size delta first, then Robert's call
+7 cloud player composites screen+camera from two packet copies + the camera track as data → instant max+camera SHARE · UX · medium · needs C8
+8 idle consolidation: re-encode raw channels at export QP once the export exists; extends disk hours · UX (what is kept) · medium · needs E2's governor to own the idle time
 9 record the export: at max, composite at native size + tiny stream of the patch under the PiP + camera raw → unedited max+camera export = copy · UX · heavy · only after A1's long take holds (load family)
-10 record the page not the pixels: DOM/description stream for web content, pixels only for canvas/video/iframes · UX new mode, needs extension or snippet (AI2's vehicle) · heavy
-11 name the size: two-pass export to an exact target size, our rate control through the quantizer, whole-take lookahead · UX new control · medium-heavy
-12 the player is the editor: cloud player = editor preview code; upload raw + edit → any edit shares instantly, MP4 renders behind · UX · heavy · upload bigger than the file
-13 every take at 60: scroll-aware frame interpolation for takes recorded below 60, local model for camera, opt-in at export · UX option · medium-heavy
-14 continue after a crash: recovery + R-CONT continue = one take · UX control · medium-heavy
-15 zoom proposals from pixel change (AI1's delta detector), like Tighten · UX proposals · medium
-16 atlas of changed rectangles through the hardware encoder (lossy sibling of 1) · eng · heavy · same measurement day as 1
-17 native core at maximum: Swift core on macOS (ScreenCaptureKit, VideoToolbox, Metal), Rust on Windows/Linux, same types.ts contract · UX native app · heavy (= P4 re-spec)
-18 installed core serves the browser: PWA gains native capture when the core is installed · UX install · medium after 17
-19 shared math in Rust → WASM + native: resampler, loudness, echo ruler, tile hashing, governor · eng · medium
-20 governor everywhere, biased up: per-hardware-block pressure, every subsystem a dial, unseen work shed first, bursts absorbed, picture last, immediate climb · eng · medium (E1 retune is the first step)
-21 deadline-paced background work: prerender/uploads/filmstrips at the rate their deadline needs · eng · light-medium
-22 UI never freezes, measured: main-thread lateness as a report-card dimension; >1 frame → worker or chunked (size probe first) · eng · light-medium
-23 UI complexity dial: effects level follows the governor; settings slider pins it; reduced-motion floor · UX setting · light after 20
-24 heat as a signal: thermal state from the native shell, battery-aware ceilings in the browser · eng · light after 17
-25 temporal layers at max (M1 candidate): 60 fps file with a 30 fps layer → sub-max export and streaming = packet selection · eng · medium, probe first
-26 two devices, one take: room on Supabase realtime, direct WebRTC, shared clock (pings + room-audio correlation), each side records locally full quality, fragments ship after, remote camera = PiP input, the shared preview IS the call · UX new mode · heavy
-27 streaming out: composed stage as a track to any WHIP ingest, same link as 26 · UX new mode · medium after 26
-28 fragment journal = J1: resumable renders + the shipping cursor for 26 · eng · medium (task exists)
-29 zero-egress paid storage: R2-class object storage or the user's own Drive · eng/pricing · medium
-30 end-to-end encrypted cloud: key in the link fragment, we never see a frame, player decrypts · UX link semantics · medium
-31 direct device links: free STUN, relay only as paid fallback or user-supplied · eng · medium
-32 device-hosted sharing for free users: the recorder's machine serves the file while online · UX · medium
-33 signaling on the existing free tier (Supabase realtime), no media through it · eng · light
-34 payments through a merchant of record (Paddle/Lemon Squeezy class) · UX checkout · light-medium
-35 no backend as a standing rule: static hosting, client-side logic, servers only for auth/storage rules/signaling · eng principle
-36 one-call state snapshot for agents: flags, support verdict, store state, jobs, last errors in a few hundred tokens · eng · light
-37 delta reporter: "what changed since I last asked" · eng · light
-38 debug bundle: report cards, journals, anchors, certificates, console ring in one small file (also what a user could send) · eng · light-medium
-39 console ring in the take's black box · eng · light
-40 report card on the take card, expandable · UX display · light (Robert 09-02: bug data is NOT shown to users → agent/dev surface only)
-41 agent-safe parallel sessions: hooks enforce worktree-per-session, refuse to commit into another session's claim · process · light (Robert: "make it perfect")
-42 one-command headed prod check returning the report card (the hidden pane cannot rate-test) · tooling · medium
-43 opt-in, show-before-send telemetry: report cards only, never pixels/audio, payload visible in settings · UX consent · medium (Robert 09-02: automatic if legal and free for users; "auto report bugs" toggle for paid, no off for free)
-44 "send this take's report" after a bad take, user reviews first · UX control · light-medium
-45 privacy ledger page: every byte that left the device and why · UX · light-medium
-- OCR text selection in the paused player (Robert 2026-08-29: "select text from video" while paused): OCR the paused frame locally (zero tokens), transparent selectable spans over the stage scaled with its transform, cached per frame; degrades to today. Open: WASM OCR size vs the PWA budget · the cloud player · feeding the For-AI index.
+12 the player is the editor: cloud player = editor preview code; upload raw + edit → any edit shares instantly, MP4 renders behind · UX · heavy · needs C8; upload bigger than the file
+14 continue after a crash: recovery + R-CONT continue = one take · UX control · medium-heavy · after F19
+18 installed core serves the browser: PWA gains native capture when the core is installed · UX install · medium · after P4
+23 UI complexity dial: effects level follows the governor; settings slider pins it; reduced-motion floor · UX setting · light · after E2
+24 heat as a signal: thermal state from the native shell, battery-aware ceilings in the browser · eng · light · after P4
+26 two devices, one take — the full approved shape is in "Later — approved shapes" above · UX new mode · heavy · needs C1-C3 + J1
+27 streaming out: composed stage as a track to any WHIP ingest, same link as 26 · UX new mode · medium · after 26
+
+### Demoted 2026-09-02 (agent recommendation on review, Robert can veto) — cost now, payoff only later
+10 record the page not the pixels (DOM/description stream, pixels only for canvas/video/iframes) — this is a DIFFERENT PRODUCT, not an engine change; it belongs with Phase 6 reshaping and still needs AI2's vehicle (extension/snippet/P4).
+13 every take at 60 (scroll-aware interpolation, local model for camera) — a model on an 8 GB machine to fix what capturing at 60 fixes at the source; revisit only if takes recorded below 60 turn out to be common.
+19 shared math in Rust → WASM + native (resampler, loudness, echo ruler, tile hashing, governor) — buys nothing until P4 exists and costs a second toolchain now; start it INSIDE P4 or not at all.
+
+### Idea outside the 45, kept
+- OCR text selection in the paused player (Robert 2026-08-29: "select text from video" while paused): OCR the paused frame locally (zero tokens), transparent selectable spans over the stage scaled with its transform, cached per frame; degrades to today. Open: WASM OCR size vs the PWA budget · the cloud player · feeding the For-AI index. → Phase 4 as D-OCR.

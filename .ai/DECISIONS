@@ -646,3 +646,16 @@ macOS Chrome, 0 on the other sides), the origin string in that bar cannot be hid
 icon API, script cannot resize or move the window, and the minimum size floor needs a real drag to
 measure (automation makes Chrome ignore the requested size). Nothing of it is in the repo yet; it
 becomes a task in the phase-1 roadmap rewrite.
+
+2026-09-02 robert (6) — THE 45 IDEAS REVIEWED. He asked to review the list, then approved the tidy
+("yes, tidy it"). Findings: 23 of the 45 were already tasks or already-ruled Phase-2 work and were
+duplicated specs — they are now one pointer line each in BACKLOG. Promoted into Phase 1 because they
+are invisible, cheap and serve the phase's own done-definition: 2 → H7, 3 → X16, 21 → E3, 22 → G7,
+25 → M4, plus two probes that were buried inside heavy tasks and each answer an OPEN Phase-1 bug:
+X14a (`VideoFrame.metadata().captureTime` is absent from src/; the anchor is still read-time
+`performance.now()`) and X11a (audio off the main thread — the standing suspect for B12). Ideas 1,
+15, 16 and AI1's dropped-frame miss were collapsed into ONE measurement, X17 the changed-tile census,
+on Robert's real screen: nothing in that family is built before the census reports. Demoted as an
+AGENT RECOMMENDATION, not his ruling, so his veto stands open: 10 (record the page not the pixels —
+a different product, Phase 6), 13 (every take at 60 by interpolation — capture at 60 instead), 19
+(shared math in Rust — inside P4 or not at all).
