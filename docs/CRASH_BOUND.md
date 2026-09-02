@@ -157,6 +157,17 @@ to keep the Chrome profile of each cell for inspection.
 path times out and falls back to MediaRecorder VP9 — a different file with a different
 salvage story, and an answer to a question nobody asked.
 
+## Do not measure a live take's file by its size
+
+`getFile().size` on a blob a worker is writing through a `SyncAccessHandle` is
+STALE — it reads 28 bytes (just the `ftyp`) for the whole take, from inside the page
+and from `ls` alike, while the file on disk is megabytes. Cost an hour on 2026-09-02:
+polled from the page during a take it said no fragment ever closed, and the same
+build's post-kill files had three. **The only honest reading is after the process is
+gone**: kill it, then read the files — from OPFS in a fresh page, or straight out of
+`<profile>/Default/File System/` with no browser involved, which is what
+`crash-bound.mjs`'s manifest read does.
+
 ## The load matters, and 1440p60 is over this machine's line
 
 The first matrix ran a synthetic **2560×1440@60** source and three of its five takes
