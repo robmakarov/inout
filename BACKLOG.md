@@ -44,6 +44,19 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P2 — MEASURED, F16b, 2026-09-02] **the export panel's size probe is what stalls the first
+  seconds in the editor, and it is on the main thread.** Hunting F16b's gate 5 (does a background
+  render cost the person dragging?) found stalls of 35-201 ms landing 0.4-0.7 s into a drag, in
+  four runs of seven — and they are not the render. `[quality] size probe` encodes 300 real frames
+  to price the ladder's steps when the editor opens (10.8 s and 11.0 s on two measured takes), and
+  every stall was inside that window: excluding it, the same drag beside the same working render
+  reads p95 scheduling lateness 1.1-1.2 ms alone against 1.1-1.3 ms with the job, worst tick
+  9.6-17.6 ms, and no stall over 30 ms in any run. So the panel's own estimate is the thing a user
+  feels when they grab the playhead in the first ten seconds. Reproduce with
+  `node scripts/editor-drag-cost.mjs` (it now waits the probe out on purpose — remove the wait to
+  see it). Candidate fixes, none of them F16b's: probe in a worker, probe fewer frames, or probe
+  only the step the user is actually looking at.
+
 - [P1 — OBSERVATION with a caveat, H2's heavy cells, 2026-09-01] **under a starved main thread
   BOTH measured-audio channels end tens of seconds early, on a CLEAN stop, and only the report
   card notices.** A 300 s take at a synthetic 2560x1440@60 source (four channels, three encoders,

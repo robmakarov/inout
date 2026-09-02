@@ -40,6 +40,7 @@ import {
   type PressureReading,
   type PressureSignals,
 } from '../pressure'
+import { noteTakePressure } from '../backgroundWork'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -405,6 +406,14 @@ export async function startLiveCompositeV2(
     const now = performance.now()
     const reading = readPressure(signals)
     options.onPressure?.(reading, signals)
+    /**
+     * F16b — THE SAME READING, TO THE OTHER CONSUMER. E1 built one detector
+     * for many consumers; this is the second one. It is published BEFORE the
+     * capture flag below on purpose: `?pressure=0` turns off the ladder's
+     * right to ACT on a reading, and it must not also blind the background
+     * render, which is the thing that gets shed instead of the take.
+     */
+    noteTakePressure(reading)
     // BEFORE the flag, deliberately. The lead-time gate is answered by a
     // `?pressure=0` control run — the only take in which both instants exist,
     // because a take that steps never reaches the floor — so the mark has to be

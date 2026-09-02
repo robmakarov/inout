@@ -770,12 +770,40 @@ export interface ExportResult {
   scratchKey?: string
 }
 
+/**
+ * F16b — WHAT A BACKGROUND JOB MAY SPEND RIGHT NOW.
+ *
+ * `duty` is the fraction of wall clock the job may work for; `paused` is the
+ * fully-shed rung. A USER-VISIBLE export never has one of these: the person is
+ * waiting for it, so it runs flat out. Only a job nobody asked for yet paces
+ * itself. The levels and the policy behind them live in `core/backgroundWork.ts`.
+ */
+export type WorkPace = 'full' | 'half' | 'trickle' | 'paused'
+
+/**
+ * The throttle a background render reads. A function pair rather than a value
+ * because the render outlives any single reading: it asks at every chunk
+ * boundary, and a PAUSED job has to be woken by the change rather than by
+ * polling it awake.
+ */
+export interface PaceSource {
+  level(): WorkPace
+  /** Called on every change. Returns the unsubscribe. */
+  subscribe(cb: (level: WorkPace) => void): () => void
+}
+
 export interface ExportOptions {
   recording: Recording
   edit: EditState
   settings?: ExportSettings
   onProgress?: (p: ExportProgress) => void
   signal?: AbortSignal
+  /**
+   * F16b: present only for a BACKGROUND render (the pre-render started at stop
+   * or beside an edit). Absent — every user-visible export — means "spend the
+   * machine", which is what an export the user is waiting for must do.
+   */
+  pace?: PaceSource
 }
 
 // ---------------------------------------------------------------------------

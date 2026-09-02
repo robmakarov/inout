@@ -3,6 +3,7 @@ import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { loadQualityStep } from '@core/qualityStep'
+import { noteTakeActive } from '@core/backgroundWork'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import { AUDIO_BITS, videoBitsFor } from './captureBitrate'
@@ -2069,6 +2070,17 @@ class Session implements CaptureSession {
   private setState(s: CaptureState): void {
     if (this.stateInternal === s) return
     this.stateInternal = s
+    /**
+     * F16b — TELL BACKGROUND WORK A TAKE IS HAPPENING.
+     *
+     * The pressure readings say how hard the machine is breathing; this says
+     * whether anything is at stake. They are separate facts and the broker
+     * needs both: a reading that stops arriving during a take is blind (shed),
+     * where the same silence with no take running is simply idle (full speed).
+     * `paused` counts as active — the devices are still held and the take is
+     * still coming back.
+     */
+    noteTakeActive(s === 'recording' || s === 'paused' || s === 'stopping')
     this.emit({ type: 'state', state: s })
   }
 

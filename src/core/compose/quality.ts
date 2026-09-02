@@ -208,6 +208,37 @@ export function tiersForTake(recording: Recording, aspect?: number): QualityTier
 }
 
 /**
+ * THE STEP THIS TAKE EXPORTS AT WHEN NOBODY HAS PICKED ONE — UI1's rule, moved
+ * out of the editor by F16b so a second caller can ask the same question.
+ *
+ * It has to be one function and not two: the pre-render started AT STOP has to
+ * produce the file the export panel is going to ask for, and "the same tier"
+ * is not a thing that can be re-derived in a component and in a stop handler
+ * and stay the same thing. A key that disagrees by one rung is a render nobody
+ * joins — the whole feature, silently off.
+ *
+ * UI1: THE DEFAULT IS THE CEILING, i.e. exactly what the user chose before
+ * pressing record. A take from before the ceiling existed keeps the default it
+ * was made under — defaulting an old take to the TOP of its uncapped ladder
+ * would turn yesterday's packet copy into a full re-render (the frozen
+ * "instant default export" rule, broken silently, for every take on disk).
+ */
+export function defaultTierForTake(recording: Recording, aspect?: number): QualityTier {
+  const a = aspect ?? frameAspectFor(recording)
+  const rate = takeRate(recording)
+  const tiers = tiersForTake(recording, a)
+  // `tiersForTake` never returns an empty ladder — the lowest rung is reachable
+  // from every ceiling — so `top` is defined in every real case.
+  const top = tiers[tiers.length - 1] ?? resolveTier(QUALITY_TIERS[0]!, a, rate)
+  const ceiling = recording.qualityStep
+  if (ceiling) {
+    // The step the user chose before recording. 'max' is this file's 'source'.
+    return tiers.find((t) => t.id === (ceiling === 'max' ? 'source' : ceiling)) ?? top
+  }
+  return tiers.find((t) => t.id === 'source') ?? tiers.find((t) => isDefaultTier(t)) ?? top
+}
+
+/**
  * UI1 — IS THIS STEP AT OR BELOW WHAT THE TAKE WAS RECORDED UNDER?
  *
  * Robert: "make it not possible to choose higher quality that was choosen

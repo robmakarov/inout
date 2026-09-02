@@ -94,6 +94,7 @@ import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } 
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
+import { createPaceGate } from './paceGate'
 import { openVideoChannel, type VideoChannelReader } from './video'
 import { exportFileName } from './fileName'
 import {
@@ -188,6 +189,10 @@ function formatStats(s: RenderStats): string {
 
 const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
+/** How often a BACKGROUND render re-reads its brake inside a chunk (F16b).
+ *  Distinct from PACE_EVERY_FRAMES above, which is O5's macrotask yield. */
+const BRAKE_EVERY_FRAMES = 10
+
 interface ActiveWindow {
   /** [outStartMs, outEndMs) — where the channel is active on the output timeline. */
   outStartMs: number
@@ -239,6 +244,21 @@ function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): Acti
 export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
   const { recording, edit, settings = DEFAULT_EXPORT_SETTINGS, onProgress, signal } = opts
   const yieldEveryFrames = opts.yieldEveryFrames ?? 0
+  /**
+   * F16b — THE ELASTIC BRAKE, and it is present only for a background job.
+   * A user-visible export has no pace source and this is null, so the loop
+   * below is byte-for-byte the loop that shipped: one null check per chunk.
+   */
+  const pace = opts.pace
+    ? createPaceGate(opts.pace, {
+        signal,
+        onGiveUp: (pausedMs) =>
+          console.info(
+            `[compose] background render gave up after ${(pausedMs / 1000).toFixed(0)}s fully shed — ` +
+              'the export will render on demand (F16b)',
+          ),
+      })
+    : null
   const { width, height, fps } = settings
   const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
   const gopSec = settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC
@@ -617,6 +637,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           throwIfAborted()
           await writeAudioChunk(c)
           report('rendering', 0.05 + 0.45 * ((c + 1) / audioChunks))
+          if (pace) await pace.wait()
           if (yieldEveryFrames) await yieldToUi()
         }
         audioSource.close()
@@ -627,6 +648,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         throwIfAborted()
         await renderFrame(f, drawWaveform)
         report('rendering', base + (0.95 - base) * ((f + 1) / totalFrames))
+        if (pace && f % BRAKE_EVERY_FRAMES === 0) await pace.wait()
         if (yieldEveryFrames && f % yieldEveryFrames === 0) await yieldToUi()
       }
     } else {
@@ -642,8 +664,19 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           await renderFrame(frameIndex, null)
           frameIndex++
           report('rendering', 0.05 + 0.9 * (frameIndex / totalFrames))
+          // A CHUNK IS A WHOLE SECOND, and a brake that can only bite at the
+          // end of one is up to a second late. Measured 2026-09-02 in a real
+          // editor: the stall a drag beside a background render pays lands
+          // 486-643 ms into the drag — inside the chunk the job was already
+          // in when the hand arrived. Reading the pace every few frames costs
+          // a paced job one clock read per frame and costs a user-visible
+          // export nothing at all, because it has no pace to read.
+          if (pace && frameIndex % BRAKE_EVERY_FRAMES === 0) await pace.wait()
           if (yieldEveryFrames && frameIndex % yieldEveryFrames === 0) await yieldToUi()
         }
+        // …and once per chunk regardless, so a rest can also land where the
+        // decoders and the encoder are in their settled state.
+        if (pace) await pace.wait()
       }
       // Float-rounding safety: never drop trailing frames.
       for (; frameIndex < totalFrames; frameIndex++) {
@@ -692,6 +725,13 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     await scratch?.discard().catch(() => undefined)
     throw err
   } finally {
+    if (pace) {
+      const rested = pace.restedMs()
+      if (rested > 0) {
+        console.info(`[compose] background render rested ${(rested / 1000).toFixed(1)}s of its own wall clock (F16b)`)
+      }
+      pace.dispose()
+    }
     for (const reader of videoReaders) reader.dispose()
     for (const mixer of audioMixers) mixer.dispose()
   }

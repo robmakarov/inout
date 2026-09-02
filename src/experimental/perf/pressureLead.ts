@@ -36,7 +36,7 @@ const CORES_SPARED = 2
 /** How many contending 1440p60 encoders the `encode` load opens. */
 const ENCODE_LOAD_STREAMS = 3
 
-interface LoadHandle {
+export interface LoadHandle {
   stop: () => void
 }
 
@@ -47,7 +47,7 @@ interface LoadHandle {
  * ticks and leaves the encoder untouched, and the whole point of reading four
  * signals is to find out which one moves first.
  */
-function startLoad(kind: 'none' | 'cpu' | 'encode' | 'all'): LoadHandle {
+export function startLoad(kind: 'none' | 'cpu' | 'encode' | 'all'): LoadHandle {
   const stops: (() => void)[] = []
 
   if (kind === 'cpu' || kind === 'all') {

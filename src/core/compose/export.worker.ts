@@ -17,7 +17,14 @@
  * Abort crosses the boundary as a message, not a signal — AbortSignal is not
  * cloneable — and is re-made into a local AbortController here.
  */
-import type { EditState, ExportProgress, ExportResult, ExportSettings, Recording } from '@core/types'
+import type {
+  EditState,
+  ExportProgress,
+  ExportResult,
+  ExportSettings,
+  Recording,
+  WorkPace,
+} from '@core/types'
 import { setInlinePositionedWriterEnabled } from '@core/store'
 import { setSourceFrame } from '@core/frame'
 import { getLastRenderStats, renderExport, type RenderStats } from './render'
@@ -50,8 +57,20 @@ export type ExportWorkerIn =
         loudness?: LoudnessMode
         sourceFrame?: boolean
       }
+      /**
+       * F16b: this render is a BACKGROUND job and obeys the elastic brake.
+       * The pace itself arrives as `pace` messages — the broker that decides
+       * it reads capture's pressure instrument, which lives on the main
+       * thread, and a `PaceSource` is a pair of functions and not cloneable.
+       */
+      paced?: boolean
+      /** The pace at the moment the job started, so a job that begins while a
+       *  take is already running does not spend a whole message round trip at
+       *  full speed. */
+      pace?: WorkPace
     }
   | { type: 'abort' }
+  | { type: 'pace'; level: WorkPace }
 
 export type ExportWorkerOut =
   | { type: 'progress'; progress: ExportProgress }
@@ -61,10 +80,32 @@ export type ExportWorkerOut =
 const abort = new AbortController()
 let started = false
 
+// ---- F16b: the pace, as this thread sees it -------------------------------
+// A mirror of the main thread's broker, updated by message. The render builds
+// its gate over this, so the mechanism in paceGate.ts is the same one the
+// in-thread fallback render uses — one implementation, two sources.
+let paceLevel: WorkPace = 'full'
+const paceListeners = new Set<(level: WorkPace) => void>()
+const paceSource = {
+  level: (): WorkPace => paceLevel,
+  subscribe: (cb: (level: WorkPace) => void): (() => void) => {
+    paceListeners.add(cb)
+    return () => paceListeners.delete(cb)
+  },
+}
+
 self.onmessage = (ev: MessageEvent<ExportWorkerIn>): void => {
   const msg = ev.data
   if (msg.type === 'abort') {
     abort.abort()
+    // A paused render is asleep inside its gate; waking it is what lets the
+    // abort be noticed at once rather than at the end of a nap.
+    for (const cb of paceListeners) cb(paceLevel)
+    return
+  }
+  if (msg.type === 'pace') {
+    paceLevel = msg.level
+    for (const cb of paceListeners) cb(paceLevel)
     return
   }
   if (msg.type !== 'start' || started) return
@@ -83,12 +124,14 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (msg.flags.loudness) setLoudnessMode(msg.flags.loudness)
     if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
   }
+  if (msg.pace) paceLevel = msg.pace
   try {
     const result = await renderExport({
       recording: msg.recording,
       edit: msg.edit,
       settings: msg.settings,
       signal: abort.signal,
+      pace: msg.paced ? paceSource : undefined,
       // Nothing shares this thread: never sleep.
       yieldEveryFrames: 0,
       onProgress: (progress) => post({ type: 'progress', progress }),

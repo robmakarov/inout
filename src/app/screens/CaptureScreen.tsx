@@ -15,6 +15,7 @@ import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
 import { detectPlatform, evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
+import { takeRate } from '@core/rate'
 import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { clampPose, defaultCameraPose, poseToRect, type CameraGeometry } from '@core/timeline'
 import type { CameraPose } from '@core/types'
@@ -292,6 +293,56 @@ export function CaptureScreen() {
           editState: edit,
           mode: 'editor',
         })
+        /**
+         * F16b — START THE EXPORT THE MOMENT THE TAKE ENDS.
+         *
+         * A max take with a camera has no single file to copy (two video
+         * channels, so nothing is packet-copyable at the max step) and Robert
+         * calls its on-demand export very slow. The machine is idle at stop by
+         * definition, so the render that export will need starts HERE, before
+         * the panel is even open — short takes are finished before the user
+         * reaches it, long ones are that much further along.
+         *
+         * IT COSTS NOTHING IT COULD NOT ALREADY LOSE. `exportWouldRender` is
+         * the same conservative predicate F16 uses: a take whose export is a
+         * packet copy or a smart cut never starts a job (a screen-only max
+         * take, every sub-max take), and every miss, failure or supersession
+         * falls through to rendering on demand.
+         *
+         * THE TIER IS THE ONE THE PANEL WILL ASK FOR — `defaultTierForTake`,
+         * the rule that used to live in EditorScreen. If these two disagreed by
+         * one rung the export would not join this job, and the feature would be
+         * silently off while looking exactly like it was on.
+         *
+         * Imported here, not at the top: the compose chunk is not part of first
+         * paint (O7), and this is the same hand-off S1's report card rides.
+         */
+        void (async () => {
+          const [{ prerenderEnabled }, compose, quality, frame] = await Promise.all([
+            import('@core/compose/prerenderFlag'),
+            import('@core/compose'),
+            import('@core/compose/quality'),
+            import('@core/frame'),
+          ])
+          if (!prerenderEnabled()) return
+          const aspect = frame.frameAspectFor(rec)
+          const chosen = quality.defaultTierForTake(rec, aspect)
+          const settings = quality.settingsForTier(
+            quality.resolveTier(chosen, aspect, takeRate(rec)),
+          )
+          if (
+            !compose.exportWouldRender({
+              recording: rec,
+              edit,
+              settings,
+              allowPacketCopy: quality.isDefaultTier(chosen),
+            })
+          ) {
+            return
+          }
+          compose.startPrerender({ recording: rec, edit, settings }, 'stop')
+        })().catch(() => undefined)
+
         /**
          * S1 — GRADE THE TAKE THAT JUST HAPPENED.
          *
