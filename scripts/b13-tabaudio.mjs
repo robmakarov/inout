@@ -70,6 +70,7 @@ const opts = {
   headed: true,
   loud: false,
   fake: false,
+  rung: 'raw',
 }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6)
@@ -80,6 +81,7 @@ for (const a of process.argv.slice(2)) {
   else if (a === '--headless') opts.headed = false
   else if (a === '--loud') opts.loud = true
   else if (a === '--fake') opts.fake = true
+  else if (a.startsWith('--rung=')) opts.rung = a.slice(7)
 }
 
 let bin = process.env.CHROME_BIN
@@ -202,7 +204,7 @@ const START_SIGNAL = `(async () => {
 })()`
 
 const profile = mkdtempSync(join(tmpdir(), 'inout-b13-'))
-const report = { url: opts.url, takeMs: opts.takeMs, variants: {} }
+const report = { url: opts.url, takeMs: opts.takeMs, rung: opts.rung, variants: {} }
 let browser
 let exitCode = 1
 
@@ -366,7 +368,15 @@ async function runVariant(name, urlSuffix) {
     `--user-data-dir=${profile}-${name}`,
     '--no-first-run',
     '--no-default-browser-check',
-    '--use-fake-ui-for-media-stream',
+    /**
+     * NO `--use-fake-ui-for-media-stream` ON THE REAL PATH, and this is the
+     * switch that cost this task most of a session. It auto-answers the SURFACE
+     * PICKER with nothing, so every getDisplayMedia request returns
+     * `NotReadableError: Could not start video source` — headed, headless,
+     * under every auto-select switch Chrome has. Permissions are granted over
+     * CDP instead, and the surface is chosen by --auto-accept-this-tab-capture
+     * answering a preferCurrentTab request (see the shim below).
+     */
     /**
      * `--fake` SUBSTITUTES THE DEVICES, and for THIS task that is a strictly
      * smaller run. Chrome's fake display-audio track is a GENERATOR, not the
@@ -378,17 +388,28 @@ async function runVariant(name, urlSuffix) {
      * it cannot answer a single one of Robert's three complaints. The spectrum
      * section detects this itself and refuses to print a verdict.
      */
-    ...(opts.fake ? ['--use-fake-device-for-media-stream'] : []),
+    ...(opts.fake ? ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] : []),
     '--auto-accept-this-tab-capture',
     '--auto-select-tab-capture-source-by-title=INOUT',
     '--autoplay-policy=no-user-gesture-required',
     '--disable-background-timer-throttling',
     '--window-size=1280,900',
   ]
-  // The tones never need to reach the room: tab capture taps the tab's render
-  // stream, not the output device. Asserted, not assumed — a silent capture
-  // fails the run below.
-  if (!opts.loud) args.push('--mute-audio')
+  /**
+   * KEEPING THE TONES OUT OF THE ROOM WITHOUT SILENCING THE MEASUREMENT.
+   *
+   * `--mute-audio` was the obvious answer and it is the WRONG one: measured
+   * 2026-09-02, a take recorded under it is digital silence end to end
+   * (-240 dBFS, every tone at the floor). Tab capture taps the tab's render
+   * output, so muting the render mutes the capture.
+   *
+   * `suppressLocalAudioPlayback: true` on the audio constraint is the knob
+   * built for exactly this: the captured stream keeps the audio, the speakers
+   * do not get it. It is added by the shim, and it touches only where the sound
+   * GOES — never `echoCancellation` / `noiseSuppression` / `autoGainControl`,
+   * which are the subject of the measurement and are passed through untouched.
+   * `--loud` turns it off if a run ever needs to be heard live.
+   */
   if (!opts.headed) args.unshift('--headless=new')
   args.push(url)
   browser = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
@@ -414,7 +435,71 @@ async function runVariant(name, urlSuffix) {
       }
     }
 
+    /**
+     * THE SHIM, AND WHAT IT IS CAREFUL NOT TO TOUCH.
+     *
+     * The app's rung-0 request carries `selfBrowserSurface: 'exclude'` — it
+     * deliberately refuses to capture its own tab — so --auto-accept-this-tab-capture
+     * can never answer it and the run would sit on an unanswered picker forever.
+     * This forwards the app's OWN options with only the surface CHOICE changed:
+     * `preferCurrentTab` on, `selfBrowserSurface` removed.
+     *
+     * The audio constraints are passed through UNTOUCHED. That is the whole
+     * point — B13 is asking whether the app's `echoCancellation:false,
+     * noiseSuppression:false, autoGainControl:false` survive to the delivered
+     * track, and a shim that rewrote them would be answering its own question.
+     * The video source becomes a tab rather than a monitor, which is stated in
+     * the report: for AUDIO that is the same mechanism (a tab share's audio IS
+     * tab audio), for the VIDEO anchor it is a different capturer.
+     */
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `(() => {
+        const md = navigator.mediaDevices
+        const original = md.getDisplayMedia.bind(md)
+        md.getDisplayMedia = (opts) => {
+          const next = { ...(opts || {}) }
+          delete next.selfBrowserSurface
+          next.preferCurrentTab = true
+          /**
+           * --rung=floor REPRODUCES THE REQUEST A WEDGED MACHINE MAKES.
+           * acquire.ts's rung 3 dropped the three raw-audio flags and asked for
+           * bare audio:true — Chromium's voice-processing default — moving
+           * the flags onto the delivered track instead (repairDisplayAudio).
+           * Robert's 124.8-minute take was recorded 177 s after a level-3
+           * wedge, i.e. on that rung, and the repair has NEVER been measured.
+           * This asks exactly what that rung asks and lets the app's own repair
+           * run, so what is recorded is what a wedged machine records.
+           */
+          if (${JSON.stringify(opts.rung)} === 'floor' && next.audio) next.audio = true
+          if (${!opts.loud} && next.audio && typeof next.audio === 'object') {
+            next.audio = { ...next.audio, suppressLocalAudioPlayback: true }
+          }
+          // Bare audio:true cannot carry suppressLocalAudioPlayback, so the
+          // floor rung is audible unless the whole page is muted at the source.
+          if (${!opts.loud} && next.audio === true) {
+            next.audio = { suppressLocalAudioPlayback: true }
+          }
+          window.__b13shim = (window.__b13shim || 0) + 1
+          window.__b13lastRequest = JSON.stringify(opts || {})
+          return original(next)
+        }
+      })()`,
+    })
+    await send('Page.reload', { ignoreCache: true })
     await sleep(3000)
+    /**
+     * KEEP THE TAB PAINTING. A web-contents source is DAMAGE-DRIVEN: a still
+     * page delivers one frame and then nothing, which is how the first real run
+     * of the X14a probe read a single frame in 120 s.
+     */
+    await evaluate(`(() => {
+      const bar = document.createElement('div')
+      bar.style.cssText = 'position:fixed;z-index:2147483647;left:0;bottom:0;width:90px;height:90px;background:#0a0;pointer-events:none'
+      document.body.appendChild(bar)
+      const tick = () => { bar.style.transform = 'translateX(' + ((performance.now() / 6) % 500) + 'px)'; requestAnimationFrame(tick) }
+      requestAnimationFrame(tick)
+      return true
+    })()`)
     v.gates.boots = !!(await evaluate(`!!document.querySelector('button[aria-label="Start recording"]')`))
     if (!v.gates.boots) throw new Error('the app did not reach the capture screen')
 
@@ -516,9 +601,18 @@ async function runVariant(name, urlSuffix) {
     if (capSpec && v.reference) {
       const markerL = capSpec[3000]?.l
       const neighbourFloor = Math.max(capSpec[4000]?.l ?? -120, capSpec[2000]?.l ?? -120)
-      v.gates.capturedOurSignal =
-        typeof markerL === 'number' && markerL > -80 && markerL - (capSpec[16000]?.l ?? -120) > -20 &&
-        Math.abs(markerL - (v.reference[3000]?.l ?? -120)) < 25
+      /**
+       * PRESENT is one question, INTACT is another, and conflating them cost a
+       * reading. The first cut failed the check when the marker sat more than
+       * 25 dB below the reference — which is exactly what a voice-processed
+       * floor-rung take looks like, so the rig refused to print its own best
+       * finding. The check is now purely "is our signal in there at all":
+       * a fake generator reads -77 dB here, a muted capture -240, and a real
+       * take -20 to -45 depending on what the processing did to it.
+       */
+      v.gates.capturedOurSignal = typeof markerL === 'number' && markerL > -70
+      v.attenuationDb =
+        typeof markerL === 'number' ? Math.round((markerL - (v.reference[3000]?.l ?? 0)) * 10) / 10 : null
       v.signalCheck = { markerL, neighbourFloor, referenceMarkerL: v.reference[3000]?.l ?? null }
     }
 
@@ -580,12 +674,13 @@ async function runVariant(name, urlSuffix) {
       )
       if (typeof b64 === 'string' && b64.length > 0) {
         const ext = v.exported.name.endsWith('.webm') ? 'webm' : 'mp4'
-        const path = join(opts.out, `b13-${name}.${ext}`)
+        const path = join(opts.out, `b13-rung-${opts.rung}-${name}.${ext}`)
         writeFileSync(path, Buffer.from(b64, 'base64'))
         v.file = path
       }
     }
 
+    v.shim = { calls: await evaluate(`window.__b13shim ?? 0`), appRequest: await evaluate(`window.__b13lastRequest ?? null`) }
     v.trackLines = captureLog.filter((l) => /track delivered|tab audio delivered|raw tab audio|LOOPBACK|settings MOVED/.test(l))
     v.anchorLines = captureLog.filter((l) => /audio anchor/.test(l))
   } finally {
@@ -630,7 +725,7 @@ try {
     ? [['looplat0', 'looplat=0']]
     : [['shipped', '']]
   for (const [name, suffix] of variants) {
-    console.log(`\n=== B13 variant "${name}" ${suffix ? '(' + suffix + ')' : '(shipped anchor)'} · ${opts.takeMs} ms take ===`)
+    console.log(`\n=== B13 variant "${name}" ${suffix ? '(' + suffix + ')' : '(shipped anchor)'} · rung=${opts.rung} · ${opts.takeMs} ms take ===`)
     report.variants[name] = await runVariant(name, suffix)
     const v = report.variants[name]
     console.log(`  chips: ${JSON.stringify(v.chips)}`)
@@ -646,12 +741,18 @@ try {
   const first = Object.values(report.variants)[0]
   if (first?.gates?.capturedOurSignal === false) {
     console.log(
-      `\n  !! THE TAB-AUDIO CHANNEL DID NOT RECORD THIS PAGE'S TONES ` +
-        `(L-only 3 kHz marker read ${first.signalCheck?.markerL} dB against a reference of ` +
-        `${first.signalCheck?.referenceMarkerL} dB). Every spectrum below is of SOMETHING ELSE and ` +
-        `answers none of B13's three complaints. This is what --fake looks like, and it is also what a ` +
-        `picker that handed over the wrong surface looks like. Run without --fake on a Chrome that has ` +
-        `macOS Screen Recording granted.`,
+      `\n  !! THE TAB-AUDIO CHANNEL RECORDED NO SIGNAL AT ALL ` +
+        `(L-only 3 kHz marker at ${first.signalCheck?.markerL} dBFS, reference ` +
+        `${first.signalCheck?.referenceMarkerL} dBFS). Every spectrum below is of SOMETHING ELSE. ` +
+        `-240 means the render was muted (--mute-audio kills the loopback, measured); around -77 means ` +
+        `--fake substituted a generator for the tab; anything else means the picker handed over a ` +
+        `different surface.`,
+    )
+  } else if (first?.attenuationDb !== null && first?.attenuationDb < -6) {
+    console.log(
+      `\n  NOTE: the whole signal came back ${first.attenuationDb} dB down. The tones ARE ours — the ` +
+        `level itself is a finding (automatic gain control pulling the take down), and the per-octave ` +
+        `SHAPE below is what says which frequencies were treated differently.`,
     )
   }
   dbTable(
