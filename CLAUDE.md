@@ -45,6 +45,14 @@ session in the same worktree keeps its own. **Name your own commit** before you 
 `printf 'subject\n\nbody\n' | .claude/hooks/commit-msg.sh`. Skip it and you get a
 `wip: unattributed sweep …` placeholder, which is a bug to fix, not a default to live with.
 Committing by hand also works — the hook then only sweeps what you left behind.
+**A BRANCH YOU CREATE IS NOT A BRANCH YOU KEEP.** Sessions in this checkout share one HEAD and one
+index, so another session's `git checkout` moves you off the branch you just made and your next
+commit lands wherever HEAD now points — 2026-09-02, task H2b: `git checkout -b task/H2b` succeeded,
+another session checked out `task/B9` and then `main`, and the whole task committed to `main`. The
+same day another session's Stop hook swept two files edited through Bash into a `wip: unattributed
+sweep` commit. So: `git branch --show-current` immediately before every commit, edit files you care
+about through the Edit tool (it refuses when the file moved under you) rather than through `sed` or
+a heredoc, and take your own worktree for anything that must not ship early.
 
 Deploy guard: every push is gated. `scripts/build-gate.sh` builds the exact pushed commit and runs
 its tests (~7 s; typecheck is inside `npm run build`; throwaway worktree, so other sessions' dirty

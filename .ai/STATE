@@ -98,6 +98,23 @@ phase: MVP validation (2026-07-16)
   first tests (`src/core/capture/recovery.test.ts`); until now the only coverage was the
   experimental copy, which cannot fail when this one breaks.
 
+- THE FIRST VIDEOENCODER OF A CHROME PROCESS COSTS 3.2 SECONDS, AND THAT IS THE WHOLE OF THE
+  "first six seconds have no picture" DEFECT (H6, 2026-09-02, fixed as far as it can be). Measured
+  on prod: 3122 ms at 1920x1080, 3281 ms at 320x240 — a PROCESS cost, not a size one — while the
+  SECOND encoder in the same process costs 47-77 ms and the warm's own chunks cost 585-708 ms cold.
+  So encoderWarm.ts cannot be made cheaper or started earlier than the mount it already starts at.
+  What it could do was stop COMPETING: with nobody recording it finished 4.2 s after page start,
+  and with record pressed at once it finished at 5.0-8.6 s — the take's three encoders against the
+  warm's two. It now closes its init encoder the instant that flush resolves and stands its
+  40-frame measurement down when a take commits (`encoderWarmYield.ts`, set synchronously in
+  session.arm before its first await); the measurement is OWED, not lost — doStop runs it when the
+  take ends. Picture at a `--settleBeforeRecordMs=0` kill went from nothing at 2/3/4/5 s to 3.00 s
+  at a 4 s kill and 4.53 s at 5 s. AND ON ANY LOAD AFTER THE FIRST THERE IS NO WINDOW AT ALL: the
+  3.2 s is paid once per Chrome LAUNCH, so the second and third loads in the same browser finish
+  the whole warm in 577-618 ms, and an already-running Chrome with record pressed at once and
+  killed at 2 s keeps 1.0 s of picture — the same as a settled app. The residual is one case, the
+  first page load after a browser launch, and it is Chrome's GPU process starting.
+
 - A STOP THAT MISSES ITS BUDGET NO LONGER DELETES WHAT IT ALREADY WROTE (H5, 2026-09-02, shipped on,
   no flag). `ch.bytes` comes from the reply a channel sends when it finishes stopping, and doStop is
   bounded on that reply at 5 s — so a channel that missed the budget read as "recorded nothing", its

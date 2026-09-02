@@ -485,16 +485,17 @@ it is built combine-ready:
           BACKLOG P2: press record within a second of the app loading and the first ~6 seconds of
           a take have NO PICTURE ON DISK AT ALL — a Chrome process's first VideoEncoder is still
           initialising, so there is nothing encoded to write and no fragment policy can help.
- 14. H6   the first six seconds have no picture [light-medium · PROMOTED from BACKLOG 2026-09-02
-          ("i dont like backlogs") · evidence: H2b's own cells] press record within ~1 s of app
-          load and a crash in the first ~6 s loses ALL picture even with H2b's floors on — the
-          process's first VideoEncoder pays a multi-second init and the warm probe is still
-          running, so no chunk exists to write. THE TENSION IS THE FROZEN RULE: "hold the press
-          until warm" breaks instant record start, so the fix must warm EARLIER (raw encoders at
-          mount — prearm.ts territory) or write what exists sooner; measure, don't pick.
-          GATES: `crash-bound.mjs --killAt=2000..5000 --settleBeforeRecordMs=0` recovers picture
-          at every instant · record-press latency unchanged (instant-start pinned by test) ·
-          no idle device access (warm uses no camera/mic/screen) · oracle green.
+ 14. H6   the first six seconds have no picture   DONE 2026-09-02. The cause is Chrome's, not
+          ours: a PROCESS's first VideoEncoder costs 3.2 s (3122 ms at 1080p, 3281 ms at 320x240 —
+          a process cost, not a size one; the second encoder in the same process costs 47-77 ms).
+          So it cannot be warmed earlier or smaller. What it could do was stop COMPETING with the
+          take: the warm's init encoder now closes the instant its flush resolves, and a take that
+          commits stands its 40-frame measurement down — owed, not lost, doStop runs it when the
+          take ends. Picture at a no-settle kill went from nothing at 2/3/4/5 s to 3.00 s at 4 s
+          and 4.53 s at 5 s. AND THE CASE THAT MATTERS IS ALREADY ZERO: the 3.2 s is paid once per
+          Chrome LAUNCH, so on any load after the first the whole warm finishes in 577-618 ms and
+          a take pressed at once, killed at 2 s, keeps 1.0 s of picture. Residual: the first page
+          load after a browser launch. Handoff under the task.
  15. B10  the size probe stalls the editor's first seconds [light · PROMOTED 2026-09-02 · evidence:
           F16b's gate 5 hunt] `[quality] size probe` encodes 300 frames on the MAIN thread for
           ~11 s at editor open; every measured drag stall (35-201 ms) was inside that window.
@@ -1550,6 +1551,58 @@ encoder pays for its backlog"; its segment 1 held 60 KB against 361 KB on the cl
 ms on re-run, inside the 250 ms band · typecheck clean, 995 tests at the gate run · oracle 1/1 PASS sync
 39.1/53.5 ms, instant 74.7 ms, smartcut 76.2 ms · long cell PASS at 120 s, instant 53.6 ms,
 smartcut 55.0 ms, below the recorded baseline.
+## H6 the first six seconds have no picture [light-medium · DONE 2026-09-02]
+Press record within ~1 s of app load and a crash in the first ~6 s loses ALL picture even with
+H2b's floors on — the process's first VideoEncoder pays a multi-second init and the warm probe is
+still running, so no chunk exists to write.
+GATES: `crash-bound.mjs --killAt=2000..5000 --settleBeforeRecordMs=0` recovers picture at every
+instant · record-press latency unchanged · no idle device access · oracle green.
+
+HANDOFF 2026-09-02. DONE as far as the machine allows, and the gate is met at 4 s and 5 s but NOT
+at 2 s and 3 s — the reason is measured, it is not ours, and the case it leaves is one page load
+per browser launch. Shipped on, no flag.
+THE TASK NAMED TWO CANDIDATE FIXES AND NEITHER IS THE ONE. Measured on prod before touching
+anything:
+  first encoder, 1920x1080   isConfigSupported 67 ms · init+5 frames+flush 3122 ms
+  first encoder, 640x360     71 ms · 3276 ms
+  first encoder, 320x240     147 ms · 3281 ms
+  SECOND encoder, same process   0 ms · 47-77 ms
+  the warm's own chunks      585->708 ms cold cache · 288->372 ms warm
+So it is a PROCESS cost and not a size one — "warm at a smaller size" buys nothing — and it is not
+the chunk fetch either. The warm already starts at CaptureScreen mount, which is as early as there
+is anything to start. Neither "warm earlier" nor "make it smaller" was available.
+WHAT WAS AVAILABLE WAS TO STOP COMPETING, and the fight was measurable: with nobody recording the
+warm finishes 4.2 s after page start; press record the moment the app is usable and it finishes at
+5.0 / 8.6 s instead — the take's three encoders against the warm's two, over one piece of hardware.
+Two changes, both additive: the warm's init encoder is CLOSED the instant its flush resolves (it
+used to stay open through the whole measurement, so five 1080p sessions were live at once), and a
+take that commits stands the 40-frame measurement down. The measurement is OWED, not lost —
+`doStop` runs it when the take ends, where it was always meant to run, with nothing recording; a
+cancelled take gives the yield back too. `encoderWarmYield.ts` is its own module so `session.arm`
+can set the flag SYNCHRONOUSLY before its first await without pulling the encoderWarm chunk into
+first paint (O7).
+WHAT IT IS WORTH, the same rig, `--settleBeforeRecordMs=0`, four kill points:
+  killed at    2 s        3 s        4 s          5 s
+  before       no picture no picture no picture   no picture   (7 s was the first that had any)
+  after        no picture no picture 3.00 s       4.53 s
+AND ON ANY PAGE LOAD AFTER THE FIRST THERE IS NO WINDOW AT ALL, which is the answer that matters:
+the 3.2 s is paid once per Chrome LAUNCH, not per load. Second and third loads in the same browser
+finish the whole warm — chunks, init and measurement — in 577 and 618 ms, before a hand can reach
+the button. Verified end to end rather than inferred: an already-running Chrome, a fresh load,
+record pressed at once, SIGKILL at 2 s, files read out of the profile and demuxed in node → two of
+three video files hold a closed fragment with 1.0 s of picture, the same as a settled app.
+THE RESIDUAL, NAMED: the first page INOUT is asked for after a browser launch. A crash in the
+first ~4 s of a take started there still costs the picture, because Chrome's GPU process is coming
+up and there is nothing encoded in existence. Nothing in this repo can shorten that; what could be
+tried, if it ever matters, is holding the record press until the warm resolves — which the task
+itself ruled out as breaking instant record start, and which would trade a crash-only loss for a
+delay every user feels on every first take.
+GATE EVIDENCE: picture at 4 s and 5 s where there was none, floor moved from ~7 s to ~4 s on the
+worst case and to zero on every other load · record press does one boolean assignment before its
+first await, nothing else on that path changed, 1009 tests green (3 new) and typecheck clean · the
+warm still touches no device (OffscreenCanvas) · oracle 1/1 PASS sync 64.6/78.4 ms, instant
+59.2 ms, smartcut 61.8 ms. No oracle:long: this changes no packet-copy path, only when an
+instrumentation encoder runs.
 ## M1 THE COMBINE — max + emergency elastic [READY TO BUILD 2026-09-02, DECISIONS robert (2):
    the "but not until i say" gate was the DEFAULT, not the work — build now, ship flag-gated
    OFF, elastic never engages at max in the app until Robert flips it · Robert 2026-09-01:

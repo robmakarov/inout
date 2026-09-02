@@ -7,7 +7,7 @@ technical defects by severity. Done items get deleted, not archived.
 ## Inbox
 
 - (dump here)
-- **[P2 · technical] `?slow=` is dead code, and both CLAUDE.md and docs/FLAGS.md sell it as working.**
+- **[P2 → ROADMAP G6(e), promoted 2026-09-02] `?slow=` is dead code, and both CLAUDE.md and docs/FLAGS.md sell it as working.**
   Found 2026-09-02 while B9 needed to force a cold channel: `parseSlowChannels` (src/core/capture/synthetic.ts)
   has NO caller outside its own test — `?synthetic=1&slow=screen:600,camera:600` changed nothing,
   measured (the channels' own anchors read 111 ms either way). docs/FLAGS.md line 55 and CLAUDE.md's
@@ -51,21 +51,7 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P2 — MEASURED, H2b, 2026-09-02] **press record within a second of the app loading and the
-  first ~6 seconds of a take have no picture on disk at all.** Not the fragment cadence and not
-  salvage: a Chrome process's first `VideoEncoder` pays a multi-second init
-  (`rawVideo.worker.ts`, note 6) and the app's own encoder-warm probe is still running at that
-  moment, so no encoded chunk exists to write. Measured on prod, identical build, three video
-  channels per cell, files read out of the profile after a SIGKILL and demuxed in node: pressing
-  ~200 ms after first paint left NOTHING on disk for any video channel at 2/3/4/5 s and then all
-  three files appeared at once at 7 s carrying the whole take; pressing ten seconds in gave 1.0 s
-  of decodable picture at a 2 s kill and 4.0 s at 5 s. A user who presses record immediately is in
-  the first state, and a crash there costs them the picture even with H2b's floors on. Reproduce
-  with `node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000 --settleBeforeRecordMs=0`.
-  Candidate fixes, none of them H2b's: hold the record press until the warm probe has finished
-  (it already runs at mount and already knows when it is done), or warm the raw channels' encoders
-  rather than only the measuring one.
-- [P2 — MEASURED, F16b, 2026-09-02] **the export panel's size probe is what stalls the first
+- [P2 → ROADMAP B10, promoted 2026-09-02] **the export panel's size probe is what stalls the first
   seconds in the editor, and it is on the main thread.** Hunting F16b's gate 5 (does a background
   render cost the person dragging?) found stalls of 35-201 ms landing 0.4-0.7 s into a drag, in
   four runs of seven — and they are not the render. `[quality] size probe` encodes 300 real frames
@@ -97,7 +83,7 @@ technical defects by severity. Done items get deleted, not archived.
   on this machine. S1's card called it correctly and unprompted ("mic ended 38.7s before the take
   did"), so the instrument for whoever picks this up already exists. Belongs to A1/E1/H4, not H2.
 
-- [P2 — OBSERVATION, from the 2026-09-01 autopsy, not yet a verdict] **the 720p camera PiP wrote
+- [P2 → ROADMAP G6(f), promoted 2026-09-02] **the 720p camera PiP wrote
   MORE bytes than the 3024x1964 screen.** Take rec_78ogcw052vdn, 3,026 s: camera 900 MB
   (2.49 Mbps against a 2.5 Mbps request — on target) and screen 814 MB (2.25 Mbps against an
   8 Mbps request — 28 % of it). Either the screen encoder could not be fed at max quality, or
@@ -144,7 +130,7 @@ technical defects by severity. Done items get deleted, not archived.
   loaded regime, and it steps the rate. Whether the ladder is fast enough for a game that starts
   MID-TAKE is unmeasured — `npm run exp -- syncload` is the cell that would say.
 
-- [P1] 2026-08-29 (G3 session): **the v1 oracle's export-throughput gate is a coin flip** — `node
+- [P1 → ROADMAP G6(a), promoted 2026-09-02] 2026-08-29 (G3 session): **the v1 oracle's export-throughput gate is a coin flip** — `node
   scripts/oracle.mjs --engine=v1` fails on `export throughput X < 1x realtime` with the threshold
   sitting inside the run-to-run noise. Interleaved A/B, same machine, alternating trees:
   base 1.34x PASS / 0.87x FAIL / 1.35x PASS against a working tree's 1.15 / 1.28 / 1.28. It is not a
@@ -164,7 +150,7 @@ technical defects by severity. Done items get deleted, not archived.
   rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
   F15 is unblocked; the ruling and shape live in the task and DECISIONS.
 
-- [P1] 2026-09-01 (G1+LC1 session; ABSORBS the 08-29 "render lane flips run to run" entry and
+- [P1 → ROADMAP G6(b), promoted 2026-09-02] 2026-09-01 (G1+LC1 session; ABSORBS the 08-29 "render lane flips run to run" entry and
   RETRACTS the "instant lane is bimodal" one): **the fidelity oracle's RENDER lane flips on machine
   load, and the instant lane does not flip at all.** Prior readings on the same lane, now explained:
   toneErr 5.33 dB once, then 0.04 and 0.01 on the same tree (G2 session). Five consecutive runs
@@ -194,7 +180,7 @@ technical defects by severity. Done items get deleted, not archived.
   that rule has found a real defect rather than a bookkeeping one.
   LIKELY ONE LINE: clamp at the EPS_SEC the same file already uses everywhere else.
 
-- [P2] 2026-09-01 (G1+LC1 session): **the 120 s cell dies on CDP about a third of the time, and it is
+- [P2 → ROADMAP G6(d), promoted 2026-09-02] 2026-09-01 (G1+LC1 session): **the 120 s cell dies on CDP about a third of the time, and it is
   the most expensive run in the repo.** Eight attempts at `--recordMs=120000`: three died — "experiment
   threw in page", "Inspected target navigated or closed" x2 — and all three were CONSECUTIVE, straight
   after a 10-run 6 s matrix, after which five ran clean. So it is a state the rig gets into, not a
@@ -757,7 +743,7 @@ technical defects by severity. Done items get deleted, not archived.
   first-frame delay) into ChannelDiagnostics/cert so a field take carries the numbers, then
   compensate from measurements, not theory. X14 (≤20 ms) stays blocked on platform deliverables.
 
-- [P1 · gate] THE SPUR GATE MOVES 25 dB WITH MACHINE LOAD, so a red spur cannot be attributed to a
+- [P1 → ROADMAP G6(c), promoted 2026-09-02] THE SPUR GATE MOVES 25 dB WITH MACHINE LOAD, so a red spur cannot be attributed to a
   commit without a same-window control. Filed 2026-08-25 as one unreproduced observation (−34.6 dB on
   a 120 s run of 7c9a02f, where the same build at 6 s read −52.3 and the previous build at 120 s read
   −56.7); REPRODUCED UNDER CONTROL 2026-09-02 during B9, and it is load, not length. Three consecutive

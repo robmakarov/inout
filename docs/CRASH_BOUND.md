@@ -76,86 +76,51 @@ Two floors, one after the other, and one fix each:
   the grid brings the first fragment a second sooner and every later one a second later,
   which measured WORSE at a 5 s kill (3.0–3.7 s of picture against the shipped 4.0 s).
 
-## Press record into a cold Chrome and none of this applies
+## The first take after a Chrome launch, and only that one
 
-Measured 2026-09-02, and it is why `crash-bound.mjs` now waits before pressing record
-(`--settleBeforeRecordMs`, default 10 s). Pressing the instant the button appears —
-~200 ms after first paint, which no user does — put NOTHING on disk for any video
-channel at 2, 3, 4 or 5 s, on the identical build; at 7 s all three files appeared at
-once carrying the whole take. A Chrome process's first `VideoEncoder` pays a
-multi-second init and the app's own encoder-warm probe is still running at that moment,
-so there are no encoded chunks to write and no fragment policy can help. The floor in
-that state is Chrome warming up, not salvage. It is a real user state — someone who
-presses record a second after the app loads — and it is filed to BACKLOG.
+Task H6, measured 2026-09-02. **A Chrome PROCESS's first `VideoEncoder` costs about
+3.2 seconds**, and until it is paid nothing encoded exists anywhere, so a take that
+starts inside that window has no picture on disk to salvage. It is not the fragment
+cadence and not salvage; it is the machine waking up.
 
-## What prices it
+It is a process cost, not a size one, and not the app's chunks:
 
-Two cadences, one per container, and both are the muxer's — not the disk's. Every
-chunk is written AND flushed where the muxer says it goes (`rawVideo.worker.ts`,
-`compositor.worker.ts`, and the durable positioned writer behind measured audio), so
-nothing is lost between the muxer and the platter. What is lost is what the muxer had
-not yet handed over.
+| measured on prod | |
+|---|---|
+| first encoder, 1920×1080 | `isConfigSupported` 67 ms · init + 5 frames + flush **3122 ms** |
+| first encoder, 640×360 | 71 ms · **3276 ms** |
+| first encoder, 320×240 | 147 ms · **3281 ms** |
+| *second* encoder, same process | 0 ms · **47–77 ms** |
+| the warm's own chunks | 585→708 ms cold cache, 288→372 ms warm |
 
-- **Video — fragmented MP4, ~1–2 s.** mediabunny closes a fragment only when it is
-  already at least `minimumFragmentDuration` long *and* a keyframe is queued on every
-  track. The raw channels use a 2 s GOP (`KEYFRAME_INTERVAL_S`), so a fragment closes
-  roughly every 2 s and everything since the last close is still in memory when the
-  process dies. H2b adds ONE keyframe at 1 s and halves the minimum so that first
-  fragment can close; after it, the cadence is the 2 s it always was.
-- **Audio — WebM, ~1 s.** The Matroska muxer starts a new cluster once the current one
-  is 1 s long (`minimumClusterDuration` default) and flushes the writer after every
-  batch, so audio sits about one cluster behind the live moment.
+So the warm cannot be made cheaper and cannot start earlier than the mount it already
+starts at. **What it could do was stop competing.** With nobody recording it finished
+4.2 s after page start; press record the moment the app is usable and it finished at
+5.0–8.6 s instead, because the take's three encoders and the warm's two were fighting
+over the same hardware. H6 closes the warm's init encoder the instant its flush
+resolves, and stands its 40-frame measurement down when a take commits — deferred, not
+lost: `doStop` runs it when the take ends, with nothing recording.
 
-Shortening either would shorten the bound; both cost bytes (more keyframes, more
-cluster headers) and neither is worth spending until 2.1 s is the complaint.
+**What that is worth, same rig, `--settleBeforeRecordMs=0`:**
 
-## What survives, and what does not
+| killed at | before H6 | after H6 |
+|---|---|---|
+| 2 s | no picture | no picture |
+| 3 s | no picture | no picture |
+| 4 s | no picture | **3.00 s of picture** |
+| 5 s | no picture | **4.53 s** |
+| 7 s | everything, all at once | — |
 
-- **The pending manifest survives.** It is the whole hinge, and since H2b it has two
-  homes: `localStorage['inout.pending']` and the `inout-pending` IndexedDB database,
-  both written at record start. One of the two was present after every kill in both
-  runs, read off disk before the app was allowed to run — through CDP, and
-  independently out of the profile's own LevelDB files. In the eight H2b cells the
-  IndexedDB copy was the one that survived, every time.
-- **Every channel survives.** No kill lost a channel outright at any length.
-- **The composite does not, by design.** A crash-truncated composite has an unknown
-  tail and must never be packet-copied (2026-08-23), so salvage deletes it. A crashed
-  take is its raw channels.
-- **The salvaged take exports.** Proven through the product's own buttons, not by
-  probing the file: `--export` presses Export on the salvaged take and waits for the
-  file to appear in OPFS.
-- **The take report card reads INCOMPLETE, honestly.** 3 of 10 dimensions; the other
-  seven were evidence that lived in the page and died with it. That is S1's rule
-  working — an unread dimension is never a passed one — not a defect in salvage.
+**And on any page load after the first, there is no window at all.** The 3.2 s is paid
+once per Chrome LAUNCH, not per load: on the second and third loads in the same Chrome
+the whole warm — chunks, init and measurement — finishes **577–618 ms after page
+start**, before anyone can reach the button. Verified end to end: an already-running
+Chrome, a fresh load, record pressed at once, killed at 2 s → two of three video files
+hold a closed fragment with **1.0 s of picture**, the same as a settled app.
 
-## Re-run it
-
-```bash
-node scripts/crash-bound.mjs --control=300000 --killAt=60000,300000,720000,1200000,1860000
-```
-
-HEAVY: ~80 minutes of headed Chrome. Announce it, and do not run it while the machine
-is in use. Exit code is 0 only when all five gates hold (five usable points, every kill
-salvaged whole, the manifest survived every time, worst case under 5 s, and picture at
-every kill point).
-
-The floor is its own, much cheaper run:
-
-```bash
-node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000,7000,8000,10000,20000
-```
-
-~18 minutes. Add `--url='https://inout-kappa.vercel.app/?crashfloor=0'` for the
-positive control — the same eight cells with both fixes off, which is the second table
-above.
-
-Useful flags: `--screen=2560x1440` for a heavier source, `--export` to prove the
-salvaged take exports, `--control=<ms>` for the clean-stop reference, `--keep-profile`
-to keep the Chrome profile of each cell for inspection.
-
-**Headed on purpose.** Headless Chrome has no GPU here, so the raw channel's WebCodecs
-path times out and falls back to MediaRecorder VP9 — a different file with a different
-salvage story, and an answer to a question nobody asked.
+So the residual is exactly one case: the first page INOUT is asked for after a browser
+launch, where a crash in the first ~4 s still costs the picture. That is Chrome's GPU
+process starting, measured at 3.1–3.3 s whatever we ask of it.
 
 ## Do not measure a live take's file by its size
 
