@@ -800,6 +800,25 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   the same fallback a late join takes — and has no source-liveness tick while paused. NOT BUILT:
   retake (dropping the tail segment and re-recording), which is not a capture feature at all but a
   resume of a FINISHED recording, touching recovery, editsRepo and editor state.
+- A COMPONENT DEATH IS A SEAM, NOT A DEAD TAKE (H1, 2026-09-02, ON BY DEFAULT). An encoder that
+  reports failure, a worker that dies, or a MediaRecorder that errors mid-take no longer ends the
+  channel: `session.containSegment` closes the segment, drains it, and opens segment N+1 on the SAME
+  live track — F6's move with a different trigger, and the third task to reuse it after O16. Every
+  kind, audio included. What it replaced was ONE toast ("saved up to this point only") and a channel
+  that silently stopped writing while the take ran on. Measured on prod: video seams 20-96 ms (O16's
+  band is 69), audio 74-111 ms (F6's own pause seams are 99-218). `Recording.seams` carries kind ·
+  instant · gap · cause ('encoder-error' | 'worker-death' | 'recorder-error'), rebased at stop like
+  H4's `lost`, and it is said in the live band, in the editor and in the report card's `channels`.
+  BOUNDED: `capture/segmentContain.ts` — 1.5 s cooldown, 4 contains PER CHANNEL — and past the budget
+  the channel is given up through H4's ledger, so a permanently sick encoder costs a bounded number
+  of files rather than an hour of rubble. A healthy take is untouched: no seam, one segment per kind,
+  GREEN 10/10. `?killenc=<kind>:<ms>` and `?killworker=<kind>:<ms>` induce the two failures (the
+  second through an uncaught worker throw, the only thing that reaches `worker.onerror`);
+  `node scripts/contain-check.mjs` is the four-cell gate in one command.
+  TWO LIVE DEFECTS FIXED UNDERNEATH: the loudness fold stalled on any CLOSED audio segment and marked
+  the take degraded (F6's pause had it too — `MixLoudnessAccumulator.retire`), and the report card
+  measured SEGMENTS against the take's length, so segment 1 of a multi-segment kind was convicted of
+  ending early on every paused and every stepped take.
 - A RAW CHANNEL RECORDS THROUGH WEBCODECS BY DEFAULT (X6, built 2026-08-26; FLIPPED the same day on
   Robert's field ruling — "yes now it okay, with ?rawcodec=webcodecs i mean", after days of takes on the
   flag). The deciding numbers: the black-boxed take pair measured audio-clock starvation 1.6 % of

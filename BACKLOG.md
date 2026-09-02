@@ -44,6 +44,21 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P1 — SEEN ONCE, H1's rig, 2026-09-02] **a channel whose measured stop misses the 5 s budget is
+  DELETED, not "kept with what reached disk".** One cell in four of
+  `node scripts/contain-check.mjs` came back with screen AND camera absent from the take entirely —
+  the report card said "screen was requested and never delivered a byte" about a channel whose own
+  console line had it armed at +120 ms and delivering 1920x1080 frames all take. The mechanism is in
+  plain sight in `session.ts doStop`: `Promise.all(channels.map(c => c.stopped))` is bounded at
+  STOP_BUDGET_MS (5000) and the warning it prints says "keeping what reached disk" — but the very
+  next lines are `kept = this.channels.filter(c => c.bytes > 0)` and
+  `if (c.bytes === 0) blobStore.remove(c.blobKey)`, and `bytes` is filled by the stop reply that just
+  timed out. So the file on disk (megabytes of it) is deleted and the take reports the channel as
+  never delivered. NOT H1's mechanism — the budget, the filter and the removal all predate it, and
+  three re-runs of the same cell passed with every channel full length — but H1's rig is what caught
+  it, and the trigger is load: the failing run was the fourth back-to-back Chrome and both raw
+  channels logged ~184 dropped frames. The fix is to read the bytes off DISK before deleting anything,
+  or to keep a channel whose blob is non-empty regardless of what its stop reply said.
 - [P1 — MEASURED, H2's floor probe, 2026-09-01] **a crash in the first ~5 seconds of a take
   loses the WHOLE take, and in the first ~7 seconds loses the picture.** Eight single-kill
   cells on prod, `node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000,7000,8000,10000,20000`:

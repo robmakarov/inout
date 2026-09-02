@@ -384,11 +384,23 @@ it is built combine-ready:
           hidden tab clamps setInterval to 1 Hz, so `?synthetic=1`'s canvas source delivers
           ~2 fps and no rate test through it means anything. It needs a VISIBLE window:
           Robert watching one loaded sub-max take go down and come back, or a headed rig.
-  5b. NEXT ON THIS LANE: H1, all that is left of the unkillable-take pack (item 6 below — H2 and H4
-          are done, H3 is running overnight). E1 leaves READY;
+  5b. NEXT ON THIS LANE: F16b (item 7 below). THE UNKILLABLE-TAKE PACK IS CLOSED except H3's
+          overnight curve — H1 merged 2026-09-02, H2 and H4 done, H3 running. E1 leaves READY;
           M1 stays Robert-gated and now also carries E1's rawVideo.worker.ts lift.
-  6. H1 is what is LEFT of the unkillable-take pack [medium · spec below] a component death is a
-          seam, not a dead take. H2, H3 and H4 are off this line:
+  6. THE UNKILLABLE-TAKE PACK — all four in, H3 excepted:
+     H1   segment containment             DONE + MERGED 2026-09-02 (handoff under the task). A
+          component death is a seam: an encoder that failed, a worker that died or a recorder that
+          errored closes the segment and opens the next one on the SAME live device, and the hole is
+          certified in `Recording.seams`. Seams measured on prod: video 20-96 ms (inside O16's 69 ms
+          band), audio 74-111 ms (inside F6's 99-218). Nothing engages on a healthy take — GREEN
+          10/10, one segment per kind. `node scripts/contain-check.mjs` re-runs all four gate cells
+          in one command; `?killenc=` and `?killworker=` are the induced-death knobs.
+          FOR ANY LATER TASK: `segmentContain.ts` bounds the retries (1.5 s cooldown, 4 per CHANNEL)
+          and past the budget the channel is given up through H4's ledger, so containment can never
+          become an unbounded loop. Two live defects fixed on the way — the loudness fold stalling on
+          a closed audio segment (F6's pause had it too), and the report card grading SEGMENTS
+          instead of kinds (every paused and every stepped take was mis-graded).
+          STILL OWED: the WORDING of the two new sentences is Robert's, on H4's precedent.
      H2   the crash-loss bound            DONE 2026-09-01 — 2.1 s, and it does NOT grow with the
           take (1.01 s at 60 s, 1.79 s at 31 min, five real SIGKILLs). Manifest and every channel
           survived every kill; the salvaged take exports. `node scripts/crash-bound.mjs` re-runs
@@ -965,6 +977,74 @@ worker death, a track ending mid-take closes the segment and opens the next with
 works, certifying what was lost and when. The take survives everything short of the tab dying.
 GATES: induced encoder kill mid-take → take completes, seam inside F6 bands, loss certified ·
 induced worker death likewise · nothing engages on a healthy take · oracle v2+v1 green.
+
+HANDOFF 2026-09-02 (task/H1, own worktree). DONE, all four gates, measured on the deployed build.
+THE MOVE WAS ALREADY IN THE REPO AND THAT IS THE FINDING — for the third time on this line. F6 built
+close-the-segment-keep-the-device for pause/resume, O16 reused it verbatim for a resolution step, and
+a component death is that same move with a different trigger. So H1 is one generalised
+`containSegment` in session.ts plus a DECISION module, and no new file surgery: `armChannel` was
+already kind-agnostic (it is the call the progressive acquirer and `resumeChannel` both make),
+`core/types.ts` has said since 08-23 that a kind may be several non-overlapping segments, and every
+consumer resolves by id and window.
+WHAT IT REPLACED. `onFatal` emitted ONE toast — "video saved up to this point only" — and then
+nothing: the channel's file stopped while the take ran on believing it was recording, no ledger, no
+reopen, and the report card graded the stump as a full channel. The device was never the problem. A
+dead encoder does not turn the camera off, so the track is still live and segment N+1 opens on it.
+THREE ENTRY POINTS, all contained the same way and told apart in the certification because they are
+genuinely different code: `{event:'fatal'}` posted by a worker that is still alive (encoder-error),
+`worker.onerror` from one that is gone (worker-death), and MediaRecorder's own `error` on the
+fallback lane (recorder-error). EVERY KIND, not only the screen O16 stepped — an audio encoder dies
+exactly like a video one and that half was contained by nothing.
+WHAT IT REFUSES, because an encoder that dies on open would otherwise spin and an hour of that is a
+take made of rubble: `segmentContain.ts`, pure and unit-tested like O16's `stepVerdict` — 1.5 s
+cooldown, 4 contains PER CHANNEL (a sick camera must not spend the screen's budget). Past the budget
+the channel is given up the way a dead device is given up: preview dropped, device released, H4's
+ledger stamped with the instant, the take running on with everything else.
+TWO THINGS HAD TO BE FIXED UNDERNEATH, and both were live defects before this task:
+  · THE LOUDNESS FOLD waits on every registered contributor, so a CLOSED audio segment would have
+    held it at its last sample for the rest of the take, overflowed the ring and marked the take's
+    loudness `degraded` — a channel punished for doing what it was told. `retire` keeps the
+    contribution and stops the waiting. F6's pause had the same hole.
+  · THE REPORT CARD graded SEGMENTS against the take's length, so segment 1 of a screen that ran the
+    whole take was convicted of "ending 23 s before the take did". It now judges a kind by its LAST
+    segment. That was already wrong for every paused and every stepped take.
+GATES, all on prod (234a36d), `node scripts/contain-check.mjs` — one command, exit 0 only on all four
+cells, headed real Chrome for crash-bound's reason (headless has no GPU here and never opens the
+VideoEncoder this task kills):
+  · NOTHING ENGAGES ON A HEALTHY TAKE — plain `?synthetic=1`, 16.1 s: no seam, no loss, ONE segment
+    per kind, no live band, `GREEN — 10 of 10 dimensions measured and inside band`.
+  · INDUCED ENCODER KILL — `?killenc=screen:6000`: two screen segments (84+6001 ms / 429 KB then
+    6105+10051 ms / 3.28 MB), seam 20 ms at 6085 ms certified `encoder-error`, camera and mic full
+    length, screen NOT in the loss ledger because it came back, band live while recording, report
+    card RED on channels.
+  · INDUCED WORKER DEATH — `?killworker=screen:6000`, the other entry point: seam 22 ms at 6075 ms
+    certified `worker-death`, everything else as above.
+  · INDUCED AUDIO ENCODER KILL — `?killenc=mic:6000`: mic in two segments, seam 111 ms, screen and
+    camera full length.
+  SEAMS ACROSS EVERY RUN: video 20 / 22 / 23 / 67 / 96 ms, audio 74 / 80 / 94 / 102 / 111 ms — inside
+  O16's 69 ms for video and inside F6's own 99-218 ms for audio. ONE OUTLIER, 2602 ms, on the first
+  cell of a run where the dying encoder was 96 frames behind: the seam IS the drain of the segment
+  that died, so a backlogged encoder pays for its backlog. Bounded by STOP_BUDGET_MS either way.
+  · TYPECHECK CLEAN · 944 TESTS (23 new) · ORACLE v2 PASS sync 36.1/50.6 ms instant 54.5 smartcut
+    55.9 · ORACLE v1 PASS sync 43.3/56.1 ms instant 41.6 · LONG CELL (mandatory, G4) PASS at 120 s:
+    instant maxAbs 70.3 ms, smartcut 74.6 ms — BELOW the recorded 94.2/94.2/95.3/100.5 baseline, so
+    the flip did not move it up, which is what that rule catches.
+THE KNOBS ARE THE ONLY WAY THIS COULD BE TESTED AT ALL — a hardware encoder does not fall over on
+request. `?killenc=<kind>:<ms>` drives the encoder's own error callback, `?killworker=<kind>:<ms>`
+kills the worker through an uncaught throw, which is the one thing that reaches `worker.onerror`.
+Two flags because they are two entry points and this task's first two gates are exactly those two.
+Documented in docs/FLAGS.md. Deliberately NOT gated on `?synthetic=1`: inducing this on a REAL screen
+share is where the drain costs something.
+WHAT THE TAKE CARRIES NOW: `Recording.seams` — kind, instant, gap, cause — rebased at stop on the
+same timeline as the channels, exactly as H4's `lost` is. Said in the same three places H4 chose: the
+live band, the editor, and the S1 report card (folded into `channels`, not added as a dimension).
+STILL OWED: the WORDING of the two new sentences is Robert's, on H4's precedent. Proposals shipped:
+live — "Screen was interrupted and restarted itself — a fraction of a second is missing there. The
+take is still recording."; after — "Screen stopped recording for 20 ms at 0:06 and restarted itself —
+the rest of the take is there." Only the words are open.
+ONE DEFECT FOUND AND NOT FIXED, filed P1: a channel whose measured stop misses the 5 s budget is
+DELETED rather than "kept with what reached disk" — seen once in four cells, mechanism read straight
+out of `doStop`, and it predates H1 entirely. BACKLOG has the evidence.
 
 ## H2 the crash-loss bound — kill it anywhere, lose seconds [light-medium · mostly measurement]
 Salvage exists; its bound at max60 hour scale has never been stated. SIGKILL the tab at sampled
