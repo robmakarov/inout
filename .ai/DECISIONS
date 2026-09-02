@@ -548,3 +548,38 @@ engages at max in the app until Robert flips it, which is the house pattern (fro
 And his architectural note stands as a requirement: max-elastic is part of the ONE elastic system,
 not a fork — same detector, same actuator dial, same seam machinery as E1; M1 is where that system
 is worked through at max (the rawVideo.worker.ts sampling lift), never a second implementation.
+2026-09-02 robert (3) — FOUR DIRECTION RULINGS FROM THE PLATFORM/ELASTIC CONVERSATION, his words.
+(1) NATIVE AT MAXIMUM ("we need to use outside of browser capabilities at maximum, not just make
+chromium apps for desktop"): a native INOUT captures, encodes, writes and renders natively; Chromium
+is only the face. The seam is the contract in src/core/types.ts — the browser is ONE implementation
+of it, native apps are others, and everything above the seam (timeline, edit, sync math, governor,
+report card, certification, UI) is shared. Capability ladder: web only → web + installed native core
+→ full native app. Language split recorded as the recommendation, not yet ruled: Swift for the Apple
+adapter, Rust for Windows/Linux adapters and for shared math compiled to WASM + native, TS for UI and
+the web adapter; no Rust rewrite of the engine. P4 is to be re-specified against this, not "Electron
++ thin bridges".
+(2) ELASTIC IS BIASED UP ("elastic purpose more to go up when possible than down, going down is
+compromise that we must try to prevent whenever possible, it purpose just not let user loose his
+data because of overload · predictions must not be overprotective and paranoid"). Default is the
+most the machine can do; history only ever RAISES the start, never lowers it; a press is never
+pre-shaped down. Down exists only to prevent loss and its trigger is DISTANCE TO LOSS (queue about to
+overflow on the next tick), not "busy". Order of defence before any picture step: shed the unseen
+(background render, prerender, filmstrips/waveforms, UI effects, preview rate, composite) → absorb
+bursts in a memory-bounded queue → smallest picture step, up again the tick headroom shows, with a
+periodic probe upward. Consequence for E1/M1 tuning: `serious` sheds free things only; the picture
+moves at `critical` only.
+(3) NO WASTE, which is what "heat" means ("if we can do fast enough without using all available
+users hardware we must not take extra shit"): foreground work uses exactly what the chosen quality
+requires; background work is paced to its DEADLINE, not to the hardware (the prerender runs at the
+rate that has it ready before the panel is reached, not flat out); never do work whose output is
+thrown away. Applies to every aspect, UI included (UI must never freeze; a UI-complexity setting is
+a manual pin on the automatic dial, speculative, not yet asked for).
+(4) TWO DEVICES, ONE TAKE, IS A TECHNICAL TARGET, NOT A CALLS PRODUCT ("calls and streaming i meant
+technically ... two users from different devices record one take together and see each other ...
+preview is ready and they see what will be recorded when they press record - and its close enough to
+call already"). The composed stage before the press IS the shared preview; a received camera is an
+ordinary track the live compositor draws; each device records locally at full quality; shared clock
+= pings + room-audio correlation with drift fit; fragments ship on J1's journal; assembly/render where
+the hardware is. Streaming is the same link with a different far end. Sequencing unchanged: max60
+perfect first, then governor bias, then J1, then the native core (macOS, Swift), then two devices on
+one network, then internet, then streaming.
