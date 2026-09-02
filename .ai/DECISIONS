@@ -692,3 +692,28 @@ with ai too" (a tile stream already says WHAT CHANGED, which is what an agent ne
 hides) · idea 15 (zoom proposals) REJECTED: "bullshit, excatly the shit that must not go unaproved,
 features for users" · idea 11 (name the size) REJECTED: "user only use quality slider".
 OPEN QUESTION he raised, unanswered: can many recordings run at once from one Chrome?
+
+2026-09-02 robert (11) — THE CUTS SETTLED, AND ONE SURVIVOR. "other to cut - fuck them": ideas 8
+(idle re-compression), 12 (the player is the editor), 13 (invent frames to reach 60), 23 (interface
+simplifies under load) and 32 (free users' machines host their files) are DEAD — do not re-propose.
+Idea 10 (record the page, not the pixels) is NOT cut: "10 is way to experiment later, put it somwhere
+for coloboration with ai experimints in v2 to consider" → it lives in Phase 5/v2 as an AI-collaboration
+experiment, beside idea 1. Idea 27 (stream out live): "not sure" — unscheduled, not dead.
+
+2026-09-02 robert (12) — LIKE WATER. On the governor/elastic system: "not just fast - super reactive
+system we must invent, like water". So E2 and M1 are not a retune of steps — the target is CONTINUOUS
+adaptation with no perceptible stepping: it yields instantly under pressure and returns instantly when
+pressure lifts, and a user should never be able to point at the moment it moved. A visible step is a
+defect even when the numbers are good. Invent it; do not tune the old one.
+
+2026-09-02 robert (13) — NOT ONE SMALL DETAIL, and the interactive direction. On ideas 6 and 16: "only
+if no smallest details will be lost ... we need to build system that prevent smallest action to be
+lost, even time in system tab changing, that small very important all the time on screens". The clock
+ticking in a browser tab is the fixture: a one-glyph change once a second, on an otherwise still
+screen, must survive to the file. Any quality or change-detection work is judged against it, and
+DECISIONS robert (8) is the rule it serves. NEW DIRECTION he named: "select text is important,
+clicking links on screen too, also i think this is important direction, we can make screen on video
+almost interactive" — the recorded screen becomes selectable and clickable, not a flat picture. This
+is the same underlying capability as idea 10 (the page's own description, not just its pixels), which
+is why 10 survived. Reminder from him, already on file in BACKLOG's approved shapes: the screenshot /
+image capture channel is coming too.

@@ -5,6 +5,8 @@ Dump anything at the top of Inbox. Whoever picks it up triages it (lane, severit
 - (dump here)
 
 ## Open technical evidence (→ task id where one exists)
+- [P1] THE LONG-TAKE EXPORT IS THE FRAME COUNT, and the machine may render it twice. Measured 2026-09-02 (`exp nativerender`, 60 s 3024x1964@60 source, 1080p step, real production render): 122-138 fps sustained — so a 124-minute take is 27 min of render at 30 fps out and ~57 min at 60 fps (`max`). RULED OUT as causes: the background frame + a zoom (128 ms over 3600 frames, 0.036 ms/frame — Robert's "must not make it slower" is already true), the decoder's `optimizeForLatency` hint (6 %, inside run noise, and it is what bounds GPU memory), constant quality (its cost tracks output BYTES: −11 % on still text = faster, not slower). Encoder alone does 187 fps at 1080p qp20 hardware (`scripts/encode-cost.mjs`), decode alone ~207 fps at 3024x1964, and they run SERIAL on one worker thread — overlapping them is the only pure-throughput lever left, worth ~1.4× (render.ts's header says a prefetch pump "bought nothing", measured on a 12 s take where the shape was different). The bigger waste is policy: the at-stop pre-render renders the WHOLE take, and any edit cancels it and restarts from zero 1.2 s later, so a frame preset and a zoom on a 124-minute take can cost two discarded hour-long renders before the export even starts. J1 (resumable renders) is the real fix; a length bound on the pre-render is the cheap one and needs Robert's yes.
+- [P2] `?stallhold=` (new 2026-09-02) can delay the start of preview playback by up to 3 s on a cold element — the hold is doing its job, but pressing play and waiting is a new thing a user can feel. Watch for a report; if it lands, hold only after playback has actually started.
 - [P1 → B11] smart cut refuses a 120 s trim on `Timestamps must be non-negative (got -0.0003333333333337407s)` = −1/3000 s in `outAt()` (smartCut.ts:456), one cold run in five; the user silently gets a full render.
 - [P1 → B12] under a starved main thread (synthetic 2560x1440@60, three encoders, 354.8 Mpx/s) BOTH measured-audio channels ended tens of seconds early on a CLEAN stop; only the report card noticed.
 - [P0 → W2] the screen wedge: rung 3 (bare request) wedged three in a row 2026-09-02; page has no move left; Robert's levers and the second-origin test in docs/SCREEN_WEDGE.md.
@@ -71,12 +73,9 @@ the census IS the cheap half of trying it.
 ### Still only ideas — phase-gated, nothing owed until their gate opens
 6 constant-quality capture: quantizer mode + the export's governor on the raw screen encoder · UX (file sizes) · medium · measure the size delta first, then Robert's call
 7 cloud player composites screen+camera from two packet copies + the camera track as data → instant max+camera SHARE · UX · medium · needs C8
-8 idle consolidation: re-encode raw channels at export QP once the export exists; extends disk hours · UX (what is kept) · medium · needs E2's governor to own the idle time
 9 record the export: at max, composite at native size + tiny stream of the patch under the PiP + camera raw → unedited max+camera export = copy · UX · heavy · only after A1's long take holds (load family)
-12 the player is the editor: cloud player = editor preview code; upload raw + edit → any edit shares instantly, MP4 renders behind · UX · heavy · needs C8; upload bigger than the file
 14 continue after a crash: recovery + R-CONT continue = one take · UX control · medium-heavy · after F19
 18 installed core serves the browser: PWA gains native capture when the core is installed · UX install · medium · after P4
-23 UI complexity dial: effects level follows the governor; settings slider pins it; reduced-motion floor · UX setting · light · after E2
 24 heat as a signal: thermal state from the native shell, battery-aware ceilings in the browser · eng · light · after P4
 26 two devices, one take — the full approved shape is in "Later — approved shapes" above · UX new mode · heavy · needs C1-C3 + J1
 27 streaming out: composed stage as a track to any WHIP ingest, same link as 26 · UX new mode · medium · after 26
@@ -85,10 +84,11 @@ the census IS the cheap half of trying it.
 3 speculative seams (pre-cut at silences while idle) — "i dont feel like its good, triming goes back and forth all the time". A pre-cut guess is worthless when the trim keeps moving. What he actually wants instead: R1, review the render path, it was too slow on his last take.
 11 name the size (type an exact target file size) — "bullshit, user only use quality slider".
 15 zoom proposals from pixel change — "bullshit, excatly the shit that must not go unaproved, features for users". The delta detector itself survives ONLY as X17's measurement and AI1's index, never as a user-facing suggestion.
+8 idle consolidation · 12 the player is the editor · 13 every take at 60 by interpolation · 23 UI complexity dial · 32 device-hosted sharing for free users — Robert 2026-09-02 on the whole cut list: "other to cut - fuck them".
 
-### Demoted 2026-09-02 (agent recommendation on review, Robert can veto) — cost now, payoff only later
-10 record the page not the pixels (DOM/description stream, pixels only for canvas/video/iframes) — this is a DIFFERENT PRODUCT, not an engine change; it belongs with Phase 6 reshaping and still needs AI2's vehicle (extension/snippet/P4).
-13 every take at 60 (scroll-aware interpolation, local model for camera) — a model on an 8 GB machine to fix what capturing at 60 fixes at the source; revisit only if takes recorded below 60 turn out to be common.
+### THE INTERACTIVE SCREEN — a direction Robert named 2026-09-02, bigger than any single idea
+"select text is important, clicking links on screen too, also i think this is important direction, we can make screen on video almost interactive." Text in a recorded screen is selectable, links are clickable — the recording stops being a flat picture. D-OCR is the cheap half (read the paused frame locally); the full half needs the page's own description, which is idea 10 — the reason 10 survived the cuts. Same data serves AI collaboration. Also on his mind and already logged in "Later — approved shapes": the screenshot / image capture channel.
+10 record the page not the pixels — Robert 2026-09-02: "10 is way to experiment later, put it somwhere for coloboration with ai experimints in v2 to consider". NOT cut. Phase 5 / v2, beside idea 1, as an AI-collaboration experiment; still needs AI2's vehicle (extension/snippet/P4), still breaks on canvas/video/protected content.
 19 shared math in Rust → WASM + native — UN-DEMOTED by the ceiling ruling (DECISIONS robert (7)): it belongs INSIDE P4, not nowhere.
 NOTE on 1 and 16 after the ceiling ruling and the every-movement rule: idea 1 is a v2 experiment with a second reason to exist — Robert 2026-09-02: "feels like something that can be used for collaboration with ai too" (a tile stream already states WHAT CHANGED, which is what an agent needs and what a video hides). Idea 16 stays alive but is now bounded: any tile that changed AT ALL is kept, cursor twitches included; no threshold is permitted, so its saving must come from the encoder, never from discarding movement.
 
