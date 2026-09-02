@@ -376,7 +376,7 @@ export function channel(
  * part of the render can coast on silence, and so the loudness statistics the
  * export reads are those of a real signal rather than of a flat line.
  */
-async function buildAudioFile(key: string, seconds: number): Promise<number> {
+export async function buildAudioFile(key: string, seconds: number): Promise<number> {
   const SR = 48_000
   const CH = 2
   const writer = await createPositionedWriter(key)

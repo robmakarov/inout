@@ -742,3 +742,11 @@ frame rate is a quantized dial by physics — a 60 Hz source can only be sampled
 looks WORSE than a clean 30. So the "like water" rule binds the SYSTEM, not this one dial: the
 continuous dials (quantizer/quality, how much is composited, background work) are spent FIRST and the
 chunky one (rate) is the LAST resort. Today the ladder is an early response, which is the defect.
+
+2026-09-02 robert (15) — NO WAITING, ANYWHERE. Told that the new stall hold could delay the start of
+preview playback by up to 3 s on a cold element: "no waiting, we are trying to fix all waiting, not
+tolerate it". A hold is not a fix, it is the defect made polite. Every "it has to buffer / warm up /
+settle first" answer is refused: find why the thing is not ready and make it ready. (The hold was
+removed the same day and replaced by warming the file through the OS page cache — measured 191 → 4 ms
+worst first-play on a real 124-minute channel, holding no memory at any length.) Reads with robert
+(14): no guessing, and now no waiting either.
