@@ -124,11 +124,158 @@ const PROBE = `(() => {
   }
 })()`
 
+/**
+ * --app: THE GATE, ON THE DEPLOYED BUILD. A real headed Chrome, a real CDP
+ * click on the app's own record button, and every answer read out of the app
+ * and its console rather than argued from the source.
+ */
+async function runApp(bin) {
+  const profile = mkdtempSync(join(tmpdir(), 'inout-dpip-app-'))
+  const url = URL_.includes('?') ? URL_ : `${URL_.replace(/\/$/, '')}/?synthetic=1`
+  let s
+  const results = {}
+  try {
+    s = await launchChromeRetrying({ bin, profile, url, headed: true })
+    await sleep(2500)
+    // A TAB ACROSS A DEPLOY TESTS THE OLD BUILD (CLAUDE.md). Fresh profile or
+    // not, bust it and reload before judging anything.
+    await s.evaluate(`(async()=>{for(const r of await navigator.serviceWorker.getRegistrations())await r.unregister();for(const k of await caches.keys())await caches.delete(k)})()`)
+    await s.send('Page.reload', { ignoreCache: true })
+    await sleep(3500)
+    results.entry = await s.evaluate(
+      `performance.getEntriesByType('resource').map(r=>r.name).filter(n=>/assets\/index-.*\.js$/.test(n)).map(n=>n.split('/').pop())[0] ?? null`,
+    )
+    results.support = await s.evalJson(`JSON.stringify(window.__inoutPanel ? window.__inoutPanel() : null)`)
+    // NO WINDOW BEFORE THE PRESS — the same rule as the devices.
+    results.panelBeforePress = await s.evaluate(`!!(documentPictureInPicture && documentPictureInPicture.window)`)
+    results.panelChunkWarmed = await s.evaluate(
+      `performance.getEntriesByType('resource').some(r=>/panelChunk-/.test(r.name))`,
+    )
+
+    const rect = await s.evalJson(
+      `(()=>{const b=document.querySelector('.recbtn');if(!b)return null;const r=b.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`,
+    )
+    if (!rect) throw new Error('no record button on the capture screen')
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await s.send('Input.dispatchMouseEvent', {
+        type, x: rect.x, y: rect.y, button: 'left', clickCount: 1, buttons: type === 'mousePressed' ? 1 : 0,
+      })
+    }
+
+    // THE PANEL OPENS ON THE PRESS.
+    let opened = false
+    for (let i = 0; i < 40 && !opened; i++) {
+      opened = await s.evaluate(`!!(documentPictureInPicture.window && !documentPictureInPicture.window.closed)`)
+      if (!opened) await sleep(250)
+    }
+    results.openedOnPress = opened
+    if (!opened) {
+      // THE CONTROL RUN (?panel=0, or a browser without the window): the same
+      // take, stopped from the page's own button, so its report card can be
+      // read beside the panel run's on identical everything else.
+      await sleep(7000)
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await s.send('Input.dispatchMouseEvent', {
+          type, x: rect.x, y: rect.y, button: 'left', clickCount: 1, buttons: type === 'mousePressed' ? 1 : 0,
+        })
+      }
+      let done = false
+      for (let i = 0; i < 60 && !done; i++) {
+        done = await s.evaluate(`!!document.querySelector('.editor')`)
+        if (!done) await sleep(400)
+      }
+      results.controlRun = true
+      results.editorAfterStop = done
+      return { results, console: s.consoleLines }
+    }
+    results.geometry = await s.evalJson(`JSON.stringify(window.__inoutPanel())`)
+    const readPanel = (expr) => s.evaluate(`(()=>{const d=documentPictureInPicture.window?.document;return d?(${expr}):null})()`)
+    results.panelTitle = await s.evaluate(`documentPictureInPicture.window?.document.title ?? null`)
+    results.buttons = await s.evalJson(
+      `JSON.stringify([...(documentPictureInPicture.window?.document.querySelectorAll('.rp__btn')??[])].map(b=>b.textContent))`,
+    )
+    // THE TIMER MOVES ON THE PANEL'S OWN CLOCK.
+    const t1 = await readPanel(`d.querySelector('.rp__time')?.textContent`)
+    await sleep(2200)
+    const t2 = await readPanel(`d.querySelector('.rp__time')?.textContent`)
+    results.timer = { first: t1, after2s: t2, advanced: !!t1 && !!t2 && t1 !== t2 }
+
+    // --nopause: the panel open for the whole take and never pressed, so its
+    // COST can be read against the ?panel=0 control without a pause/resume in
+    // the middle of it.
+    if (process.argv.includes('--nopause')) {
+      await sleep(13000)
+      await s.evaluate(`(()=>{const b=documentPictureInPicture.window?.document.querySelector('.rp__btn--stop');if(b)b.click()})()`)
+      let done = false
+      for (let i = 0; i < 60 && !done; i++) {
+        done = await s.evaluate(`!!document.querySelector('.editor')`)
+        if (!done) await sleep(400)
+      }
+      results.editorAfterStop = done
+      results.noPauseRun = true
+      results.labelAfterPause = 'Continue'
+      results.labelAfterContinue = 'Pause'
+      results.stopPressed = true
+      await sleep(800)
+      results.panelClosedWithTake = await s.evaluate(
+        `!(documentPictureInPicture.window && !documentPictureInPicture.window.closed)`,
+      )
+      return { results, console: s.consoleLines }
+    }
+
+    // PAUSE / CONTINUE — the engine's own words are the evidence.
+    const clickPanel = (sel) => s.evaluate(`(()=>{const b=documentPictureInPicture.window?.document.querySelector(${JSON.stringify(sel)});if(!b)return false;b.click();return true})()`)
+    results.pausePressed = await clickPanel('.rp__btn:not(.rp__btn--stop)')
+    await sleep(1200)
+    results.labelAfterPause = await readPanel(`d.querySelector('.rp__btn:not(.rp__btn--stop)')?.textContent`)
+    results.continuePressed = await clickPanel('.rp__btn:not(.rp__btn--stop)')
+    await sleep(1500)
+    results.labelAfterContinue = await readPanel(`d.querySelector('.rp__btn:not(.rp__btn--stop)')?.textContent`)
+
+    // STOP FROM THE PANEL ENDS THE TAKE, AND THE PANEL GOES WITH IT.
+    await sleep(2000)
+    results.stopPressed = await clickPanel('.rp__btn--stop')
+    let inEditor = false
+    for (let i = 0; i < 60 && !inEditor; i++) {
+      inEditor = await s.evaluate(`!!document.querySelector('.editor')`)
+      if (!inEditor) await sleep(400)
+    }
+    results.editorAfterStop = inEditor
+    await sleep(800)
+    results.panelClosedWithTake = await s.evaluate(
+      `!(documentPictureInPicture.window && !documentPictureInPicture.window.closed)`,
+    )
+    results.geometryAfter = await s.evalJson(`JSON.stringify(window.__inoutPanel())`)
+    return { results, console: s.consoleLines }
+  } finally {
+    await quitChrome(s)
+    rmSync(profile, { recursive: true, force: true })
+  }
+}
+
 const bin = resolveChrome()
 if (!bin) {
   console.error('dpip-check: no Chrome found (set CHROME_BIN)')
   process.exit(1)
 }
+if (process.argv.includes('--app')) {
+  const { results, console: lines } = await runApp(bin)
+  const capture = lines.filter((l) => /\[capture\]|\[panel\]/.test(l))
+  console.log(JSON.stringify(results, null, 2))
+  console.log('\n--- what the app said ---')
+  for (const l of capture.slice(-40)) console.log(l)
+  const ok =
+    results.openedOnPress &&
+    results.timer?.advanced &&
+    results.labelAfterPause === 'Continue' &&
+    results.labelAfterContinue === 'Pause' &&
+    results.editorAfterStop &&
+    results.panelClosedWithTake &&
+    results.panelBeforePress === false
+  console.log(`\nU1 gate: ${ok ? 'GREEN' : 'RED'}`)
+  process.exit(ok ? 0 : 1)
+}
+
 const profile = mkdtempSync(join(tmpdir(), 'inout-dpip-'))
 let s
 try {
