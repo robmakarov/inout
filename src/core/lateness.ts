@@ -187,10 +187,22 @@ export class LatenessTally {
     if (this.worst.length > 3) this.worst.length = 3
   }
 
-  /** Long-animation-frame / longtask attribution, worst first, at most five. */
+  /**
+   * Long-animation-frame / longtask attribution, worst first, at most five.
+   *
+   * RANKED BY BLOCKING TIME, NOT BY DURATION, and that correction came from a
+   * reading: a take whose worst sample was 2.0 ms named a 487.4 ms animation
+   * frame as its "worst task" — a frame with `blockingDuration: 0`, i.e. one
+   * that took a long wall time without ever holding the thread for 50 ms.
+   * Ranking by duration therefore names a frame that stalled nobody, next to a
+   * lateness reading that agrees nothing stalled. What a stall is made of is
+   * BLOCKING time, so that is the key, with duration as the tiebreak for the
+   * entry types that do not report it.
+   */
   noteOwner(owner: LatenessOwner): void {
     this.owners.push(owner)
-    this.owners.sort((a, b) => b.durationMs - a.durationMs)
+    const weight = (o: LatenessOwner): number => o.blockingMs ?? o.durationMs
+    this.owners.sort((a, b) => weight(b) - weight(a) || b.durationMs - a.durationMs)
     if (this.owners.length > 5) this.owners.length = 5
   }
 

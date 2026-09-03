@@ -15,9 +15,11 @@
  *           in this repo disables it, and none of them can see this.
  *           MEASURED 2026-09-02: timer 1.2 Hz / p50 983.6 ms late, worker beat
  *           63.3 Hz / p50 0.0 ms, on the same hidden page.
- *   cost    THE BUDGET (< 1 ms of main thread per second of capture). The same
- *           fixed workload, alternating with and without a sampler running, in
- *           ONE page load so nothing else differs. Medians of N repetitions.
+ *   cost    THE BUDGET (< 1 ms of main thread per second of capture). Two equal
+ *           windows on one idle page, one with a sampler and one without, read
+ *           through CDP's `Performance.getMetrics` — the renderer's own
+ *           main-thread busy time. A throughput A/B cannot see this: the
+ *           workload's spread is ±0.7 % and the quantity is ~0.03 %.
  *   take    THE CARD. Record a real take through the product, stop it, and read
  *           the `lateness` dimension off `__inoutReport()`.
  *   editor  THE EDITOR'S CARD. The editor samples its own first 15 s on mount
@@ -146,38 +148,28 @@ const CLAMP = (ms, period) => `
 `
 
 /**
- * THE COST, MEASURED THE ONLY WAY THAT MEANS ANYTHING: the same work twice,
- * differing in nothing but whether a sampler is running, inside ONE page load.
- * Fixed unit COUNT and variable wall clock — so the difference in wall clock IS
- * the cost, with no throughput arithmetic in between. The yield between units
- * is what lets the beats be delivered at all: without it the queue would drain
- * after the measurement and the sampler would look free.
+ * THE COST, MEASURED WITH CHROME'S OWN MAIN-THREAD CLOCK.
+ *
+ * The first two cuts of this lane were a THROUGHPUT A/B — the same workload run
+ * with and without a sampler — and both were the wrong instrument, which the
+ * numbers said plainly: 209.5 vs 210.9 work units/s, i.e. the sampled run came
+ * out FASTER, because the workload's own run-to-run spread (±0.7 %) is an order
+ * of magnitude larger than the thing being measured (~0.03 % of a second). No
+ * number of repetitions fixes a signal that far under the noise.
+ *
+ * So ask the browser instead. CDP's `Performance.getMetrics` exposes the
+ * renderer's cumulative `TaskDuration` and `ScriptDuration` — the main thread's
+ * own busy time, in seconds, at microsecond resolution. Two equal windows on
+ * ONE idle page, one without a sampler and one with, and the difference in
+ * TaskDuration divided by the window IS the cost per second of wall clock. No
+ * workload, no throughput arithmetic, nothing to be swamped by.
  */
-const COST = (ms, sampling) => `
+const IDLE = (ms, sampling) => `
 (async () => {
-  const work = () => { let x = 0; for (let i = 0; i < 120000; i++) x += Math.sqrt(i); return x }
   ${sampling ? 'const run = await window.__inoutLatenessStart()' : ''}
-  for (let i = 0; i < 20; i++) work()   // warm the JIT, so rep 1 is not the slow one
-  const t0 = performance.now()
-  let units = 0, sink = 0
-  // FIXED WALL, COUNTED WORK — not fixed work and a measured wall. A window
-  // long enough to hold hundreds of beats is what makes the difference bigger
-  // than the noise; the first cut of this lane ran 60 units in ~200 ms, where
-  // the whole quantity being measured is a few hundredths of a millisecond.
-  while (performance.now() - t0 < ${ms}) {
-    sink += work()
-    units++
-    await new Promise((r) => setTimeout(r, 2))
-  }
-  const wallMs = performance.now() - t0
+  await new Promise((r) => setTimeout(r, ${ms}))
   ${sampling ? 'const summary = run.stop()' : 'const summary = null'}
-  return {
-    units,
-    wallMs: Math.round(wallMs * 10) / 10,
-    perSec: Math.round((units / (wallMs / 1000)) * 100) / 100,
-    sink: sink > 0,
-    summary,
-  }
+  return { summary }
 })()
 `
 
@@ -210,38 +202,46 @@ async function laneClamp(chrome, out) {
 async function laneCost(chrome, out) {
   const ready = await chrome.evaluate('typeof window.__inoutLatenessStart === "function"')
   if (!ready) throw new Error('__inoutLatenessStart is not on this build — cost cannot be measured')
+  await chrome.send('Performance.enable')
+  const metrics = async () => {
+    const r = await chrome.send('Performance.getMetrics')
+    const get = (name) => r.metrics.find((m) => m.name === name)?.value ?? 0
+    return { task: get('TaskDuration'), script: get('ScriptDuration'), layout: get('LayoutDuration') }
+  }
+  const windowMs = COST_SEC * 1000
   const on = []
   const off = []
-  const windowMs = COST_SEC * 1000
   for (let i = 0; i < COST_REPS; i++) {
     // Alternating, always off first, so a machine that warms or throttles over
     // the run cannot masquerade as the cost of sampling.
-    const a = await chrome.evaluate(COST(windowMs, false), 180_000)
-    off.push(a.perSec)
-    const b = await chrome.evaluate(COST(windowMs, true), 180_000)
-    on.push(b.perSec)
-    if (b.summary) out.costSummary = b.summary
+    for (const sampling of [false, true]) {
+      const before = await metrics()
+      const r = await chrome.evaluate(IDLE(windowMs, sampling), windowMs + 60_000)
+      const after = await metrics()
+      const busyMsPerSec = ((after.task - before.task) / (windowMs / 1000)) * 1000
+      ;(sampling ? on : off).push(busyMsPerSec)
+      if (sampling && r?.summary) out.costSummary = r.summary
+    }
   }
   const mOn = median(on)
   const mOff = median(off)
-  // Work units lost per second of wall clock, expressed as the milliseconds of
-  // that second they represent. This is the gate's own unit.
-  const perSec = (1 - mOn / mOff) * 1000
+  const perSec = mOn - mOff
   out.cost = {
+    method: 'CDP Performance.getMetrics TaskDuration, idle page, equal windows',
     windowMs,
     reps: COST_REPS,
-    offUnitsPerSec: off.map(r1),
-    onUnitsPerSec: on.map(r1),
-    medianOff: r1(mOff),
-    medianOn: r1(mOn),
+    offBusyMsPerSec: off.map(r3),
+    onBusyMsPerSec: on.map(r3),
+    medianOffMsPerSec: r3(mOff),
+    medianOnMsPerSec: r3(mOn),
     costMsPerSec: r3(perSec),
     selfReportedMsPerSec: out.costSummary?.selfCostMsPerSec ?? null,
     samplesSeen: out.costSummary?.samples ?? null,
     periodMs: out.costSummary?.periodMs ?? null,
   }
   out.costVerdict =
-    `sampling costs ${r3(perSec)} ms per second of main thread ` +
-    `(${r1(mOff)} → ${r1(mOn)} work units/s, median of ${COST_REPS} × ${COST_SEC} s); ` +
+    `sampling costs ${r3(perSec)} ms of main thread per second ` +
+    `(idle page busy ${r3(mOff)} → ${r3(mOn)} ms/s, median of ${COST_REPS} × ${COST_SEC} s); ` +
     `the sampler's own reading: ${out.costSummary?.selfCostMsPerSec ?? '?'} ms/s over ` +
     `${out.costSummary?.samples ?? '?'} samples at ${out.costSummary?.periodMs ?? '?'} ms`
   console.error(`g7: ${out.costVerdict}`)

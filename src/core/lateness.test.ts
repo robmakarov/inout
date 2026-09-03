@@ -134,3 +134,27 @@ describe('G7 lateness tally', () => {
     expect(WINDOW_MS).toBe(1_000)
   })
 })
+
+/**
+ * A CORRECTION A READING MADE. The take rig printed a card whose worst sample
+ * was 2.0 ms and whose "worst task" was a 487.4 ms animation frame — one with
+ * `blockingDuration: 0`, i.e. a frame that took wall time without ever holding
+ * the thread. Ranking owners by duration names a frame that stalled nobody.
+ */
+describe('G7 owners are ranked by what stalls, not by what is long', () => {
+  it('a long frame that blocked nothing loses to a short one that blocked', () => {
+    const t = new LatenessTally(16)
+    t.noteOwner({ atMs: 100, durationMs: 487.4, blockingMs: 0, name: 'a long idle frame' })
+    t.noteOwner({ atMs: 200, durationMs: 60, blockingMs: 55, name: 'the size probe' })
+    const s = t.summary('worker-beat', false)
+    expect(s.owners[0].name).toBe('the size probe')
+  })
+
+  it('falls back to duration for an entry type that reports no blocking', () => {
+    const t = new LatenessTally(16)
+    t.noteOwner({ atMs: 100, durationMs: 90, name: 'longtask' })
+    t.noteOwner({ atMs: 200, durationMs: 51, name: 'shorter longtask' })
+    const s = t.summary('worker-beat', false)
+    expect(s.owners[0].name).toBe('longtask')
+  })
+})

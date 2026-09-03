@@ -437,7 +437,10 @@ describe('G7: main-thread lateness', () => {
     expect(card.verdict).toBe('red')
     expect(card.line).toContain('201.4 ms late at 11.0s')
     expect(card.line).toContain('sizeProbe.js encodeFrame()')
-    expect(card.dimensions[0].detail).toContain('worst task: sizeProbe.js encodeFrame() 201.9 ms')
+    // Blocking time first: what a stall is made of, not how long the frame was.
+    expect(card.dimensions[0].detail).toContain(
+      'worst task: sizeProbe.js encodeFrame() 198.4 ms blocking of 201.9 ms at 11.2s',
+    )
   })
 
   it('a quiet editor is GREEN and says what it sampled', () => {

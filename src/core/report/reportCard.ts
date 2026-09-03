@@ -858,9 +858,15 @@ export function latenessDimension(
   // every number above is then a FLOOR. Say it where it cannot be missed.
   if (s.missed > 0) parts.push(`${s.missed} beats never arrived — these are lower bounds`)
   if (owner) {
+    // BLOCKING FIRST, because that is what a stall is made of: a long animation
+    // frame can run 487 ms of wall clock and block for none of it, and quoting
+    // its duration beside a 2 ms worst sample reads as a contradiction.
     parts.push(
-      `worst task: ${owner.name} ${owner.durationMs} ms at ${secs(owner.atMs)}` +
-        (owner.blockingMs !== undefined ? ` (${owner.blockingMs} ms blocking)` : ''),
+      `worst task: ${owner.name} ` +
+        (owner.blockingMs !== undefined
+          ? `${owner.blockingMs} ms blocking of ${owner.durationMs} ms`
+          : `${owner.durationMs} ms`) +
+        ` at ${secs(owner.atMs)}`,
     )
   } else if (s.hiddenRatio > 0.5) {
     // Not a gap in the instrument: neither long-animation-frame nor longtask
