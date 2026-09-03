@@ -260,7 +260,7 @@ const METRIC_RETRY_COOLDOWN_MS = 5000
 const METRIC_RETRY_MAX = 2
 
 /** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
-async function runOracleOnceGated(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
+async function runOracleOnceGated(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483, extraQuery = '') {
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
     const t0 = Date.now()
@@ -345,7 +345,7 @@ async function main() {
     }
 
     for (let i = 0; i < cold; i++) {
-      const run = await runOracleOnceGated(port, headed, engine, composite, recordMs, trimMs)
+      const run = await runOracleOnceGated(port, headed, engine, composite, recordMs, trimMs, extraQuery)
       const elapsed = run.elapsedMs ?? 0
       dumpRun(i, {
         run: i + 1,
