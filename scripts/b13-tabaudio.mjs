@@ -71,6 +71,8 @@ const opts = {
   loud: false,
   fake: false,
   rung: 'raw',
+  resamp: '',
+  signal: 'tones',
 }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6)
@@ -82,6 +84,8 @@ for (const a of process.argv.slice(2)) {
   else if (a === '--loud') opts.loud = true
   else if (a === '--fake') opts.fake = true
   else if (a.startsWith('--rung=')) opts.rung = a.slice(7)
+  else if (a.startsWith('--resamp=')) opts.resamp = a.slice(9)
+  else if (a.startsWith('--signal=')) opts.signal = a.slice(9)
 }
 
 let bin = process.env.CHROME_BIN
@@ -92,106 +96,20 @@ if (!bin) {
 }
 mkdirSync(opts.out, { recursive: true })
 
-/** Octave centres, then the two channel markers. All integer-cycle in 4 s. */
-const TONES = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-const MARK_L = 3000
-const MARK_R = 5000
-
 /**
  * Built in the page so the generator and the reference analysis are the SAME
  * buffer — a reference computed a second way is a second bug waiting.
  * Schroeder phases keep the crest factor down so twelve tones can be loud
  * enough to sit far above any noise floor without ever clipping.
  */
-const SIGNAL_SRC = `
-  const TONES = ${JSON.stringify(TONES)}
-  const MARK_L = ${MARK_L}, MARK_R = ${MARK_R}
-  const LOOP_S = 4
-  function buildSignal(rate) {
-    const n = Math.round(LOOP_S * rate)
-    const L = new Float32Array(n), R = new Float32Array(n)
-    const all = TONES.length + 1
-    const phase = (k) => (Math.PI * k * k) / all      // Schroeder
-    const add = (buf, f, k, amp) => {
-      const w = (2 * Math.PI * f) / rate
-      const p = phase(k)
-      for (let i = 0; i < n; i++) buf[i] += amp * Math.sin(w * i + p)
-    }
-    TONES.forEach((f, k) => { add(L, f, k, 1); add(R, f, k, 1) })
-    add(L, MARK_L, TONES.length, 1)
-    add(R, MARK_R, TONES.length, 1)
-    let peak = 0
-    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]))
-    const g = 0.8 / peak
-    for (let i = 0; i < n; i++) { L[i] *= g; R[i] *= g }
-    return { L, R, rate, n }
-  }
-  /**
-   * Goertzel magnitude, in dBFS, of one frequency over one window. Exact for a
-   * tone that completes whole cycles in the window, which every tone here does,
-   * so no FFT and no window function is needed and none is used.
-   */
-  function toneDb(buf, from, len, f, rate) {
-    const k = Math.round((len * f) / rate)
-    const w = (2 * Math.PI * k) / len
-    const c = 2 * Math.cos(w)
-    let s1 = 0, s2 = 0
-    for (let i = 0; i < len; i++) { const s = buf[from + i] + c * s1 - s2; s2 = s1; s1 = s }
-    const re = s1 - s2 * Math.cos(w), im = s2 * Math.sin(w)
-    const mag = (2 * Math.sqrt(re * re + im * im)) / len
-    return 20 * Math.log10(Math.max(mag, 1e-12))
-  }
-  /**
-   * Average each tone over windows spread through the whole signal.
-   *
-   * THE WINDOW IS THE LOOP, 4 s, and that is not a round number chosen for
-   * comfort. Goertzel is exact only when the tone completes a whole number of
-   * cycles in the window: at a 1 s window, 31.25 Hz lands a quarter of a bin
-   * off and reads 1.0 dB low, 62.5 Hz reads 4.0 dB low — scalloping loss, an
-   * artefact of the ruler. Those two tones ARE the bass this task is about, so
-   * a ruler that mis-reads them by 4 dB cannot be used to judge a complaint
-   * about bass. At 4 s every tone here is an exact bin and the loss is zero.
-   *
-   * skipS seconds are dropped from each end because a take's edges are their
-   * own subject (H5, B12); the reference passes 0, having no edges.
-   */
-  function spectrum(L, R, rate, skipS) {
-    const skip = Math.round((skipS === undefined ? 1 : skipS) * rate)
-    const win = LOOP_S * rate
-    const usable = Math.min(L.length, R.length) - 2 * skip
-    if (usable < win) return null
-    const count = Math.max(1, Math.min(20, Math.floor(usable / win)))
-    // Spread the windows across the usable span without running off its end.
-    const step = count > 1 ? Math.floor((usable - win) / (count - 1)) : 0
-    const acc = {}
-    const names = [...TONES, MARK_L, MARK_R]
-    for (const f of names) acc[f] = { l: [], r: [] }
-    for (let i = 0; i < count; i++) {
-      const at = skip + i * step
-      for (const f of names) {
-        acc[f].l.push(toneDb(L, at, win, f, rate))
-        acc[f].r.push(toneDb(R, at, win, f, rate))
-      }
-    }
-    const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length
-    const out = {}
-    for (const f of names) out[f] = { l: Math.round(mean(acc[f].l) * 10) / 10, r: Math.round(mean(acc[f].r) * 10) / 10 }
-    let sum = 0, peak = 0
-    for (let i = 0; i < L.length; i++) { sum += L[i] * L[i]; peak = Math.max(peak, Math.abs(L[i])) }
-    out.__rmsDb = Math.round(20 * Math.log10(Math.max(Math.sqrt(sum / L.length), 1e-12)) * 10) / 10
-    out.__peak = Math.round(peak * 1000) / 1000
-    out.__windows = count
-    out.__rate = rate
-    return out
-  }
-`
+import { MARK_L, MARK_R, SIGNAL_SRC, TONES } from './b13-signal.mjs'
 
 /** Start the tones playing in the page and keep them playing. */
 const START_SIGNAL = `(async () => {
   ${SIGNAL_SRC}
   const ctx = new AudioContext()
   await ctx.resume()
-  const sig = buildSignal(ctx.sampleRate)
+  const sig = ${JSON.stringify(opts.signal)} === 'program' ? buildProgram(ctx.sampleRate) : buildSignal(ctx.sampleRate)
   const buf = ctx.createBuffer(2, sig.n, ctx.sampleRate)
   buf.copyToChannel(sig.L, 0); buf.copyToChannel(sig.R, 1)
   const src = ctx.createBufferSource()
@@ -362,7 +280,10 @@ const OPUS_FLOOR = `(async () => {
 })()`
 
 async function runVariant(name, urlSuffix) {
-  const url = opts.url + (opts.url.includes('?') ? '&' : '?') + urlSuffix
+  // B13(3): `--resamp=sinc` exports through the band-limited interpolator
+  // instead of the shipped Hermite. Same take, same signal, different export.
+  const extra = [urlSuffix, opts.resamp ? `resamp=${opts.resamp}` : ''].filter(Boolean).join('&')
+  const url = opts.url + (extra ? (opts.url.includes('?') ? '&' : '?') + extra : '')
   const args = [
     `--remote-debugging-port=${DEBUG_PORT}`,
     `--user-data-dir=${profile}-${name}`,
@@ -597,7 +518,9 @@ async function runVariant(name, urlSuffix) {
      * 3 kHz marker settles it: it is 20-plus dB above its own channel's noise
      * when our signal is what was recorded, and buried when it is not.
      */
-    const capSpec = v.captured?.spectrum
+    // The marker check is a TONE check. Program material has no 3 kHz marker in
+    // it, so running it there would report "no signal" on a perfectly good take.
+    const capSpec = opts.signal === 'program' ? null : v.captured?.spectrum
     if (capSpec && v.reference) {
       const markerL = capSpec[3000]?.l
       const neighbourFloor = Math.max(capSpec[4000]?.l ?? -120, capSpec[2000]?.l ?? -120)
@@ -674,7 +597,7 @@ async function runVariant(name, urlSuffix) {
       )
       if (typeof b64 === 'string' && b64.length > 0) {
         const ext = v.exported.name.endsWith('.webm') ? 'webm' : 'mp4'
-        const path = join(opts.out, `b13-rung-${opts.rung}-${name}.${ext}`)
+        const path = join(opts.out, `b13-rung-${opts.rung}${opts.resamp ? '-' + opts.resamp : ''}-${name}.${ext}`)
         writeFileSync(path, Buffer.from(b64, 'base64'))
         v.file = path
       }
@@ -739,7 +662,14 @@ try {
   }
 
   const first = Object.values(report.variants)[0]
-  if (first?.gates?.capturedOurSignal === false) {
+  if (opts.signal === 'program') {
+    console.log(
+      `\n  PROGRAM MATERIAL: no tone table for this run — it exists to be LISTENED to. ` +
+        `The files are in ${opts.out}. The measurement of what the resampler costs is the isolated ` +
+        `sweep (docs/FLAGS.md, ?resamp=), not this take: an image that folds back into the same ` +
+        `octave as the signal cannot be separated from it by any spectrum of the total.`,
+    )
+  } else if (first?.gates?.capturedOurSignal === false) {
     console.log(
       `\n  !! THE TAB-AUDIO CHANNEL RECORDED NO SIGNAL AT ALL ` +
         `(L-only 3 kHz marker at ${first.signalCheck?.markerL} dBFS, reference ` +
