@@ -189,6 +189,28 @@ const BARE_TIMER = (ms, periodMs) => `
 })()
 `
 
+/**
+ * THE SECOND CONTROL: a worker posting the same beat at the same rate, with an
+ * EMPTY main-thread handler. Whatever this costs is the floor of ANY worker-clock
+ * design — it is the price of waking the main thread, not of measuring anything —
+ * and the difference between it and the sampler is the only part I can optimise.
+ */
+const BARE_BEAT = (ms, periodMs) => `
+(async () => {
+  const src = 'let s=0,t=null,p=' + ${periodMs} + ';onmessage=(e)=>{if(e.data.go){const b=performance.now();' +
+    '(function tick(){const n=performance.now();s++;postMessage(performance.timeOrigin+b+s*p);' +
+    'let x=b+(s+1)*p; if(x<=n){s=Math.ceil((n-b)/p);x=b+(s+1)*p} t=setTimeout(tick,x-n)})()}else{clearTimeout(t);close()}}'
+  const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })))
+  let n = 0
+  w.onmessage = () => { n++ }
+  w.postMessage({ go: true })
+  await new Promise((r) => setTimeout(r, ${ms}))
+  w.postMessage({ go: false })
+  w.terminate()
+  return { summary: null, beats: n }
+})()
+`
+
 const IDLE = (ms, opts) => `
 (async () => {
   ${opts ? `const run = await window.__inoutLatenessStart(${JSON.stringify(opts)})` : ''}
@@ -240,7 +262,8 @@ async function laneCost(chrome, out) {
   // and so is pure cost during a take).
   const configs = [
     { label: 'off', opts: null },
-    { label: `bare setInterval(${COST_PERIODS[0]})`, bare: COST_PERIODS[0] },
+    { label: `control: bare setInterval(${COST_PERIODS[0]})`, bare: COST_PERIODS[0] },
+    { label: `control: bare worker beat ${COST_PERIODS[0]}ms`, bareBeat: COST_PERIODS[0] },
     ...COST_PERIODS.map((periodMs) => ({ label: `${periodMs}ms`, opts: { periodMs, owners: false } })),
     { label: `${COST_PERIODS[0]}ms+owners`, opts: { periodMs: COST_PERIODS[0], owners: true } },
   ]
@@ -249,7 +272,11 @@ async function laneCost(chrome, out) {
     for (const c of configs) {
       const before = await metrics()
       const r = await chrome.evaluate(
-        c.bare ? BARE_TIMER(windowMs, c.bare) : IDLE(windowMs, c.opts),
+        c.bare
+          ? BARE_TIMER(windowMs, c.bare)
+          : c.bareBeat
+            ? BARE_BEAT(windowMs, c.bareBeat)
+            : IDLE(windowMs, c.opts),
         windowMs + 60_000,
       )
       const after = await metrics()
@@ -259,7 +286,7 @@ async function laneCost(chrome, out) {
   }
   const idle = median(busy.get('off'))
   const rows = configs
-    .filter((c) => c.opts)
+    .filter((c) => c.label !== 'off')
     .map((c) => ({
       config: c.label,
       busyMsPerSec: r3(median(busy.get(c.label))),
