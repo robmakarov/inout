@@ -431,7 +431,29 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     }
   }
 
-  /* 4. RESCUE — the dead-tap revival is a rescue, and a rescue is a fault. */
+  /* 4. RESCUE — WHAT THE DEAD TAP COST, NOT HOW OFTEN WE TRIED (task G6(g)).
+
+        THIS DIMENSION WAS UNPASSABLE, and it is worth saying exactly how. It
+        graded revive ATTEMPTS: any burst after the warm-up was a fail. But a
+        revive fires after seconds of pure digital zeros on a track that is live
+        and unmuted, and from inside the tap a paused tab and a dead tap look
+        identical — so a quiet source produced attempts, attempts produced red,
+        and every honest long take was convicted. Measured on rec_gpsoujs2sydf:
+        63 attempts across 15 silent runs graded RED when every single run was a
+        quiet tab (Robert confirmed the silence was real). It made A1's gate 2
+        unreadable for a day.
+
+        The evidence that separates the two cases is `revive-recovered`, which
+        capture now records (measuredAudio.ts): sound returning within a second
+        of a tap rebuild is THAT rebuild's doing — the source had been playing
+        all along and the zeros before it are audio the take LOST. Sound that
+        returns later is a source that started playing, and a rebuild into a
+        source that stays quiet cost nothing.
+
+        So: convict on recovered loss. A permanently dead tap is not lost here —
+        `audio-continuity` above already owns it through `silentTailMs`, which
+        is the same fault measured as what it cost rather than as how hard we
+        fought it. */
   {
     const measured = audio.filter(silenceMeasured)
     if (!measured.length) {
@@ -448,17 +470,36 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
       const convicting: string[] = []
       const notes: string[] = []
       for (const c of measured) {
-        const bursts = reviveBursts(c.diagnostics?.events)
-        const late = bursts.filter((b) => b.runStartMs > WARMUP_MS)
+        const events = c.diagnostics?.events ?? []
+        const bursts = reviveBursts(events)
         if (!bursts.length) continue
-        if (late.length) bad.push(c.kind)
         const attempts = bursts.reduce((n, b) => n + b.attempts, 0)
-        const note =
+        // A rebuild that brought the sound back: the tap was dead while the
+        // source played, so the silent run before it is real lost audio.
+        const recovered = events.filter((e) => e.type === 'revive-recovered')
+        const late = recovered.filter((e) => e.atMs > WARMUP_MS)
+        if (late.length) {
+          bad.push(c.kind)
+          // What it COST: each recovery ends a silent run, and the run is the
+          // loss. Bound it by the burst that preceded the recovery.
+          const lost = late.map((e) => {
+            const burst = [...bursts].reverse().find((b) => b.firstMs <= e.atMs)
+            const from = burst ? burst.runStartMs : e.atMs
+            return `${dur(Math.max(0, e.atMs - from))} from ${secs(from)}`
+          })
+          convicting.push(
+            `${LABEL[c.kind]} lost ${lost.join(' and ')} — the tap was dead while the source ` +
+              `was playing, and a rebuild is what brought the sound back`,
+          )
+        }
+        notes.push(
           `${LABEL[c.kind]} ${bursts.length} revive burst${bursts.length === 1 ? '' : 's'} ` +
-          `(${attempts} attempts), ${late.length} after warm-up — ` +
-          `runs began ${bursts.map((b) => secs(b.runStartMs)).join(', ')}`
-        notes.push(note)
-        if (late.length) convicting.push(note)
+            `(${attempts} attempts), ${recovered.length} recovered sound — ` +
+            `runs began ${bursts.map((b) => secs(b.runStartMs)).join(', ')}` +
+            (recovered.length === 0
+              ? '; nothing was recovered, so the source itself was silent and no audio was lost'
+              : ''),
+        )
       }
       dims.push({
         id: 'rescue',

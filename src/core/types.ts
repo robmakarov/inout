@@ -79,6 +79,23 @@ export interface ChannelDiagnostics {
    * Written for every measured audio channel, mic included. Audio only.
    */
   audioTrack?: DeliveredAudioSettings
+  /**
+   * G6(h) — WHICH TAP CARRIED THE PCM, IN THE FILE.
+   *
+   * Two taps can record a measured audio channel and they do not lose the same
+   * things: the worklet tap drops about ten per cent of a take's audio time on
+   * a machine whose cores are saturated (measured, audioTap.ts), the track tap
+   * drops none. Which one ran is decided at arm from platform capability and a
+   * flag, so it varies between two takes on the same build — and until now the
+   * take could not say which it got.
+   *
+   * That is not a nicety. A1's gate 2 asked whether the capture path had held
+   * across a 124.8-minute take, and could not verify its own premise from the
+   * artifact: the answer lived in a console line on a machine since closed.
+   * Written for every measured audio channel, so "the worklet ran here" is a
+   * fact about the recording rather than a recollection about the session.
+   */
+  audioTap?: 'track' | 'worklet'
 }
 
 /**

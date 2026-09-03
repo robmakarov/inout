@@ -158,17 +158,24 @@ describe('the take report card', () => {
     const card = buildReportCard(fiftyMinuteTake(), { wedgeJournal: [] })
     expect(card.verdict).toBe('red')
     expect(card.line).toContain('RED')
-    // The dimension that decides it names the channel and what it lost.
+    // The dimension that decides it names the channel and what it lost. G6(g):
+    // the headline used to lead with '6 revive bursts' — how hard we fought —
+    // and now leads with the 27.5 minutes of sound that went missing.
     expect(card.line).toContain('tab audio')
-    expect(card.line).toContain('6 revive bursts')
+    expect(card.line).toContain('27.5 min of 50.4 min')
+    expect(card.line).not.toContain('revive bursts')
     const audio = card.dimensions.find((d) => d.id === 'audio-continuity')!
     expect(audio.status).toBe('fail')
     expect(audio.kinds).toEqual(['system-audio'])
     expect(audio.detail).toContain('54.5%')
+    // G6(g): the take is convicted by what it LOST — 54.5 % of the channel gone
+    // to digital zeros, above. The rescue dimension still reports its 25
+    // attempts, but attempts no longer convict: nothing in this take's black box
+    // says a rebuild ever brought the sound back, and a tap that stayed dead is
+    // audio-continuity's fault to name, measured as its cost.
     const rescue = card.dimensions.find((d) => d.id === 'rescue')!
-    expect(rescue.status).toBe('fail')
     expect(rescue.detail).toContain('25 attempts')
-    expect(rescue.detail).toContain('5 after warm-up')
+    expect(rescue.status).toBe('pass')
   })
 
   it('grades the clock apart from the input — 5,647 ms of padding is not the fault', () => {
@@ -365,7 +372,7 @@ describe('the take report card', () => {
     expect(card.verdict).toBe('incomplete')
   })
 
-  it('warm-up is what separates an arming tap from A1', () => {
+  it('a late revive is not a fault by itself — recovering sound is (G6(g))', () => {
     const take = cleanTake()
     take.durationMs = 600_000
     for (const c of take.channels) c.durationMs = 600_000
@@ -377,14 +384,79 @@ describe('the take report card', () => {
     expect(buildReportCard(early, { wedgeJournal: [] }).dimensions.find((d) => d.id === 'rescue')!.status).toBe(
       'pass',
     )
+    // A rebuild late in a take, into a source that stays quiet: the tab was
+    // paused, nothing was lost, and this used to be an automatic red.
     const late = { ...take, channels: [...take.channels] }
     late.channels[1] = {
       ...take.channels[1],
       diagnostics: { anchor, events: [{ atMs: WARMUP_MS + 30_000, type: 'revive' }] },
     }
     expect(buildReportCard(late, { wedgeJournal: [] }).dimensions.find((d) => d.id === 'rescue')!.status).toBe(
-      'fail',
+      'pass',
     )
+    // The same rebuild, with the sound coming back on the other side of it: the
+    // source was playing all along and the tap was not hearing it.
+    const dead = { ...take, channels: [...take.channels] }
+    dead.channels[1] = {
+      ...take.channels[1],
+      diagnostics: {
+        anchor,
+        events: [
+          { atMs: WARMUP_MS + 30_000, type: 'revive' },
+          { atMs: WARMUP_MS + 30_400, type: 'revive-recovered' },
+        ],
+      },
+    }
+    const deadDim = buildReportCard(dead, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'rescue',
+    )!
+    expect(deadDim.status).toBe('fail')
+    expect(deadDim.kinds).toEqual(['mic'])
+    expect(deadDim.headline).toContain('the tap was dead while the source was playing')
+  })
+
+  /**
+   * THE GATE FOR G6(g), and it is the take that made A1's gate 2 unreadable for
+   * a day: rec_gpsoujs2sydf, 124.8 minutes, 63 revive attempts across 15 silent
+   * runs, every one of them a quiet tab (Robert confirmed the silence was real).
+   * The old dimension graded attempts and so it graded this RED. Nothing was
+   * lost, so nothing may convict.
+   */
+  it('the 15-run quiet-tab take grades GREEN on rescue (G6(g) gate)', () => {
+    const ms = 7_488_000 // 124.8 minutes
+    const events: { atMs: number; type: string }[] = []
+    // 15 silent runs, spread across the take, ~4 attempts each = 63, and not one
+    // of them recovers anything: the tab simply had nothing playing.
+    let n = 0
+    for (let run = 0; run < 15; run++) {
+      const start = 120_000 + run * 460_000
+      for (let a = 0; a < (run < 3 ? 5 : 4) && n < 63; a++, n++) {
+        events.push({ atMs: start + a * 6_000 * 2 ** a, type: 'revive' })
+      }
+    }
+    expect(events.length).toBe(63)
+    const take: Recording = {
+      id: 'rec_gpsoujs2sydf',
+      createdAt: 1_756_700_000_000,
+      durationMs: ms,
+      channels: [
+        ch({ kind: 'screen', media: 'video', fps: 30, width: 2560, height: 1440, durationMs: ms }),
+        ch({
+          kind: 'system-audio',
+          media: 'audio',
+          durationMs: ms,
+          // A quiet tab is silent at the end too, and that is honest: the tail
+          // band is audio-continuity's, and it is under it here.
+          diagnostics: { anchor, silentTailMs: 4_000, revivals: 63, events },
+        }),
+      ],
+    }
+    const rescue = buildReportCard(take, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'rescue',
+    )!
+    expect(rescue.status).toBe('pass')
+    expect(rescue.detail).toContain('63 attempts')
+    expect(rescue.detail).toContain('no audio was lost')
   })
 })
 
