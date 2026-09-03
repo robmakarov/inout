@@ -55,6 +55,8 @@ import {
 import { exportRecording } from '@core/compose'
 import { getLastRenderStats } from '@core/compose/render'
 import { getLastScratchStats } from '@core/compose/scratch'
+import { getLastChunkedRenderStats } from '@core/compose/pipeline'
+import { chunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { constantQualityQp, setConstantQuality } from '@core/compose/constantQuality'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
 import { newId } from '@core/id'
@@ -152,6 +154,25 @@ interface OutputReport {
    */
   scratchHeldMB: number | null
   scratchWrittenMB: number | null
+  /**
+   * J1 — DID THE CHUNKED PATH ACTUALLY RUN? An A/B on `?chunked=` is worth
+   * nothing if the "on" arm quietly declined and rendered unbroken, and
+   * declining is exactly what that path is designed to do whenever anything is
+   * not right. Null means the unbroken render ran; a row means it did not, and
+   * says how many chunks it made and how many it found.
+   */
+  chunked: {
+    chunks: number
+    reused: number
+    rendered: number
+    audioReused: boolean
+    renderMs: number
+    concatMs: number
+    videoPacketsCopied: number
+    reencodedFrames: number
+  } | null
+  /** What the page was asked for, so a run cannot misreport its own arm. */
+  chunkedFlag: boolean
   samples: Sample[]
 }
 
@@ -638,6 +659,7 @@ export async function runNativeRender(
     const wallMs = Math.round(performance.now() - t0)
     const rs = getLastRenderStats()
     const ss = getLastScratchStats()
+    const cs = getLastChunkedRenderStats()
     // Rate over the first and last half of the RENDER phase, which is where a
     // growing cost would show as a slowdown rather than as a crash.
     const rendering = samples.filter((s) => s.ratio > 0.05 && s.ratio < 0.95)
@@ -674,6 +696,19 @@ export async function runNativeRender(
         : null,
       scratchHeldMB: ss ? MB(ss.maxOutstandingBytes) : null,
       scratchWrittenMB: ss ? MB(ss.bytesWritten) : null,
+      chunked: cs
+        ? {
+            chunks: cs.chunks,
+            reused: cs.reused,
+            rendered: cs.rendered,
+            audioReused: cs.audioReused,
+            renderMs: cs.renderMs,
+            concatMs: cs.concatMs,
+            videoPacketsCopied: cs.videoPacketsCopied,
+            reencodedFrames: cs.reencodedFrames,
+          }
+        : null,
+      chunkedFlag: chunkedRenderEnabled(),
       samples,
     })
   }
