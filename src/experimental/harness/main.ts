@@ -758,6 +758,29 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'chunkrender',
+    title: 'J1 — does the render REMEMBER? Chunk count and wall clock, on a real encoder.',
+    detail:
+      'Manufactures a take (R2\'s own fixture builder, cached in OPFS) and runs SIX lanes over it with the production code: the unbroken render as the control, the chunked render cold, the same export again, an edit confined to one span, the undo, and a background change. Then it kills the export early/mid/late — by leaving on disk exactly the chunks a dead tab would have published — and resumes, demuxing every file it produces to check the frame count, the duration and the certification rather than believing the exporter. {"takeSec":300} is a five-minute take; {"takeSec":1200} is the shape where "the difference is minutes" is a measurement rather than an extrapolation. {"skipControl":true} drops the slow unbroken lane when only the cache is in question.',
+    run: async (args) => {
+      const { runChunkRender } = await import('../perf/chunkRender')
+      return runChunkRender({
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        output: typeof args?.output === 'string' ? (args.output as never) : undefined,
+        audioChannels: typeof args?.audioChannels === 'number' ? args.audioChannels : undefined,
+        camera: args?.camera === true,
+        skipControl: args?.skipControl === true,
+        killAt: Array.isArray(args?.killAt) ? (args.killAt as number[]) : undefined,
+        rebuild: args?.rebuild === true,
+        buildBudgetSec: typeof args?.buildBudgetSec === 'number' ? args.buildBudgetSec : undefined,
+      })
+    },
+  },
+  {
     id: 'nativerender',
     title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
     detail:
