@@ -39,6 +39,7 @@ function parseArgs(argv) {
   let cold = 1
   let headed = false
   let engine = ''
+  let extraQuery = ''
   // O5-flip A/B lever: --no-composite restores the pre-O5-flip rig (channels
   // only, no live composite alongside). The oracle records one by default now
   // because every real take has one; this is how that change is checked
@@ -65,6 +66,11 @@ function parseArgs(argv) {
     else if (a.startsWith('--recordMs=')) recordMs = Number(a.slice(11))
     else if (a.startsWith('--trimMs=')) trimMs = Number(a.slice(9))
     else if (a.startsWith('--engine=')) engine = a.slice(9)
+    // A/B A FLAG ON ONE BUILD, not across two (the lesson E2 wrote into
+    // oracle-load): two builds differ by more than the flag, and on a machine
+    // this size the difference between them is mostly the machine. Passed
+    // straight to the page, e.g. `--query=chunked=0`.
+    else if (a.startsWith('--query=')) extraQuery = a.slice(8)
     else if (a.startsWith('--dumpDir=')) dumpDir = a.slice(10)
     else if (a.startsWith('--port=')) {
       console.error(
@@ -212,7 +218,7 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-async function runOracleOnce(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
+async function runOracleOnce(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483, extraQuery = '') {
   const cdpArgs = [
     join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
     'oracle',
@@ -223,7 +229,8 @@ async function runOracleOnce(port, headed, engine, composite = true, recordMs = 
   // Which live-composite engine made the file under test (O4 step 2). An
   // unedited take IS the composite, so this is the one knob that changes what
   // the sync and tail bands are actually measuring.
-  if (engine) cdpArgs.push(`--query=engine=${engine}`)
+  const query = [engine ? `engine=${engine}` : '', extraQuery].filter(Boolean).join('&')
+  if (query) cdpArgs.push(`--query=${query}`)
   const result = await run(process.execPath, cdpArgs, { quiet: true })
   if (!result.ok) {
     return {
@@ -257,7 +264,7 @@ async function runOracleOnceGated(port, headed, engine, composite = true, record
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
     const t0 = Date.now()
-    const { error, report } = await runOracleOnce(port, headed, engine, composite, recordMs, trimMs)
+    const { error, report } = await runOracleOnce(port, headed, engine, composite, recordMs, trimMs, extraQuery)
     const elapsed = Date.now() - t0
     if (error || !report) {
       last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
