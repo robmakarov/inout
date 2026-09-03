@@ -109,8 +109,8 @@ createRoot(document.getElementById('root')!).render(
    */
   g.__inoutEditorReport = async () => {
     const { buildEditorCard } = await import('@core/report')
-    const { lastEditorLateness } = await import('@core/lateness')
-    return buildEditorCard(lastEditorLateness())
+    const { lastEditorLateness, lastEditorLatenessTake } = await import('@core/lateness')
+    return buildEditorCard(lastEditorLateness(), lastEditorLatenessTake())
   }
   /**
    * G7 — SAMPLE THIS THREAD FOR N MILLISECONDS, ANYWHERE, AND HAND BACK THE

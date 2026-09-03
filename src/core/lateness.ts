@@ -449,13 +449,29 @@ function describeOwner(entry: PerformanceEntry, t0: number): LatenessOwner {
         }`.trim()
       : attribution?.containerSrc || attribution?.containerName
         ? `${attribution.containerType ?? 'frame'} ${attribution.containerName ?? attribution.containerSrc}`
-        : entry.entryType
+        : // A long animation frame with NO script long enough to be named is
+          // still worth telling apart: the browser reports where the frame's
+          // time went, and "the render took 163 ms" and "something ran for
+          // 163 ms" send a reader to different files.
+          `${entry.entryType}${phaseOf(e)}`
   return {
     atMs: Math.round(entry.startTime - t0),
     durationMs: round(entry.duration),
     ...(e.blockingDuration !== undefined ? { blockingMs: round(e.blockingDuration) } : null),
     name,
   }
+}
+
+/**
+ * Which half of a long animation frame it was. `renderStart` splits the frame:
+ * before it is script and task work, after it is style, layout and paint. Empty
+ * when the browser reports neither (a `longtask` entry has no phases).
+ */
+function phaseOf(e: PerformanceEntry & { renderStart?: number }): string {
+  if (!e.renderStart || !e.duration) return ''
+  const renderMs = e.startTime + e.duration - e.renderStart
+  const scriptMs = e.renderStart - e.startTime
+  return renderMs > scriptMs ? ' (render/style)' : ' (script/task)'
 }
 
 /** The last path segment plus its query-less name — a bundled chunk's full URL
@@ -471,6 +487,7 @@ function trimUrl(url?: string): string {
 
 let editorSummary: LatenessSummary | null = null
 let editorRun: LatenessRun | null = null
+let editorRecordingId: string | null = null
 
 /**
  * G7: the editor's FIRST 15 SECONDS, which is where B10 lives — the size probe
@@ -478,9 +495,10 @@ let editorRun: LatenessRun | null = null
  * Started on the editor's mount, stopped by itself, kept for
  * `__inoutEditorReport()`.
  */
-export function startEditorLateness(): () => void {
+export function startEditorLateness(recordingId?: string): () => void {
   editorRun?.stop()
   editorSummary = null
+  editorRecordingId = recordingId ?? null
   const run = startLateness({
     autoStopMs: EDITOR_WINDOW_MS,
     onDone: (s) => {
@@ -496,4 +514,10 @@ export function startEditorLateness(): () => void {
 
 export function lastEditorLateness(): LatenessSummary | null {
   return editorSummary
+}
+
+/** Which take was open while that reading was taken — the editor's card says
+ *  so, because "the editor stalled" is not a fact about the editor alone. */
+export function lastEditorLatenessTake(): string | null {
+  return editorRecordingId
 }

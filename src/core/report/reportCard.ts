@@ -16,9 +16,16 @@
  *  1. NO SCORE FOR A MEASUREMENT NOT TAKEN (R1's ruling, generalised). A
  *     dimension with no evidence reads `unmeasured` and says WHY. It never
  *     silently passes, and a card carrying one is `incomplete`, not `green`.
- *  2. IT COSTS THE TAKE NOTHING. Everything here is computed from what is
- *     already persisted, at stop or later on demand. Nothing samples, polls or
- *     allocates while the recorder runs.
+ *  2. IT COSTS THE TAKE (ALMOST) NOTHING, AND THE EXCEPTION IS MEASURED.
+ *     Everything here is computed from what is already persisted, at stop or
+ *     later on demand. ONE dimension samples while the recorder runs —
+ *     `lateness` (G7), because "how late did the main thread run" cannot be
+ *     derived from anything the take already holds — and it is the exception
+ *     that proves the rule: its clock is in a worker, the main thread does one
+ *     subtraction per beat, it keeps a histogram rather than a list, and it
+ *     carries its own measured cost on the card (`selfCostMsPerSec`) so this
+ *     claim is a number and not a promise. Everything else still samples,
+ *     polls and allocates nothing.
  *  3. IT MUST NOT CRY WOLF. The user-facing banner already learned this twice
  *     (app/lib/channels.ts) — a report that reads RED on a take that was fine
  *     is a report nobody looks at, and then a real loss goes unread. Every

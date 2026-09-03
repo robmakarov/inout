@@ -20,9 +20,14 @@
  *           ONE page load so nothing else differs. Medians of N repetitions.
  *   take    THE CARD. Record a real take through the product, stop it, and read
  *           the `lateness` dimension off `__inoutReport()`.
- *   editor  B10, AS A NUMBER. The editor samples its own first 15 s, which is
- *           where the export panel encodes 300 frames on the main thread
- *           (~11 s in). `__inoutEditorReport()` is the reading B10 has to move.
+ *   editor  THE EDITOR'S CARD. The editor samples its own first 15 s on mount
+ *           and stops itself; `__inoutEditorReport()` grades it.
+ *   drag    B10, AS A NUMBER. The editor's own 15 s window with a DRAG running
+ *           through it — B10's stalls (35-201 ms) are drag stalls: the size
+ *           probe encodes 300 frames on the main thread while the person is
+ *           moving the playhead, and a probe measured without a drag
+ *           interleaves and hides. Same pointer cadence as
+ *           scripts/editor-drag-cost.mjs, so the two rigs are comparable.
  *
  *   node scripts/g7-lateness.mjs                      # all four, own dev server
  *   node scripts/g7-lateness.mjs --lanes=editor
@@ -45,10 +50,12 @@ const arg = (name, dflt) => {
   const hit = args.find((a) => a.startsWith(`--${name}=`))
   return hit ? hit.slice(name.length + 3) : dflt
 }
-const LANES = arg('lanes', 'clamp,cost,take,editor').split(',')
+const LANES = arg('lanes', 'clamp,cost,take,drag').split(',')
 const TAKE_SEC = Number(arg('take', '20'))
 const CLAMP_SEC = Number(arg('clamp', '20'))
 const COST_REPS = Number(arg('reps', '3'))
+const COST_SEC = Number(arg('costsec', '8'))
+const DRAG_SEC = Number(arg('drag', '13'))
 const EXTERNAL = arg('url', '')
 const QUERY = arg('query', 'synthetic=1')
 
@@ -146,20 +153,31 @@ const CLAMP = (ms, period) => `
  * is what lets the beats be delivered at all: without it the queue would drain
  * after the measurement and the sampler would look free.
  */
-const COST = (units, sampling) => `
+const COST = (ms, sampling) => `
 (async () => {
   const work = () => { let x = 0; for (let i = 0; i < 120000; i++) x += Math.sqrt(i); return x }
   ${sampling ? 'const run = await window.__inoutLatenessStart()' : ''}
-  for (let i = 0; i < 5; i++) work()   // warm the JIT, so rep 1 is not the slow one
+  for (let i = 0; i < 20; i++) work()   // warm the JIT, so rep 1 is not the slow one
   const t0 = performance.now()
-  let sink = 0
-  for (let i = 0; i < ${units}; i++) {
+  let units = 0, sink = 0
+  // FIXED WALL, COUNTED WORK — not fixed work and a measured wall. A window
+  // long enough to hold hundreds of beats is what makes the difference bigger
+  // than the noise; the first cut of this lane ran 60 units in ~200 ms, where
+  // the whole quantity being measured is a few hundredths of a millisecond.
+  while (performance.now() - t0 < ${ms}) {
     sink += work()
+    units++
     await new Promise((r) => setTimeout(r, 2))
   }
   const wallMs = performance.now() - t0
   ${sampling ? 'const summary = run.stop()' : 'const summary = null'}
-  return { wallMs: Math.round(wallMs * 10) / 10, units: ${units}, sink: sink > 0, summary }
+  return {
+    units,
+    wallMs: Math.round(wallMs * 10) / 10,
+    perSec: Math.round((units / (wallMs / 1000)) * 100) / 100,
+    sink: sink > 0,
+    summary,
+  }
 })()
 `
 
@@ -194,26 +212,28 @@ async function laneCost(chrome, out) {
   if (!ready) throw new Error('__inoutLatenessStart is not on this build — cost cannot be measured')
   const on = []
   const off = []
-  const units = 60
+  const windowMs = COST_SEC * 1000
   for (let i = 0; i < COST_REPS; i++) {
     // Alternating, always off first, so a machine that warms or throttles over
     // the run cannot masquerade as the cost of sampling.
-    const a = await chrome.evaluate(COST(units, false), 180_000)
-    off.push(a.wallMs)
-    const b = await chrome.evaluate(COST(units, true), 180_000)
-    on.push(b.wallMs)
+    const a = await chrome.evaluate(COST(windowMs, false), 180_000)
+    off.push(a.perSec)
+    const b = await chrome.evaluate(COST(windowMs, true), 180_000)
+    on.push(b.perSec)
     if (b.summary) out.costSummary = b.summary
   }
   const mOn = median(on)
   const mOff = median(off)
-  const perSec = ((mOn - mOff) / mOn) * 1000
+  // Work units lost per second of wall clock, expressed as the milliseconds of
+  // that second they represent. This is the gate's own unit.
+  const perSec = (1 - mOn / mOff) * 1000
   out.cost = {
-    units,
+    windowMs,
     reps: COST_REPS,
-    offWallMs: off.map(r1),
-    onWallMs: on.map(r1),
-    medianOffMs: r1(mOff),
-    medianOnMs: r1(mOn),
+    offUnitsPerSec: off.map(r1),
+    onUnitsPerSec: on.map(r1),
+    medianOff: r1(mOff),
+    medianOn: r1(mOn),
     costMsPerSec: r3(perSec),
     selfReportedMsPerSec: out.costSummary?.selfCostMsPerSec ?? null,
     samplesSeen: out.costSummary?.samples ?? null,
@@ -221,9 +241,9 @@ async function laneCost(chrome, out) {
   }
   out.costVerdict =
     `sampling costs ${r3(perSec)} ms per second of main thread ` +
-    `(${r1(mOff)} ms of work → ${r1(mOn)} ms, median of ${COST_REPS}); ` +
+    `(${r1(mOff)} → ${r1(mOn)} work units/s, median of ${COST_REPS} × ${COST_SEC} s); ` +
     `the sampler's own reading: ${out.costSummary?.selfCostMsPerSec ?? '?'} ms/s over ` +
-    `${out.costSummary?.samples ?? '?'} samples`
+    `${out.costSummary?.samples ?? '?'} samples at ${out.costSummary?.periodMs ?? '?'} ms`
   console.error(`g7: ${out.costVerdict}`)
 }
 
@@ -244,6 +264,50 @@ async function laneTake(chrome, out) {
   out.take = { verdict: card?.verdict, line: card?.line, lateness: dim }
   out.takeVerdict = `take card ${card?.verdict}: lateness ${dim?.status} — ${dim?.detail}`
   console.error(`g7: ${out.takeVerdict}`)
+}
+
+/**
+ * THE DRAG, as the timeline's own handler sees one: pointerdown on the ruler,
+ * a stream of pointermove at pointer cadence, pointerup. Copied in shape from
+ * scripts/editor-drag-cost.mjs so the two rigs measure the same gesture — that
+ * script found B10's 35-201 ms stalls with its own in-page ticker, and this one
+ * reads them off the PRODUCT'S instrument instead.
+ */
+const DRAG = (ms) => `
+(async () => {
+  const el = document.querySelector('.tl__ruler')
+  if (!el) return { error: 'no timeline ruler — is the editor open?' }
+  const r = el.getBoundingClientRect()
+  const y = r.top + r.height / 2
+  const x0 = r.left + 8
+  const x1 = r.right - 8
+  const pd = (type, x) =>
+    el.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, pointerId: 1, isPrimary: true }))
+  pd('pointerdown', x0)
+  const t0 = performance.now()
+  let moves = 0
+  while (performance.now() - t0 < ${ms}) {
+    const phase = ((performance.now() - t0) % 4000) / 4000
+    pd('pointermove', x0 + (x1 - x0) * (phase < 0.5 ? phase * 2 : 2 - phase * 2))
+    moves++
+    await new Promise((res) => setTimeout(res, 16))
+  }
+  pd('pointerup', x1)
+  return { moves, ms: Math.round(performance.now() - t0) }
+})()
+`
+
+async function laneDrag(chrome, out) {
+  // The editor's sampler started on its own mount, so the drag has to begin
+  // INSIDE that window — which is the point: B10 is the size probe and a drag
+  // on the same thread at the same time.
+  for (let i = 0; i < 60; i++) {
+    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)) break
+    await sleep(250)
+  }
+  out.drag = await chrome.evaluate(DRAG(DRAG_SEC * 1000), 120_000)
+  await laneEditor(chrome, out)
+  out.dragVerdict = out.editorVerdict
 }
 
 async function laneEditor(chrome, out) {
@@ -330,7 +394,7 @@ async function main() {
       await quitChrome(chrome).catch(() => undefined)
       chrome = null
     }
-    if (LANES.some((l) => ['cost', 'take', 'editor'].includes(l))) {
+    if (LANES.some((l) => ['cost', 'take', 'editor', 'drag'].includes(l))) {
       chrome = await openChrome(false)
       await sleep(2500)
       const visible = await chrome.evaluate('document.visibilityState')
@@ -340,7 +404,10 @@ async function main() {
       }
       if (LANES.includes('cost')) await laneCost(chrome, out)
       if (LANES.includes('take')) await laneTake(chrome, out)
-      if (LANES.includes('editor')) await laneEditor(chrome, out)
+      // `drag` runs the editor lane itself — asking for both would grade the
+      // second 15 s window, which nothing sampled.
+      if (LANES.includes('drag')) await laneDrag(chrome, out)
+      else if (LANES.includes('editor')) await laneEditor(chrome, out)
     }
     console.log(JSON.stringify(out, null, 2))
   } finally {

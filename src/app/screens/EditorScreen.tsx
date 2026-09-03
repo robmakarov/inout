@@ -66,7 +66,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * after the editor opens. Stops itself; read afterwards with
    * `__inoutEditorReport()`. Agent/dev surface only — nothing here renders.
    */
-  useEffect(() => startEditorLateness(), [recording.id])
+  useEffect(() => startEditorLateness(recording.id), [recording.id])
   useEffect(() => {
     if (!pb.ready) return
     // Two frames: one for React to commit the elements, one for the browser to
