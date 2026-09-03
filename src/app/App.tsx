@@ -73,8 +73,10 @@ function Main() {
           .then((swept) => {
             if (swept.removed > 0) {
               console.info(
-                `[compose] swept ${swept.removed} expired render chunks, ` +
-                  `${(swept.freedBytes / 1048576).toFixed(1)} MB (J1)`,
+                `[compose] swept ${swept.removed} render chunks, ` +
+                  `${(swept.freedBytes / 1048576).toFixed(1)} MB freed; ` +
+                  `${(swept.heldBytes / 1048576).toFixed(1)} MB held of a ` +
+                  `${(swept.capBytes / 1048576).toFixed(0)} MB ceiling (J1)`,
               )
             }
           })

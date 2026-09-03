@@ -188,17 +188,30 @@ function bornAt(key: string, prefix: string): number {
 export async function sweepChunks(keep: ReadonlySet<string> = new Set()): Promise<{
   removed: number
   freedBytes: number
+  heldBytes: number
+  capBytes: number
 }> {
   const now = Date.now()
   let removed = 0
   let freedBytes = 0
+  const survivors: { key: string; size: number; touched: number }[] = []
+
   for (const f of await blobStore.list()) {
     const isPart = f.key.startsWith(CHUNK_PART_PREFIX)
     const isChunk = !isPart && f.key.startsWith(CHUNK_PREFIX)
     if (!isPart && !isChunk) continue
-    if (keep.has(f.key)) continue
-    if (isPart && now - bornAt(f.key, CHUNK_PART_PREFIX) < PART_TTL_MS) continue
-    if (isChunk && now - (await chunkTouchedAt(f.key)) < CHUNK_TTL_MS) continue
+    if (keep.has(f.key)) {
+      if (isChunk) survivors.push({ key: f.key, size: f.size, touched: Number.MAX_SAFE_INTEGER })
+      continue
+    }
+    const touched = isChunk ? await chunkTouchedAt(f.key) : 0
+    const expired = isPart
+      ? now - bornAt(f.key, CHUNK_PART_PREFIX) >= PART_TTL_MS
+      : now - touched >= CHUNK_TTL_MS
+    if (!expired) {
+      if (isChunk) survivors.push({ key: f.key, size: f.size, touched })
+      continue
+    }
     await blobStore.remove(f.key).then(
       () => {
         removed += 1
@@ -207,7 +220,51 @@ export async function sweepChunks(keep: ReadonlySet<string> = new Set()): Promis
       () => undefined,
     )
   }
-  return { removed, freedBytes }
+
+  /**
+   * AND A CEILING, BECAUSE AN EXPIRY IS NOT A BOUND. Chunks are worth real
+   * disk — they are the render, made early — but a day of takes can put a day
+   * of outputs on the disk before anything expires, and this is the one cost
+   * Robert has already ruled on out loud: "we must prevent junk from saving, it
+   * will fuck up users disks" (2026-08-30, after one orphan of 1,138 MB).
+   *
+   * The cap is a SHARE OF WHAT THIS ORIGIN MAY HAVE, asked of the browser
+   * rather than picked — so it is the same rule on a 128 GB laptop and on a
+   * full one, and it is not a length heuristic: a two-minute take and a
+   * two-hour take are held or evicted by the same arithmetic. Least recently
+   * used goes first, which for a content-addressed cache is exactly "the edit
+   * nobody has come back to".
+   */
+  const capBytes = await chunkCapBytes()
+  let heldBytes = survivors.reduce((n, f) => n + f.size, 0)
+  if (capBytes > 0 && heldBytes > capBytes) {
+    survivors.sort((a, b) => a.touched - b.touched)
+    for (const f of survivors) {
+      if (heldBytes <= capBytes) break
+      if (keep.has(f.key)) continue
+      await blobStore.remove(f.key).then(
+        () => {
+          removed += 1
+          freedBytes += f.size
+          heldBytes -= f.size
+        },
+        () => undefined,
+      )
+    }
+  }
+  return { removed, freedBytes, heldBytes, capBytes }
+}
+
+/** A quarter of what this origin may still store, or 0 when nobody will say. */
+const CHUNK_CAP_SHARE = 0.25
+async function chunkCapBytes(): Promise<number> {
+  try {
+    const est = await navigator.storage?.estimate?.()
+    const quota = est?.quota ?? 0
+    return quota > 0 ? Math.floor(quota * CHUNK_CAP_SHARE) : 0
+  } catch {
+    return 0
+  }
 }
 
 /**
