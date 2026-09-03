@@ -39,7 +39,8 @@
  * job as the positive control). A number that harms the take is a number that
  * changes, and the handoff carries the run.
  */
-import { elasticLogOpen, noteElastic } from './elasticLog'
+import { elasticLogOpen } from './elasticLog'
+import { passDoor } from './door'
 import { atLeast, type HardwareBlock, type PressureLevel, type PressureReading } from './pressure'
 import type { WorkPace } from './types'
 
@@ -288,16 +289,24 @@ function publish(t: number): void {
     const before = PACE_DUTY[previous.pace]
     const after = PACE_DUTY[state.pace]
     if (after !== before) {
-      noteElastic(
+      // M1 — THROUGH THE DOOR, which is now the only writer to that ledger.
+      // The dial is `work` and not one of Robert's four: the unseen work is not
+      // part of the take at all, which is exactly why it is the first thing
+      // given up and why the order can only be read if both are on one ledger.
+      passDoor(
         {
+          dial: 'work',
+          decidedBy: 'broker',
           layer: 'unseen',
           action: after < before ? 'shed' : 'restore',
           what: `background work ${previous.pace} → ${state.pace}`,
           why: state.why,
           ...(leaderBlock ? { block: leaderBlock } : null),
           ...(level ? { level } : null),
+          measured: { dutyBefore: before, dutyAfter: after },
+          nowMs: t,
         },
-        t,
+        () => undefined,
       )
     }
   }

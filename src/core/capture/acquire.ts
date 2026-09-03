@@ -912,8 +912,35 @@ async function repairDisplayAudio(track: MediaStreamTrack): Promise<void> {
     return
   }
   try {
-    await track.applyConstraints(RAW_DISPLAY_AUDIO)
-    const after = track.getSettings()
+    // M1 — through the door like every other change to a source. It is not one
+    // of Robert's four dials (nothing about the picture moves) and it is the
+    // one place a take's AUDIO is reconfigured after it is handed over, so the
+    // take says it happened: B13 is a live question about exactly this track's
+    // processing, and "ec/ns/agc were turned off at 0 ms" is evidence.
+    const after = await passDoor(
+      {
+        dial: 'quality',
+        decidedBy: 'geometry',
+        action: 'set',
+        what: 'tab audio re-asked for RAW (ec/ns/agc off)',
+        why: 'the wedge ladder floor hands back a processed loopback track',
+        measured: {
+          ecBefore: before.echoCancellation ?? null,
+          nsBefore: before.noiseSuppression ?? null,
+          agcBefore: before.autoGainControl ?? null,
+        },
+      },
+      async (ticket) => {
+        await constrainThroughDoor(ticket, track, RAW_DISPLAY_AUDIO)
+        const settings = track.getSettings()
+        ticket.note({
+          ec: settings.echoCancellation ?? null,
+          ns: settings.noiseSuppression ?? null,
+          agc: settings.autoGainControl ?? null,
+        })
+        return settings
+      },
+    )
     console.info(
       `[capture] raw tab audio applied on the track: ec=${after.echoCancellation ?? '?'} ` +
         `ns=${after.noiseSuppression ?? '?'} agc=${after.autoGainControl ?? '?'}`,

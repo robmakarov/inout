@@ -156,6 +156,13 @@ const SUSTAINED_TAKE_MIN_MS = 10_000
 /** B5 — how often the disk is asked how much room is left. */
 const DISK_CHECK_MS = 5_000
 /**
+ * M1 — how often the platform-adaptation witness looks at a track. One second,
+ * and it is a witness rather than a control loop: nothing acts on what it sees,
+ * so looking faster would only cost the take. Chrome's own adaptation is not a
+ * transient either — a surface it narrowed stays narrow.
+ */
+const ADAPT_CHECK_MS = 1_000
+/**
  * Deadlines on the stop path, for the same reason arming has them (note 3): a
  * recorder that never answers must not be able to freeze a finished take.
  */
@@ -357,6 +364,17 @@ interface ChannelRuntime {
   height?: number
   /** The rate this channel's file is being written at (F15). Absent = 30. */
   fps?: number
+  /**
+   * M1 — WHAT THIS TRACK LAST LOOKED LIKE WHEN SOMEBODY LOOKED ON PURPOSE.
+   *
+   * Chrome adapts a capture source on its own — it narrows a display surface or
+   * drops a camera's rate under load, and nothing asks us. That decision cannot
+   * be OWNED (it is the browser's), so the door's answer is to DETECT it: this
+   * is the last settings any decision of ours produced, and a difference from
+   * it at tick time is the platform having moved something. Undefined until the
+   * channel is activated.
+   */
+  seen?: { width?: number; height?: number; frameRate?: number }
   /** Capture-time witnesses from the measured path — persisted with the take. */
   diagnostics?: import('@core/types').ChannelDiagnostics
   stopped: Promise<void>
@@ -468,6 +486,8 @@ class Session implements CaptureSession {
   private sizeDifferingSinceMs: number | null = null
   /** B5 — the disk is asked every few seconds, not every tick. */
   private lastDiskCheckMs = 0
+  /** M1 — the platform-adaptation witness's own clock (see watchPlatformAdaptation). */
+  private lastAdaptCheckMs = 0
   /** B5 — the origin's storage usage at this take's FIRST sample, and when it
    *  was taken. The growth since is what this take has actually consumed. */
   private diskBaseline: { usageBytes: number; atMs: number } | null = null
@@ -1087,6 +1107,9 @@ class Session implements CaptureSession {
           return settings
         },
       )
+      // M1 — this is OUR change, so the platform-adaptation witness must not
+      // report it as Chrome's a second later.
+      ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
       console.info(
         `[capture] display ${before.frameRate ?? '?'} → ${after.frameRate ?? '?'} fps ` +
           `at ${after.width}×${after.height} (${reason})`,
@@ -1531,6 +1554,8 @@ class Session implements CaptureSession {
       // would be planned at one size and recorded at another.
       screenCh.width = after.width ?? screenCh.width
       screenCh.height = after.height ?? screenCh.height
+      // M1 — ours, not the platform's (watchPlatformAdaptation).
+      screenCh.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
       this.encoderPlan = this.planEncoders()
       console.info(
         `[capture] encoder budget: screen ${screen.width}x${screen.height} → ` +
@@ -2287,7 +2312,74 @@ class Session implements CaptureSession {
     this.emit({ type: 'tick', elapsedMs, remainingMs })
     if (remainingMs !== null && remainingMs <= 0) return this.autoStop()
     this.watchScreenSize()
+    this.watchPlatformAdaptation()
     this.watchDisk()
+  }
+
+  /**
+   * M1 — CHROME'S OWN CAPTURE ADAPTATION: DETECTED, BECAUSE IT CANNOT BE OWNED.
+   *
+   * The audit of 2026-09-02 counted seven adaptive systems and this is the
+   * seventh: the browser narrows or slows a capture source on its own
+   * (acquire.ts:467 and 614 are the two places the code already knows it
+   * happens), and no ladder, budget or watchdog of ours is involved. There is
+   * no door to route it through — nobody here decides it. What there can be is
+   * a witness, so that "the take was recorded at 24 fps" stops being a mystery
+   * in the numbers and becomes a line saying WHO did it.
+   *
+   * The comparison is against what OUR OWN last decision produced (`ch.seen`,
+   * written by every door application that touches this track), so a rate step
+   * we asked for is never reported as the platform's.
+   *
+   * ONE getSettings() PER VIDEO CHANNEL PER SECOND, on a tick that already runs
+   * four times a second for the timer. It is a dictionary copy, it happens on
+   * the thread that is NOT encoding, and it is the whole cost of the detector.
+   */
+  private watchPlatformAdaptation(): void {
+    const now = performance.now()
+    if (now - this.lastAdaptCheckMs < ADAPT_CHECK_MS) return
+    this.lastAdaptCheckMs = now
+    for (const ch of this.channels) {
+      if (ch.media !== 'video' || ch.ended) continue
+      const s = ch.track.getSettings()
+      const seen = ch.seen
+      if (!seen) {
+        ch.seen = { width: s.width, height: s.height, frameRate: s.frameRate }
+        continue
+      }
+      const sizeMoved =
+        (s.width !== undefined && seen.width !== undefined && s.width !== seen.width) ||
+        (s.height !== undefined && seen.height !== undefined && s.height !== seen.height)
+      // A frame rate is a float that wobbles; only a real step is a step.
+      const rateMoved =
+        s.frameRate !== undefined &&
+        seen.frameRate !== undefined &&
+        Math.abs(s.frameRate - seen.frameRate) > 1
+      if (!sizeMoved && !rateMoved) continue
+      const smaller = sizeMoved
+        ? (s.width ?? 0) * (s.height ?? 0) < (seen.width ?? 0) * (seen.height ?? 0)
+        : (s.frameRate ?? 0) < (seen.frameRate ?? 0)
+      passDoor(
+        {
+          dial: sizeMoved ? 'resolution' : 'rate',
+          decidedBy: 'chrome',
+          action: smaller ? 'shed' : 'restore',
+          what:
+            `${ch.kind} track moved on its own: ${seen.width ?? '?'}×${seen.height ?? '?'}` +
+            `@${seen.frameRate ?? '?'} → ${s.width ?? '?'}×${s.height ?? '?'}@${s.frameRate ?? '?'}`,
+          why: 'the platform changed the source without being asked — detected, not decided',
+          measured: {
+            widthBefore: seen.width ?? null,
+            heightBefore: seen.height ?? null,
+            fpsBefore: seen.frameRate ?? null,
+            ...measuredFromSettings(s),
+          },
+          nowMs: now,
+        },
+        () => undefined,
+      )
+      ch.seen = { width: s.width, height: s.height, frameRate: s.frameRate }
+    }
   }
 
   /**
