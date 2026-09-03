@@ -135,10 +135,20 @@ export async function openChunkWriter(hash: string): Promise<ChunkWriter | null>
           await blobStore.remove(partKey).catch(() => undefined)
           throw new Error('chunk store: the muxer wrote nothing')
         }
-        // Last writer wins and both are the same bytes: two renders racing the
-        // same chunk is wasteful, never wrong.
+        /**
+         * FIRST WRITER WINS, and it matters because exports run in PARALLEL
+         * (export jobs, 2026-08-30): two of them can render the same chunk at
+         * the same time, and the bytes are identical by construction — the name
+         * IS the content. Moving over a file another export may already have
+         * open for the concatenation is the one way that could go wrong, so the
+         * loser drops its own copy instead.
+         */
         const key = chunkKeyFor(hash)
-        await blobStore.move(partKey, key)
+        if ((await blobStore.size(key).catch(() => 0)) > 0) {
+          await blobStore.remove(partKey).catch(() => undefined)
+        } else {
+          await blobStore.move(partKey, key)
+        }
         touchChunk(key)
         const file = await blobStore.read(key)
         // slice() re-types without pulling the bytes into the heap (as O1).
