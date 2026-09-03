@@ -92,7 +92,7 @@ function parseArgs(argv) {
     console.error(`oracle: --trimMs=${trimMs} sits ON the 2 s keyframe grid — smart cut would not be exercised`)
     process.exit(2)
   }
-  return { cold, headed, engine, composite, recordMs, trimMs, dumpDir }
+  return { cold, headed, engine, composite, recordMs, trimMs, dumpDir, extraQuery }
 }
 
 
@@ -297,7 +297,7 @@ async function runOracleOnceGated(port, headed, engine, composite = true, record
 }
 
 async function main() {
-  const { cold, headed, engine, composite, recordMs, trimMs, dumpDir } = parseArgs(process.argv.slice(2))
+  const { cold, headed, engine, composite, recordMs, trimMs, dumpDir, extraQuery } = parseArgs(process.argv.slice(2))
   if (dumpDir) {
     mkdirSync(dumpDir, { recursive: true })
     console.error(`oracle: every run's full report → ${dumpDir}/run-N.json`)
