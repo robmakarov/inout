@@ -62,6 +62,23 @@ function Main() {
         void import('@core/compose/prerender')
           .then((m) => m.sweepPrerenderBlobs())
           .catch(() => undefined)
+        // J1: render chunks OUTLIVE the page session on purpose — that is what
+        // lets a killed tab resume and an edit cost only what it changed. They
+        // are still disk, and Robert's rule about disk is the loudest one here
+        // ("we must prevent junk from saving, it will fuck up users disks"), so
+        // they expire: staging files from a dead session, and finished chunks
+        // nobody came back to inside a day.
+        void import('@core/compose/chunkStore')
+          .then((m) => m.sweepChunks())
+          .then((swept) => {
+            if (swept.removed > 0) {
+              console.info(
+                `[compose] swept ${swept.removed} expired render chunks, ` +
+                  `${(swept.freedBytes / 1048576).toFixed(1)} MB (J1)`,
+              )
+            }
+          })
+          .catch(() => undefined)
         // Export jobs SURVIVE the page session (2026-08-30): finished rows
         // come back, interrupted ones restart. Gated on the repo actually
         // holding rows, so a boot with no jobs never loads the compose graph.

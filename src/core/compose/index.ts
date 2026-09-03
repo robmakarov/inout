@@ -19,3 +19,11 @@ export {
   subscribeExportJobs,
 } from './exportJobs'
 export { mixGainForChannels, softLimitSample } from './audio'
+export {
+  ChunkedRenderUnavailable,
+  getLastChunkedStats,
+  renderChunked,
+  type ChunkedRenderStats,
+} from './chunkedRender'
+export { chunkedRenderEnabled, setChunkedRenderEnabled } from './chunkedFlag'
+export { sweepChunks } from './chunkStore'
