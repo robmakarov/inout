@@ -13,6 +13,14 @@ map, task specs, operating rules — evidence gates are mandatory). `BACKLOG.md`
 `docs/*.md` = agent playbooks, one per instrument, listed in `docs/INDEX.md`; `docs/FLAGS.md` = every
 switch and its default — keep it current when a default moves.
 
+NO LINKS WITH PARAMETERS. Robert 2026-08-30: "i m tired of your links with parametres, make me one
+link /?text with panel of settings we testing all the time" — every switch he might press is a row in
+the `/?test` panel (`src/app/components/TestPanel.tsx`), with a hint in plain words saying what to DO
+with it, and the URL flag exists only as the same storage read a different way. A knob you tell him to
+type is a knob you did not finish. AND A DEFECT FIX SHIPS ON: the frozen rule protects behaviour the
+USER CHOSE, it is not a licence to land a fix disabled — the thing being replaced is what carries the
+switch (2026-09-03: "you did fix and turned it off so you fucking did nothing?").
+
 Talking to Robert: he wants answers and a recommendation, not a menu. When something needs his call,
 ask through the AskUserQuestion UI (2-4 clickable options, recommended first), never a prose list of
 questions. Explain jargon in plain words the first time. Behaviour a user can see or hear changes
