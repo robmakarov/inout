@@ -317,6 +317,32 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
   // measuring the previous run.
   await clearChunks()
 
+  /**
+   * WARM THE ENCODER BEFORE ANY LANE IS TIMED, or the first lane pays for the
+   * whole comparison. The first VideoEncoder in a Chrome process costs ~3.2 s
+   * (H6, which is why the product warms one at mount) and the control lane runs
+   * first — measured 2026-09-03, that alone was half the 6.2 s the control
+   * appeared to lose. A rig that hands one lane a fixed cost is not comparing
+   * the lanes, and note 10 says the rig is wrong before the product is.
+   */
+  {
+    const t0 = performance.now()
+    try {
+      const enc = new VideoEncoder({ output: () => undefined, error: () => undefined })
+      enc.configure({ codec: 'avc1.640028', width: 1920, height: 1080, bitrate: 8_000_000 })
+      const canvas = new OffscreenCanvas(1920, 1080)
+      canvas.getContext('2d')?.fillRect(0, 0, 1920, 1080)
+      const frame = new VideoFrame(canvas, { timestamp: 0, duration: 33_333 })
+      enc.encode(frame, { keyFrame: true })
+      frame.close()
+      await enc.flush()
+      enc.close()
+      notes.push(`encoder warmed in ${Math.round(performance.now() - t0)} ms before any lane was timed`)
+    } catch (err) {
+      notes.push(`encoder warm-up failed (${String(err)}) — the first lane pays H6's cost`)
+    }
+  }
+
   // ---- 1. the unbroken control, first, on a cold cache -------------------
   let control: LaneReport | null = null
   if (!opts.skipControl) {
