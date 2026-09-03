@@ -494,7 +494,14 @@ try {
       metadataFnPresent: s.hasMetadataFn === 'function',
       // Worth having only if it is steadier than the term it would replace.
       steadierThanG5: off.sd < 6.5,
-      holdsOverAnHour: Math.abs(su.driftMsPerMin ?? Infinity) < 1,
+      /**
+       * A DRIFT VERDICT NEEDS A SPAN. Least squares over 25 s put a mic at
+       * 1.12 ms/min and flipped this row to NOT USABLE, while 60 and 120 s runs
+       * of the same source read -0.07 and -0.37. The slope is not the finding
+       * on a short run; the absence of one is. Under a minute it says so.
+       */
+      driftReadable: (su.spanS ?? 0) >= 60,
+      holdsOverAnHour: (su.spanS ?? 0) < 60 ? null : Math.abs(su.driftMsPerMin ?? Infinity) < 1,
     }
   }
   const ROWKEYS = ROWS.map(([, k]) => k)
@@ -509,8 +516,8 @@ try {
     }
     console.log(
       `  ${label}: metadata() ${c.metadataFnPresent ? 'present' : 'ABSENT'} · captureTime ${c.captureTimePopulated ? 'POPULATED' : 'empty'} · ` +
-        `timestamp on ${c.epoch}, offset ${c.offsetMs} ms, sd ${c.sdMs} ms, drift ${c.driftMsPerMin} ms/min → ` +
-        `${c.steadierThanG5 && c.holdsOverAnHour ? 'USABLE as an anchor' : 'NOT usable'}`,
+        `timestamp on ${c.epoch}, offset ${c.offsetMs} ms, sd ${c.sdMs} ms, drift ${c.driftReadable ? c.driftMsPerMin + ' ms/min' : 'not readable under 60 s'} → ` +
+        `${!c.driftReadable ? 'span too short to rule on drift — rerun with --takeMs=120000' : c.steadierThanG5 && c.holdsOverAnHour ? 'USABLE as an anchor' : 'NOT usable'}`,
     )
   }
 
