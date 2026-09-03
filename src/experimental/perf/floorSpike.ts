@@ -30,6 +30,7 @@
  * HEAVY: it saturates the machine on purpose, three times.
  */
 import { createCaptureSession } from '@core/capture/session'
+import { setCompositeFault } from '@core/capture/liveCompositeV2'
 import {
   resetSyntheticPaintStats,
   setSyntheticCameraFps,
@@ -46,7 +47,7 @@ import { warmRigEncoder } from '../rigWarm'
 import { captureRateCeiling, sourceRateEnabled } from '@core/rate'
 import { startLoad } from './pressureLead'
 
-export type FloorLaneId = 'calm' | 'floor' | 'off'
+export type FloorLaneId = 'calm' | 'floor' | 'off' | 'composite-drop'
 
 export interface FloorLaneReport {
   lane: FloorLaneId
@@ -93,6 +94,7 @@ export interface FloorSpikeReport {
   screen: { width: number; height: number }
   lanes: FloorLaneReport[]
   verdicts: {
+    compositeDropRecorded: boolean | null
     calmTookNoRung: boolean | null
     floorEngaged: boolean | null
     audioNeverSacrificed: boolean | null
@@ -190,6 +192,19 @@ async function runLane(opts: {
   load: 'none' | 'cpu' | 'encode' | 'all'
 }): Promise<FloorLaneReport> {
   const out = laneReport(opts.lane, opts)
+  /**
+   * THE COMPOSITE-DROP LANE — the third path S1's folded-in gate names by hand
+   * ("a rate step, a composite drop and a codec fallback each append an entry
+   * THROUGH THE DOOR"). It is the only one of the three that needs a composite,
+   * so this lane leaves `auto` alone and injects the REAL watchdog degrade the
+   * o4wedge rig uses — the same call the watchdog makes, not a stand-in.
+   */
+  if (opts.lane === 'composite-drop') {
+    setQualityStep(null)
+    setCaptureQualityMode('auto')
+    setEmergencyFloor(false)
+    setCompositeFault({ degradeAfterMs: Math.round(opts.takeMs * 0.35) })
+  }
   // MAX IS THE SUBJECT, AND IT IS TWO SETTINGS, NOT ONE — a distinction that
   // cost this rig its first run (a "max" take that recorded 1920x1080@30 and
   // was never under any strain at all):
@@ -198,9 +213,11 @@ async function runLane(opts: {
   //   · the quality MODE is the protection: `max` opens no composite, refuses
   //     nothing in advance, and runs no ladder — which is what makes an
   //     emergency floor necessary in the first place.
-  setQualityStep('max')
-  setCaptureQualityMode('max')
-  setEmergencyFloor(opts.floorArmed)
+  if (opts.lane !== 'composite-drop') {
+    setQualityStep('max')
+    setCaptureQualityMode('max')
+    setEmergencyFloor(opts.floorArmed)
+  }
   resetSyntheticPaintStats()
   out.env = {
     qualityStep: loadQualityStep(),
@@ -249,6 +266,7 @@ async function runLane(opts: {
     setEmergencyFloor(null)
     setCaptureQualityMode(null)
     setQualityStep(null)
+    setCompositeFault(null)
   }
   return out
 }
@@ -287,7 +305,7 @@ export async function runFloorSpike(opts?: {
    * encoder of comparable weight is what moves it).
    */
   const load = opts?.load ?? 'encode'
-  const wanted = opts?.lanes ?? ['calm', 'floor', 'off']
+  const wanted = opts?.lanes ?? ['calm', 'floor', 'off', 'composite-drop']
 
   setSyntheticScreenSize({ width, height })
   /**
@@ -316,8 +334,8 @@ export async function runFloorSpike(opts?: {
     lanes.push(
       await runLane({
         lane,
-        floorArmed: lane !== 'off',
-        loaded: lane !== 'calm',
+        floorArmed: lane === 'calm' || lane === 'floor',
+        loaded: lane === 'floor' || lane === 'off',
         takeMs,
         loadAtMs,
         loadMs,
@@ -336,7 +354,12 @@ export async function runFloorSpike(opts?: {
   const elasticDim = (l: FloorLaneReport): string =>
     l.card.dimensions.find((d) => d.id === 'elastic')?.status ?? 'unmeasured'
 
+  const dropLane = lanes.find((l) => l.lane === 'composite-drop')
   const verdicts = {
+    /** S1's gate: the composite drop appended THROUGH the door. */
+    compositeDropRecorded: dropLane
+      ? dropLane.decisions.some((d) => d.dial === 'channels' && d.decidedBy === 'watchdog')
+      : null,
     calmTookNoRung: calm ? calm.floorDecisions.length === 0 : null,
     floorEngaged: floor ? floor.floorDecisions.some((d) => d.action === 'shed') : null,
     audioNeverSacrificed: floor

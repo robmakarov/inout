@@ -24,6 +24,7 @@
  *                     that pages selectively descends only where it needs to
  * There is no setting in the UI, and there is nothing here for one to set.
  */
+import { passDoor } from '@core/door'
 import type { VideoSample } from 'mediabunny'
 import { blobStore } from '@core/store'
 import {
@@ -459,6 +460,27 @@ export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
       if (decision.keyframe && pdf.bytesWritten >= MAX_FILE_BYTES) {
         if (!sizeCapped) {
           sizeCapped = true
+          // M1, AUDIT ITEM (c) — THE TRUNCATION IS A DECISION AND IT WAS A
+          // console.warn. Everything after this instant is missing from the
+          // export, and until the door the only trace was a line in a console
+          // nobody has open. The cap itself is not changed (a reader refuses a
+          // PDF past 32-50 MB, so stopping IS the correct degradation); what
+          // changes is that it can no longer happen in silence.
+          passDoor(
+            {
+              dial: 'quality',
+              decidedBy: 'budget',
+              action: 'shed',
+              what: `the For-AI export stops at ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB — everything after ${(outMs / 1000).toFixed(1)} s is not in the file`,
+              why: 'readers cap a PDF at 32-50 MB, so the file degrades by stopping rather than by being refused',
+              measured: {
+                bytesWritten: pdf.bytesWritten,
+                capBytes: MAX_FILE_BYTES,
+                atOutMs: Math.round(outMs),
+              },
+            },
+            () => undefined,
+          )
           console.warn(
             `[ai] file reached ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB at t=${(outMs / 1000).toFixed(1)}s — no more frames (readers cap a PDF at 32-50 MB)`,
           )
