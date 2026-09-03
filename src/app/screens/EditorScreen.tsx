@@ -12,7 +12,7 @@ import {
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
-import { cancelPrerender, editBindsPrerender, exportWouldRender, startPrerender } from '@core/compose'
+import { cancelPrerender, editBindsPrerender, exportWouldRender } from '@core/compose'
 import { noteEditingActivity, noteEditorOpen, noteEditorOpening } from '@core/backgroundWork'
 import { startEditorLateness } from '@core/lateness'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
@@ -216,43 +216,42 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   }, [edit])
 
   /**
-   * F16: START THE EXPORT BEFORE IT IS ASKED FOR.
+   * NOTHING RENDERS BECAUSE OF AN EDIT — task J3, Robert 2026-09-03 (robert
+   * (23)): "render in background while editing is fucked up, it goes back and
+   * forth and it wastage of resourses, i dont want it".
    *
-   * Robert, 2026-08-30: "max 60 fps must export fast on any old computer."
-   * Rendering faster cannot get there — a native 60 fps take is more decode and
-   * encode than the machine has — so the export has to be finished before the
-   * button is pressed. Editing is exactly when the machine is idle: capture is
-   * over and the render lives in a worker.
+   * WHAT USED TO BE HERE, and why he is right. F16 started a whole-take render
+   * 1.2 s after every edit settled, and `editBindsPrerender` cancelled it the
+   * moment the next edit landed. On a long take that is exactly the "back and
+   * forth" he watched: a frame preset and a zoom could burn two discarded
+   * hour-long renders before Export was ever pressed, on a machine that was
+   * then hot for the render that counts. The debounce made it politer, never
+   * cheaper — 1.2 s of stillness is not evidence that the NEXT edit is not
+   * coming.
    *
-   * DEBOUNCED HARDER THAN THE EDIT SAVE, and for a different reason: a save
-   * that fires mid-drag costs a small write, but a RENDER that fires mid-drag
-   * spends the machine on a file the next drag frame invalidates. 1.2 s of
-   * stillness is the signal that the user is looking rather than moving.
-   *
-   * Only when the export would actually RENDER — an instant copy or a smart cut
-   * is already fast, and pre-rendering one would spend a machine to save
-   * nothing. A miss costs nothing either: choose.ts falls straight through to
-   * rendering on demand, exactly as it did before this existed.
+   * WHAT IS LEFT, and it is not speculation. Two things still happen here and
+   * both only ever REMOVE work:
+   *  · `editBindsPrerender` still STOPS the at-stop job (F16b) when an edit
+   *    makes its output unservable. That is the ruling's own half — the job
+   *    stops immediately instead of spending the machine on a file the key
+   *    would never let anyone serve — and since J1 it costs nothing to stop:
+   *    every chunk it finished stays on disk under its own content name and
+   *    the eventual export reuses it.
+   *  · a take whose export is a packet copy or a smart cut cancels the job
+   *    outright, because those paths are already instant.
+   * Neither starts anything. The export is started by the PRESS, and J1's
+   * chunks are what make that press cheap: an edit costs only the chunks whose
+   * pixels moved, so the work this effect used to speculate about is now done
+   * once, when it is asked for.
    */
   useEffect(() => {
     if (!prerenderEnabled()) return
     const chosen = resolveTier(tier, frameAspect, frameRate)
     const settings = settingsForTier(chosen)
-    /**
-     * F16b, and it is the half that runs FIRST: an edit landing while a job
-     * works takes effect IN the job (Robert, DECISIONS (4)). Before this, the
-     * stale render kept spending the machine for the whole debounce below —
-     * and for as long as the user kept dragging — on a file the key would
-     * never let anyone serve. Synchronous, ahead of the timer, because "stops
-     * immediately" is the ruling.
-     */
     editBindsPrerender({ recording, edit, settings })
     if (!exportWouldRender({ recording, edit, settings, allowPacketCopy: isDefaultTier(tier) })) {
       cancelPrerender()
-      return
     }
-    const t = setTimeout(() => startPrerender({ recording, edit, settings }), 1200)
-    return () => clearTimeout(t)
   }, [recording, edit, tier, frameAspect, frameRate])
 
   // A take that is left behind takes its pre-render with it: the file is for an
