@@ -25,9 +25,17 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { gateOracleReport, oracleMetricsIncomplete } from './oracle-gate.mjs'
+import {
+  disagreement,
+  dimensionsOf,
+  loadLine,
+  startLoadSampler,
+  waitForQuiet,
+} from './lib/machine.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOST = 'localhost'
@@ -212,13 +220,21 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-async function runOracleOnce(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
+async function runOracleOnce(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483, logDir = '') {
   const cdpArgs = [
     join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
     'oracle',
     JSON.stringify({ composite, recordMs, trimMs }),
     `--port=${port}`,
   ]
+  /**
+   * THE 120 s CELL DIED ~1/3 OF THE TIME AND NOTHING SAID WHY (task G6d).
+   * cdp-run keeps Chrome's own stderr and the page's console for exactly this,
+   * behind `--logDir=`, and this runner never passed it — so every death
+   * reached the console as `cdp-run exited 1` with the diagnosis already
+   * written and thrown away. It costs two files per attempt.
+   */
+  if (logDir) cdpArgs.push(`--logDir=${logDir}`)
   if (headed) cdpArgs.push('--headed')
   // Which live-composite engine made the file under test (O4 step 2). An
   // unedited take IS the composite, so this is the one knob that changes what
@@ -250,41 +266,132 @@ async function runOracleOnce(port, headed, engine, composite = true, recordMs = 
 }
 
 const METRIC_RETRY_COOLDOWN_MS = 5000
-const METRIC_RETRY_MAX = 2
+/**
+ * THREE, NOT TWO (task G6d). The 120 s cell dies on CDP about one run in three
+ * — a launch that never exposes a debug target, a renderer that goes away, a
+ * report that never arrives. Two attempts leave a 1-in-9 chance of losing a
+ * cell that costs five minutes; three make it 1-in-27, and the attempts are
+ * only paid when something already went wrong.
+ */
+const METRIC_RETRY_MAX = 3
 
-/** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
-async function runOracleOnceGated(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
+/** One attempt, with the load it ran under measured alongside it. */
+async function attemptOracle(opts, logDir) {
+  const sampler = startLoadSampler()
+  const t0 = Date.now()
+  const { error, report } = await runOracleOnce(
+    opts.port,
+    opts.headed,
+    opts.engine,
+    opts.composite,
+    opts.recordMs,
+    opts.trimMs,
+    logDir,
+  )
+  const elapsedMs = Date.now() - t0
+  const load = sampler.stop()
+  const gate = report ? gateOracleReport(report) : null
+  return { error: error ?? null, report, gate, elapsedMs, load }
+}
+
+/**
+ * ONE READING IS NOT A VERDICT ON THIS MACHINE (task G6a-d).
+ *
+ * Three things happen here, and they are three different problems.
+ *
+ *  1. A CDP DEATH IS AN INSTRUMENT FAILURE, and it is retried — with the
+ *     chrome stderr and page console kept, which is new (G6d): the death used
+ *     to arrive as `cdp-run exited 1` with its own diagnosis discarded.
+ *
+ *  2. NULL METRICS ARE RETRIED, as before.
+ *
+ *  3. A RED IS CONFIRMED BEFORE IT IS BELIEVED. This is the fix for the coin
+ *     flips (a) export throughput, (c) spur: both are timing/level numbers that
+ *     move with what else is on the machine, and both used to decide a merge on
+ *     one reading. A second reading is taken and the two are compared BY
+ *     DIMENSION, not by value:
+ *       · red in both  -> FAIL, and the gate now says it twice with both numbers;
+ *       · red in one   -> INCONCLUSIVE. Not green, not a regression, exit
+ *                        nonzero, and the word says exactly what it is: this
+ *                        run says nothing about the engine.
+ *     A structural failure (a declined path, a lost tail) reproduces, so it
+ *     costs one extra cell and is never mislabelled. That is the trade, and it
+ *     is worth it: the expensive failure is not a slow gate, it is a session
+ *     "fixing" a bug that was another session's render.
+ */
+async function runOracleOnceGated(opts, confirm) {
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
-    const t0 = Date.now()
-    const { error, report } = await runOracleOnce(port, headed, engine, composite, recordMs, trimMs)
-    const elapsed = Date.now() - t0
-    if (error || !report) {
-      last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
+    const logDir = join(tmpdir(), `oracle-cdp-${Date.now()}-${attempt}`)
+    const a = await attemptOracle(opts, logDir)
+    if (a.error || !a.report || !a.gate) {
+      last = { ...a, error: a.error ?? 'no report', attempt, cdpLogDir: logDir }
       if (attempt < METRIC_RETRY_MAX) {
         console.error(
-          `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} error: ${last.error} — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
+          `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} INSTRUMENT error: ${last.error} — ` +
+            `${loadLine(a.load)} · logs ${logDir} — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
         )
         await sleep(METRIC_RETRY_COOLDOWN_MS)
         continue
       }
+      console.error(
+        `[oracle] FAIL LOUD: cdp-run died on all ${METRIC_RETRY_MAX} attempts — that is the ` +
+          `INSTRUMENT, not the engine. Chrome stderr and page console: ${logDir}`,
+      )
       return last
     }
-    const gate = gateOracleReport(report)
-    if (!oracleMetricsIncomplete(gate.metrics)) {
-      return { error: null, report, gate, elapsedMs: elapsed, attempt }
+    if (oracleMetricsIncomplete(a.gate.metrics)) {
+      const why = a.gate.failures.join('; ')
+      last = { ...a, error: `incomplete metrics: ${why}`, attempt, cdpLogDir: logDir }
+      if (attempt < METRIC_RETRY_MAX) {
+        console.error(
+          `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} all-null/incomplete metrics ` +
+            `(${loadLine(a.load)}) — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
+        )
+        await sleep(METRIC_RETRY_COOLDOWN_MS)
+        continue
+      }
+      console.error(`[oracle] FAIL LOUD: incomplete metrics after ${METRIC_RETRY_MAX} attempts — ${why}`)
+      return last
     }
-    const why = gate.failures.join('; ')
-    last = { error: `incomplete metrics: ${why}`, report, gate, elapsedMs: elapsed, attempt }
-    if (attempt < METRIC_RETRY_MAX) {
+    const first = { error: null, report: a.report, gate: a.gate, elapsedMs: a.elapsedMs, load: a.load, attempt }
+    if (a.gate.pass || !confirm) return first
+    // ---- the red needs a second reading before anyone acts on it ----
+    console.error(
+      `[oracle] RED on one reading (${a.gate.failures.map((f) => f.split(' (')[0]).join('; ')}) ` +
+        `under ${loadLine(a.load)} — confirming with a second cell before calling it a regression`,
+    )
+    const bLog = join(tmpdir(), `oracle-cdp-${Date.now()}-confirm`)
+    const b = await attemptOracle(opts, bLog)
+    if (b.error || !b.report || !b.gate || oracleMetricsIncomplete(b.gate.metrics)) {
       console.error(
-        `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} all-null/incomplete metrics — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
+        `[oracle] the confirming cell could not be measured (${b.error ?? 'incomplete metrics'}) — ` +
+          'INCONCLUSIVE: the first reading stands unconfirmed and this run says nothing about the engine',
       )
-      await sleep(METRIC_RETRY_COOLDOWN_MS)
-      continue
+      return { ...first, inconclusive: true, confirm: { error: b.error ?? 'incomplete metrics', load: b.load } }
     }
-    console.error(`[oracle] FAIL LOUD: incomplete metrics after ${METRIC_RETRY_MAX} attempts — ${why}`)
-    return last
+    const cmp = disagreement(a.gate.failures, b.gate.failures)
+    if (cmp.disagreed.length === 0) {
+      console.error(
+        `[oracle] CONFIRMED on a second cell — ${cmp.agreed.join(', ')} red in both readings ` +
+          `(${loadLine(a.load)} / ${loadLine(b.load)}). This is a finding.`,
+      )
+      return { ...first, confirmedBy: { failures: b.gate.failures, metrics: b.gate.metrics, load: b.load } }
+    }
+    console.error(
+      `[oracle] INCONCLUSIVE — the two readings disagree on: ${cmp.disagreed.join(', ')}` +
+        (cmp.agreed.length ? ` (both red on: ${cmp.agreed.join(', ')})` : '') +
+        `. Reading 1 ${loadLine(a.load)}: ${a.gate.failures.join('; ') || 'green'}` +
+        `. Reading 2 ${loadLine(b.load)}: ${b.gate.failures.join('; ') || 'green'}` +
+        '. THIS RUN SAYS NOTHING ABOUT THE ENGINE — re-run on a quiet machine.',
+    )
+    return {
+      ...first,
+      inconclusive: true,
+      confirm: { failures: b.gate.failures, metrics: b.gate.metrics, load: b.load },
+      disagreed: cmp.disagreed,
+      agreed: cmp.agreed,
+    }
   }
   return last
 }
@@ -337,8 +444,23 @@ async function main() {
       }
     }
 
+    /**
+     * WHAT THE MACHINE WAS DOING BEFORE WE ADDED TO IT (task G6a-d). Measured
+     * once, before the first cell, while nothing of ours is running yet — the
+     * only moment at which "busy" means somebody ELSE. Bounded and loud: on a
+     * machine that never goes quiet the cell still runs, and the load it ran
+     * under is printed beside every number it produces.
+     */
+    const preflight = await waitForQuiet({ label: 'oracle', maxWaitMs: 60_000 })
+
     for (let i = 0; i < cold; i++) {
-      const run = await runOracleOnceGated(port, headed, engine, composite, recordMs, trimMs)
+      const run = await runOracleOnceGated(
+        { port, headed, engine, composite, recordMs, trimMs },
+        // A single cell decides a merge, so it confirms its own red. A cold
+        // MATRIX is already repetition — its disagreements are counted across
+        // the runs below instead, at no extra cost.
+        cold === 1,
+      )
       const elapsed = run.elapsedMs ?? 0
       dumpRun(i, {
         run: i + 1,
@@ -347,6 +469,9 @@ async function main() {
         engine: engine || 'default',
         elapsedMs: elapsed,
         error: run.error ?? null,
+        load: run.load ?? null,
+        inconclusive: run.inconclusive ?? false,
+        confirm: run.confirm ?? run.confirmedBy ?? null,
         gate: run.gate ?? null,
         report: run.report ?? null,
       })
@@ -355,18 +480,31 @@ async function main() {
           run: i + 1,
           elapsedMs: elapsed,
           error: run.error,
+          load: run.load ?? null,
+          cdpLogDir: run.cdpLogDir ?? null,
           gate: run.gate ?? { pass: false, failures: [run.error ?? 'no report'], metrics: {} },
         })
-        console.error(`[${i + 1}/${cold}] ERROR ${run.error ?? 'no report'} (${elapsed}ms)`)
+        console.error(
+          `[${i + 1}/${cold}] ERROR ${run.error ?? 'no report'} (${elapsed}ms, ${loadLine(run.load)})` +
+            (run.cdpLogDir ? ` · chrome stderr + page console: ${run.cdpLogDir}` : ''),
+        )
         continue
       }
       const gate = run.gate
-      results.push({ run: i + 1, elapsedMs: elapsed, gate, report: run.report })
+      results.push({
+        run: i + 1,
+        elapsedMs: elapsed,
+        gate,
+        report: run.report,
+        load: run.load ?? null,
+        inconclusive: run.inconclusive ?? false,
+        disagreed: run.disagreed ?? null,
+      })
       const m = gate.metrics
       const sync = m.syncMeanMs?.toFixed?.(1) ?? 'n/a'
       const max = m.syncMaxAbsMs?.toFixed?.(1) ?? 'n/a'
       const spur = m.spurPeakDb?.toFixed?.(1) ?? 'n/a'
-      const status = gate.pass ? 'PASS' : 'FAIL'
+      const status = gate.pass ? 'PASS' : run.inconclusive ? 'INCONCLUSIVE' : 'FAIL'
       const tail = m.tailDurationDeltaMs ?? 'n/a'
       const rt = m.exportRealtimeFactor ?? 'n/a'
       console.error(
@@ -405,12 +543,29 @@ async function main() {
       results[results.length - 1].dists = dists
       console.error(
         `      ${fmtDist('render', dists.render)} ${fmtDist('inst', dists.instant)} ` +
-          `${fmtDist('trim', dists.trimmed)}`,
+          `${fmtDist('trim', dists.trimmed)} · ${loadLine(run.load)}`,
       )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
         if (cold === 1) {
-          process.stdout.write(JSON.stringify({ gate, report: run.report }, null, 2) + '\n')
+          process.stdout.write(
+            JSON.stringify(
+              {
+                // G6a-d: the WORD, first. A red that could not be reproduced is
+                // not a regression and must never be read as one.
+                verdict: run.inconclusive ? 'INCONCLUSIVE' : 'FAIL',
+                inconclusive: run.inconclusive ?? false,
+                disagreedDimensions: run.disagreed ?? [],
+                load: run.load ?? null,
+                preflight,
+                confirm: run.confirm ?? run.confirmedBy ?? null,
+                gate,
+                report: run.report,
+              },
+              null,
+              2,
+            ) + '\n',
+          )
           process.exitCode = 1
           return
         }
@@ -434,7 +589,36 @@ async function main() {
     }
 
     const passed = results.filter((r) => r.gate.pass).length
+    /**
+     * A DIMENSION RED IN SOME RUNS AND GREEN IN OTHERS IS A COIN FLIP, NOT A
+     * FINDING (task G6a-d). A cold matrix is already the repetition a single
+     * cell has to buy, so its disagreements are free to count — and until now
+     * nothing counted them: `--cold=20` printed 14 PASS / 6 FAIL and left the
+     * reader to decide, which is exactly how `export throughput` (0.46-0.94x
+     * loaded, 0.51-0.82x idle) and `spur` (25 dB of movement) were argued about
+     * for three sessions.
+     */
+    const measured = results.filter((r) => !r.error)
+    const dimCounts = new Map()
+    for (const r of measured) {
+      for (const d of dimensionsOf(r.gate.failures)) dimCounts.set(d, (dimCounts.get(d) ?? 0) + 1)
+    }
+    const flaky = [...dimCounts.entries()]
+      .filter(([, n]) => n > 0 && n < measured.length)
+      .map(([d, n]) => ({ dimension: d, redRuns: n, ofRuns: measured.length }))
+    const consistent = [...dimCounts.entries()]
+      .filter(([, n]) => n === measured.length && measured.length > 0)
+      .map(([d]) => d)
+    const matrixInconclusive = cold > 1 && flaky.length > 0
+    const singleInconclusive = cold === 1 && results.some((r) => r.inconclusive)
+    const verdict =
+      matrixInconclusive || singleInconclusive ? 'INCONCLUSIVE' : passed === cold ? 'PASS' : 'FAIL'
     const summary = {
+      verdict,
+      preflight,
+      load: results.map((r) => r.load ?? null),
+      flakyDimensions: flaky,
+      consistentlyRedDimensions: consistent,
       // G4: WHICH CELL. A report whose length is not in it is a report the next
       // session has to guess at, and the guess has always been 6 s.
       recordMs,
@@ -483,8 +667,21 @@ async function main() {
           'that is a failed run under contention, not a green one. Re-run when the machine is idle.',
       )
     }
+    if (flaky.length > 0) {
+      console.error(
+        `oracle: INCONCLUSIVE — ${flaky
+          .map((f) => `${f.dimension} red in ${f.redRuns}/${f.ofRuns} runs`)
+          .join(', ')}. A dimension that flips across identical runs is measuring the MACHINE. ` +
+          (consistent.length
+            ? `Red in every run, and therefore findings: ${consistent.join(', ')}.`
+            : 'Nothing was red in every run, so this matrix reports no finding at all.'),
+      )
+    }
+    console.error(
+      `oracle: ${verdict} — ${passed}/${cold} cells green · ${loadLine(results[0]?.load)} at run 1`,
+    )
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')
-    if (passed < cold) process.exitCode = 1
+    if (passed < cold || verdict === 'INCONCLUSIVE') process.exitCode = 1
   } catch (err) {
     console.error(String(err instanceof Error ? err.message : err))
     if (viteErr) console.error('--- vite stderr ---\n' + viteErr.slice(-2000))

@@ -25,6 +25,8 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { disagreement, loadLine, startLoadSampler, waitForQuiet } from './lib/machine.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOST = 'localhost'
@@ -215,20 +217,60 @@ async function main() {
   })
   try {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
-    const cdp = await runQuiet(process.execPath, [
-      join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
-      'oracle-fidelity',
-      JSON.stringify({ composite: !noComposite }),
-      `--port=${port}`,
-    ])
-    if (!cdp.ok) {
-      console.error(cdp.err || `cdp-run exited ${cdp.code}`)
+
+    /**
+     * THIS RIG HAD NO RETRY AND NO IDEA WHAT THE MACHINE WAS DOING (task G6b).
+     * The render lane was measured going RED from load alone — tone error
+     * 8.69 dB, THD −56.8 — on code that was fine, and one reading decided it.
+     * Level and distortion numbers come off a real encode on a shared 8 GB
+     * machine; they move when something else is rendering. So: wait (bounded,
+     * loud) for a quiet machine, sample the load the take actually ran under,
+     * and never let ONE reading call a regression.
+     */
+    const preflight = await waitForQuiet({ label: 'oracle-fidelity', maxWaitMs: 60_000 })
+
+    const measure = async (attempt) => {
+      const logDir = join(tmpdir(), `oracle-fidelity-cdp-${Date.now()}-${attempt}`)
+      const sampler = startLoadSampler()
+      const cdp = await runQuiet(process.execPath, [
+        join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
+        'oracle-fidelity',
+        JSON.stringify({ composite: !noComposite }),
+        `--port=${port}`,
+        `--logDir=${logDir}`,
+      ])
+      const load = sampler.stop()
+      if (!cdp.ok) {
+        return { error: cdp.err?.trim() || `cdp-run exited ${cdp.code}`, load, logDir }
+      }
+      let report
+      try {
+        report = JSON.parse(cdp.out.trim())
+      } catch (err) {
+        return { error: `invalid JSON after ${cdp.out.length} bytes: ${String(err)}`, load, logDir }
+      }
+      return { report, gate: gateFidelity(report), instantGate: gateInstantLane(report), load, logDir }
+    }
+
+    let first = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      first = await measure(attempt)
+      if (!first.error) break
+      console.error(
+        `oracle-fidelity: attempt ${attempt}/3 INSTRUMENT error: ${first.error} — ` +
+          `${loadLine(first.load)} · chrome stderr + page console: ${first.logDir}`,
+      )
+      if (attempt < 3) await sleep(5000)
+    }
+    if (first.error) {
+      console.error(
+        `oracle-fidelity: FAIL LOUD — cdp-run died on all 3 attempts. That is the INSTRUMENT, ` +
+          `not the mix. Logs: ${first.logDir}`,
+      )
       process.exitCode = 1
       return
     }
-    const report = JSON.parse(cdp.out.trim())
-    const gate = gateFidelity(report)
-    const instantGate = gateInstantLane(report)
+    const { report, gate, instantGate, load } = first
     const fmtLane = (m) =>
       `toneErr=${m.maxToneErrorDb?.toFixed?.(2)}dB (bus ${m.expectedBusDb?.toFixed?.(2)}, residual ${m.busResidualDb?.toFixed?.(2)}) sep=${m.separationDb?.toFixed?.(1)}dB hits=${m.limiterHits} thd=${m.thdDb?.toFixed?.(1)} imd=${m.imdDb?.toFixed?.(1)} win=${m.windowStartSec}s/onset=${m.onsetSec}s`
     console.error(`${gate.pass ? 'PASS' : 'FAIL'} render(single-source): ${fmtLane(gate.metrics)}`)
@@ -237,6 +279,65 @@ async function main() {
       `${instantGate.pass ? 'PASS' : 'FAIL'} instant(user's default file, engine=${instantGate.metrics.engine ?? 'n/a'}, path=${instantGate.metrics.path ?? 'n/a'}): ${fmtLane(instantGate.metrics)}`,
     )
     if (!instantGate.pass) console.error('  failures:', instantGate.failures.join('; '))
+    console.error(
+      `info ${loadLine(load)} · preflight ${(preflight.busy * 100).toFixed(0)}% busy${preflight.quiet ? '' : ' (NEVER SETTLED)'}`,
+    )
+
+    /**
+     * THE SECOND READING (task G6b). Both lanes are levels off a real encode;
+     * a red on one reading is a candidate, not a verdict. Failures are compared
+     * BY DIMENSION and per lane, so `tone error 8.69 > 1 dB` and
+     * `tone error 1.04 > 1 dB` are the same finding twice while a lane red only
+     * once is the coin flip this task exists to remove.
+     */
+    const laneFailures = (g, ig) => [
+      ...g.failures.map((f) => `render ${f}`),
+      ...ig.failures.map((f) => `instant ${f}`),
+    ]
+    let verdict = gate.pass && instantGate.pass ? 'PASS' : 'FAIL'
+    let confirm = null
+    if (verdict === 'FAIL') {
+      console.error(
+        'oracle-fidelity: RED on one reading — confirming with a second take before calling it a regression',
+      )
+      const second = await measure('confirm')
+      if (second.error) {
+        verdict = 'INCONCLUSIVE'
+        confirm = { error: second.error, load: second.load }
+        console.error(
+          `oracle-fidelity: the confirming take could not be measured (${second.error}) — INCONCLUSIVE: ` +
+            'the first reading stands unconfirmed and this run says nothing about the mix',
+        )
+      } else {
+        const cmp = disagreement(
+          laneFailures(gate, instantGate),
+          laneFailures(second.gate, second.instantGate),
+        )
+        confirm = {
+          failures: laneFailures(second.gate, second.instantGate),
+          render: second.gate.metrics,
+          instant: second.instantGate.metrics,
+          load: second.load,
+          agreed: cmp.agreed,
+          disagreed: cmp.disagreed,
+        }
+        if (cmp.disagreed.length === 0) {
+          console.error(
+            `oracle-fidelity: CONFIRMED on a second take — ${cmp.agreed.join(', ')} red in both ` +
+              `(${loadLine(load)} / ${loadLine(second.load)}). This is a finding.`,
+          )
+        } else {
+          verdict = 'INCONCLUSIVE'
+          console.error(
+            `oracle-fidelity: INCONCLUSIVE — the two takes disagree on: ${cmp.disagreed.join(', ')}` +
+              (cmp.agreed.length ? ` (both red on: ${cmp.agreed.join(', ')})` : '') +
+              `. Reading 2 (${loadLine(second.load)}): render ${fmtLane(second.gate.metrics)} · ` +
+              `instant ${fmtLane(second.instantGate.metrics)}` +
+              '. THIS RUN SAYS NOTHING ABOUT THE MIX — re-run on a quiet machine.',
+          )
+        }
+      }
+    }
     // The decomposition, printed but not gated: capture alone → the live mix
     // the instant path DISCARDS → the render of the same take. Which stage
     // costs what, on one recording.
@@ -258,8 +359,11 @@ async function main() {
         console.error(`info render(same multi-source take): ${fmtLane(laneMetrics(ct.render.fidelity, busDb))}`)
       }
     }
-    process.stdout.write(JSON.stringify({ gate, instantGate, report }, null, 2) + '\n')
-    if (!gate.pass || !instantGate.pass) process.exitCode = 1
+    console.error(`oracle-fidelity: ${verdict}`)
+    process.stdout.write(
+      JSON.stringify({ verdict, preflight, load, confirm, gate, instantGate, report }, null, 2) + '\n',
+    )
+    if (verdict !== 'PASS') process.exitCode = 1
   } finally {
     vite.kill('SIGTERM')
     await sleep(200)
