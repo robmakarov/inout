@@ -69,7 +69,7 @@ Four rules are enforced, not advice (T1) — `npm run drill` proves each in ~2 s
 REFUSED commit (exit 2, loud, nothing touched): HEAD must still be on the branch this session edited
 on · a worktree another live session owns is not yours to commit · unclaimed files are never swept
 while another session is live · a task branch commits locally and is NEVER pushed to `main`.
-**ONE TASK, ONE WORKTREE**: `scripts/worktree.sh <id>` cuts `/tmp/inout-<id>` on `task/<id>` with
+**ONE TASK, ONE WORKTREE**: `scripts/worktree.sh <id>` cuts `~/.inout-worktrees/inout-<id>` on `task/<id>` with
 node_modules, settings and an owner marker. Sessions in one checkout share one HEAD and one index —
 another session's `git checkout` moves you (2026-09-02: H2b landed on `main` that way). Land the work
 FROM THE MAIN CHECKOUT (`git merge --ff-only task/<id>`); never move the `main` ref from a worktree

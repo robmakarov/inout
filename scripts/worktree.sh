@@ -8,7 +8,7 @@
 # dirty files, and the Stop hook (rule 2) will not commit from a worktree while
 # the session it was cut for is still live.
 #
-#   scripts/worktree.sh T1            # -> /tmp/inout-t1 on branch task/t1
+#   scripts/worktree.sh T1            # -> ~/.inout-worktrees/inout-t1 on branch task/t1
 #   scripts/worktree.sh T1 origin/main
 #
 # Re-running it for the same id is a no-op that re-stamps the owner marker, so it
@@ -36,8 +36,17 @@ main=$(dirname "$common")
 # never depends on this one surviving.
 mods=$(cd "$repo/node_modules" 2>/dev/null && pwd -P) || mods="$main/node_modules"
 
-dir="${INOUT_WORKTREE_DIR:-${TMPDIR:-/tmp}}"
+# NOT $TMPDIR, AND THIS COST AN HOUR OF WORK (G6, 2026-09-03). macOS prunes
+# per-user temp directories out from under running processes: mid-session the
+# whole inout-g6 worktree vanished, taking every uncommitted file with it, and
+# `git worktree list` then showed a worktree that was not there. A task session
+# lives for hours by design — the resume-snapshot rule in .ai/TASKS exists
+# precisely so one can be picked up tomorrow — so its checkout must outlive the
+# temp reaper. $HOME is the shortest path that does.
+dir="${INOUT_WORKTREE_DIR:-$HOME/.inout-worktrees}"
 case "$dir" in */) dir="${dir}inout-$id" ;; *) dir="$dir/inout-$id" ;; esac
+# git creates the leaf, not the parent.
+mkdir -p "$(dirname "$dir")"
 branch="task/$id"
 start="${2:-}"
 if [ -z "$start" ]; then
