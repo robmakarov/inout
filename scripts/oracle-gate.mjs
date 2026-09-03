@@ -189,7 +189,24 @@ const MAX_TAIL_LOSS_MS = 400
  *  last one is at most one interval plus a flash duration from the end;
  *  2000 ms leaves room without hiding a dropped tail. */
 const MAX_LAST_EVENT_GAP_MS = 2000
-/** Export must not be slower than this multiple of realtime. */
+/**
+ * Export must not be slower than this multiple of realtime.
+ *
+ * WHERE THIS BAND ACTUALLY SITS, MEASURED (task G6a, 2026-09-02). This gate was
+ * the headline coin flip of the flakes pack — 0.46-0.94x on a loaded machine.
+ * Eight cold v1 cells with the gate.sh lock held read 1.07 1.19 1.42 1.46 1.00
+ * 1.32 1.39 1.43 — 8/8 green, so the flip was the MACHINE and not the engine.
+ * But note the minimum: 1.00. The band is not comfortably below the v1
+ * distribution, it is AT the bottom of it, and v1 is the slow engine here (the
+ * same cell on v2 reads 4.66x). So:
+ *   · a single red on this line is not a regression. oracle.mjs re-measures it
+ *     and reports INCONCLUSIVE unless the second cell agrees;
+ *   · anyone tightening this number needs a fresh distribution first, because
+ *     there is no headroom left to spend on v1;
+ *   · the number MEANS something (an export slower than realtime is a product
+ *     problem, not a statistical one), which is why it was not moved to fit the
+ *     data. It is a threshold, not a band fitted to noise.
+ */
 const MIN_EXPORT_REALTIME = 1.0
 /**
  * Output bytes the muxer may hold at once. compose/scratch.ts coalesces writes
