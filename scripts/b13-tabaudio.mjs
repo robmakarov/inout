@@ -585,6 +585,40 @@ async function runVariant(name, urlSuffix) {
       })
     })()`, 180000)
 
+    /**
+     * THE RAW CHANNEL, SAVED BESIDE THE EXPORT — and this is the comparison the
+     * task needed from the start. The certificate on the files Robert listened
+     * to reads `path: instant`, and what an instant export contains is not
+     * always what the diagnostics describe: the measured tab-audio channel has
+     * paddedMs, silence accounting and an anchor, and the file may have been
+     * built from something else. Saving both from one take makes the raw
+     * channel the reference for whatever the export did.
+     */
+    if (tab?.blobKey) {
+      const rawB64 = await evaluate(
+        `(async () => {
+          const root = await navigator.storage.getDirectory()
+          const dir = await root.getDirectoryHandle('blobs')
+          let h = null
+          try { h = await dir.getFileHandle(${JSON.stringify(tab.blobKey)}) } catch (e) {
+            for await (const [n, hh] of dir.entries()) if (n.startsWith(${JSON.stringify(tab.blobKey)})) h = hh
+          }
+          if (!h) return ''
+          const buf = new Uint8Array(await (await h.getFile()).arrayBuffer())
+          let s = ''
+          const CH = 0x8000
+          for (let i = 0; i < buf.length; i += CH) s += String.fromCharCode.apply(null, buf.subarray(i, i + CH))
+          return btoa(s)
+        })()`,
+        180000,
+      )
+      if (typeof rawB64 === 'string' && rawB64.length > 0) {
+        const rawPath = join(opts.out, `b13-RAWCHANNEL-${opts.rung}.webm`)
+        writeFileSync(rawPath, Buffer.from(rawB64, 'base64'))
+        v.rawChannelFile = rawPath
+      }
+    }
+
     // ---- the file for Robert's ear ----------------------------------------
     if (v.exported?.name) {
       const b64 = await evaluate(
@@ -662,6 +696,7 @@ try {
     console.log(`  tab-audio delivered settings: ${JSON.stringify(tab?.audioTrack ?? null)}`)
     console.log(`  anchors: ${JSON.stringify(v.lead ?? null)}`)
     console.log(`  export: ${v.exportMs} ms for a ${opts.takeMs} ms take = ${v.exportRealtimeX}x realtime`)
+    if (v.rawChannelFile) console.log(`  raw tab-audio channel: ${v.rawChannelFile}`)
     if (v.file) console.log(`  file for Robert: ${v.file}`)
     for (const l of v.trackLines ?? []) console.log(`  · ${l}`)
     for (const l of v.anchorLines ?? []) console.log(`  · ${l}`)
