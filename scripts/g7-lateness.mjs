@@ -172,6 +172,23 @@ const CLAMP = (ms, period) => `
  * TaskDuration divided by the window IS the cost per second of wall clock. No
  * workload, no throughput arithmetic, nothing to be swamped by.
  */
+/**
+ * THE CONTROL: a bare `setInterval(16)` that does NOTHING. If waking a parked
+ * renderer 62 times a second costs about what the sampler costs, then the price
+ * is the wake-up and not the instrument — and the number that matters is the
+ * one measured while a take is already running, where the thread is awake
+ * anyway. That is `costtake` below.
+ */
+const BARE_TIMER = (ms, periodMs) => `
+(async () => {
+  let n = 0
+  const iv = setInterval(() => { n++ }, ${periodMs})
+  await new Promise((r) => setTimeout(r, ${ms}))
+  clearInterval(iv)
+  return { summary: null, ticks: n }
+})()
+`
+
 const IDLE = (ms, opts) => `
 (async () => {
   ${opts ? `const run = await window.__inoutLatenessStart(${JSON.stringify(opts)})` : ''}
@@ -223,6 +240,7 @@ async function laneCost(chrome, out) {
   // and so is pure cost during a take).
   const configs = [
     { label: 'off', opts: null },
+    { label: `bare setInterval(${COST_PERIODS[0]})`, bare: COST_PERIODS[0] },
     ...COST_PERIODS.map((periodMs) => ({ label: `${periodMs}ms`, opts: { periodMs, owners: false } })),
     { label: `${COST_PERIODS[0]}ms+owners`, opts: { periodMs: COST_PERIODS[0], owners: true } },
   ]
@@ -230,7 +248,10 @@ async function laneCost(chrome, out) {
   for (let i = 0; i < COST_REPS; i++) {
     for (const c of configs) {
       const before = await metrics()
-      const r = await chrome.evaluate(IDLE(windowMs, c.opts), windowMs + 60_000)
+      const r = await chrome.evaluate(
+        c.bare ? BARE_TIMER(windowMs, c.bare) : IDLE(windowMs, c.opts),
+        windowMs + 60_000,
+      )
       const after = await metrics()
       busy.get(c.label).push(((after.task - before.task) / (windowMs / 1000)) * 1000)
       if (c.opts && r?.summary) out.costSummary = r.summary
@@ -259,6 +280,68 @@ async function laneCost(chrome, out) {
     rows.map((r) => `${r.config} +${r.costMsPerSec} ms/s`).join(' · ') +
     ` (${BUILD ? 'built bundle' : 'dev server'}, ${COST_REPS} × ${COST_SEC} s)`
   console.error(`g7: ${out.costVerdict}`)
+}
+
+/**
+ * THE GATE'S OWN CONDITION: "< 1 ms per second OF CAPTURE".
+ *
+ * The idle-page lane measures what it costs to wake a renderer that is parked;
+ * a recording take does not park. So this alternates equal windows INSIDE ONE
+ * RUNNING TAKE — sampler off, sampler on — and reads the renderer's main-thread
+ * busy time across each. Same take, same encoders, same preview: the only
+ * difference between the two windows is the instrument.
+ */
+async function laneCostTake(chrome, out) {
+  await chrome.send('Performance.enable')
+  const metrics = async () => {
+    const r = await chrome.send('Performance.getMetrics')
+    const get = (name) => r.metrics.find((m) => m.name === name)?.value ?? 0
+    return { task: get('TaskDuration'), script: get('ScriptDuration') }
+  }
+  const started = await chrome.evaluate(
+    `(() => { const b = document.querySelector('button.recbtn'); if (!b) return 'no record button'; b.click(); return 'ok' })()`,
+  )
+  if (started !== 'ok') throw new Error(`could not start a take: ${started}`)
+  await sleep(4000) // let arming settle: the first seconds are not steady state
+  const windowMs = COST_SEC * 1000
+  const on = []
+  const off = []
+  const onScript = []
+  const offScript = []
+  for (let i = 0; i < COST_REPS; i++) {
+    for (const sampling of [false, true]) {
+      const before = await metrics()
+      const r = await chrome.evaluate(
+        IDLE(windowMs, sampling ? { periodMs: COST_PERIODS[0], owners: false } : null),
+        windowMs + 60_000,
+      )
+      const after = await metrics()
+      const perSec = (x) => ((x / (windowMs / 1000)) * 1000)
+      ;(sampling ? on : off).push(perSec(after.task - before.task))
+      ;(sampling ? onScript : offScript).push(perSec(after.script - before.script))
+      if (sampling && r?.summary) out.costTakeSummary = r.summary
+    }
+  }
+  await chrome.evaluate(`(() => { document.querySelector('button.recbtn')?.click(); return 'ok' })()`)
+  const cost = median(on) - median(off)
+  out.costTake = {
+    method: 'CDP TaskDuration, alternating windows INSIDE one running take',
+    periodMs: COST_PERIODS[0],
+    windowMs,
+    reps: COST_REPS,
+    offBusyMsPerSec: off.map(r3),
+    onBusyMsPerSec: on.map(r3),
+    offScriptMsPerSec: offScript.map(r3),
+    onScriptMsPerSec: onScript.map(r3),
+    costMsPerSec: r3(cost),
+    costScriptMsPerSec: r3(median(onScript) - median(offScript)),
+    samplesSeen: out.costTakeSummary?.samples ?? null,
+  }
+  out.costTakeVerdict =
+    `DURING CAPTURE at ${COST_PERIODS[0]} ms: main thread busy ${r3(median(off))} → ${r3(median(on))} ms/s ` +
+    `(+${r3(cost)}), script ${r3(median(offScript))} → ${r3(median(onScript))} ms/s; ` +
+    `${COST_REPS} × ${COST_SEC} s windows inside one take`
+  console.error(`g7: ${out.costTakeVerdict}`)
 }
 
 async function laneTake(chrome, out) {
@@ -411,8 +494,13 @@ async function laneDragCmp(chrome, out) {
     }
     await sleep(1000)
   }
+  const probeBefore = chrome.consoleLines.filter((l) => l.includes('size probe')).length
   const r = await chrome.evaluate(DRAGCMP(DRAG_SEC * 1000), 180_000)
   out.dragcmp = r
+  // Did B10's own suspect actually run inside the window this measured?
+  const probes = chrome.consoleLines.filter((l) => l.includes('size probe'))
+  out.sizeProbe = probes.slice(-2)
+  out.sizeProbeInsideDrag = probes.length > probeBefore
   const t = r?.ticker
   const sm = r?.sampler
   out.dragcmpVerdict =
@@ -517,7 +605,7 @@ async function main() {
       await quitChrome(chrome).catch(() => undefined)
       chrome = null
     }
-    if (LANES.some((l) => ['cost', 'take', 'editor', 'drag', 'dragcmp'].includes(l))) {
+    if (LANES.some((l) => ['cost', 'costtake', 'take', 'editor', 'drag', 'dragcmp'].includes(l))) {
       chrome = await openChrome(false)
       await sleep(2500)
       const visible = await chrome.evaluate('document.visibilityState')
@@ -526,6 +614,7 @@ async function main() {
         throw new Error(`the page is ${visible} — every number here would be the clamp`)
       }
       if (LANES.includes('cost')) await laneCost(chrome, out)
+      if (LANES.includes('costtake')) await laneCostTake(chrome, out)
       if (LANES.includes('take')) await laneTake(chrome, out)
       // `drag` runs the editor lane itself — asking for both would grade the
       // second 15 s window, which nothing sampled.
