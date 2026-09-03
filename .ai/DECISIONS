@@ -996,3 +996,48 @@ cannot tell its own noise from a finding is worse than no gate, because a sessio
 a fix for a bug that was never there. What is left unnamed and is written down as unnamed: the 120 s
 cell's ~1/3 CDP death did not reproduce on a quiet machine (3/3 clean), so it is mitigated — 3 retries
 and the logs finally kept — and not solved.
+
+session 2026-09-03 — B14 CLOSES: THE METER WAS MEASURING THE WRONG FRAME, AND max PAID 30 fps FOR IT.
+VERIFIED BEFORE FIXED, which the task demanded and which is what found the real cause. On prod, two
+arms, `qstep=max&screensize=3024x1964`: pressed cold, `"has not been measured yet — holding at 30 fps
+on the old size rule"` (nothing in `inout.encoderBudget.v1` at the press); pressed a minute in,
+`"this machine's encoder measured 342 Mpx/s — holding at 30 fps"`, take recorded
+`{screen 3024x1964 fps:30}`. TWO branches of `rateForSurface`, not one, and Robert's 124.8-minute take
+hit the SECOND — the one the note called out as the branch that "would have allowed it".
+THE CAUSE. `encoderWarm` metered at a hard-coded 1920x1080 with a hard-coded `avc1.4D402A` — Main
+LEVEL 4.2, which `isConfigSupported` REFUSES above 1080p rather than clamping, so the size was never a
+choice, it was the only size that codec string allows. And Mpx/s is not a machine constant: same
+machine, same 40-frame meter, the take's own codec ladder, 3 reps each — 1920x1080 330 · 2560x1662 389
+· 3024x1964 398/406/412 · 3840x2160 417. It RISES with frame size (rate.ts's own 2026-08-30 numbers,
+362/410/416/435, said the same and were read as noise). 3024x1964@60 wants 356; the machine gives ~405
+at that frame and 330 at 1080p. THE WHOLE DEFECT LIVES IN THE GAP BETWEEN THOSE TWO READINGS.
+A comment in encoderWarm called measuring small "the safe direction". For a decision that can only ever
+TAKE SOMETHING AWAY it is the REFUSING direction, and that sentence is the lesson worth keeping: the
+safe direction of an error depends on which way the decision can move, never on the sign alone.
+THE FIX, and it is a measurement and not a policy. The meter runs at the DISPLAY's own pixel size with
+the first supported AVC candidate (new `capture/avcCodecs.ts` owns the ladder; `rawVideo.worker.ts`
+imports it, so the meter and the channel can no longer disagree about what this machine encodes with).
+The reading stores the frame it was taken at, and a reading taken SMALLER than the surface understates
+it and may inform an attempt but never a refusal — not a margin and not a correction, but the
+DIRECTION OF THE ERROR, which is known and monotone. `rateDecisionForSurface` names the branch it took
+and `acquire` passes it through M1's door EITHER WAY — recorded as REFUSED when the budget looks and
+takes nothing — so a take carries the fact instead of the next agent inferring it.
+GATES, ON PROD, AS NUMBERS. Cold: meter `378 Mpx/s at 3024x1964`, `60 fps kept: 356 wanted, 378
+measured, branch measured-fits`, recording `{3024x1964 fps:60}`, file grid 60 / cadence 60, 313 encoded
+of 312 arrived, 0 dropped, card **GREEN 13/13, rate pass**. A minute in: 396 Mpx/s, same verdict, 415
+of 414, 0 dropped, **GREEN 13/13**. `stopStats.decisions` carries `branch/want/can/at` on both. Oracle
+PASS on v2 AND v1. Nothing else in rate.ts moved — the size rules and the unmeasured branch's constant
+are untouched, so a machine that has never been asked is still not experimented on.
+FOUND ON THE WAY AND DELIBERATELY NOT SHIPPED (BACKLOG P1, Robert's call): THE `max` STEP NEVER TURNS
+ON `max` MODE. `captureQualityMode()` reads its own key and defaults to `'auto'`; the slider writes only
+`inout.quality.step`. Every other max behaviour is wired to the step — `sourceResEnabled`,
+`sourceRateEnabled` — this one was missed. So at max the arm-time refusal runs at all (B14's own
+subject, against acquire.ts's own comment "MAX MODE ATTEMPTS WHAT THE SOURCE OFFERS, full stop"), the
+rate ladder steps (against "max must not have ladder"), and `singleGenerationTake`'s
+`!rateLadderAllowed()` branch is dead — so a max+CAMERA take still opens a composite, which contradicts
+STATE's "max opens no composite" and F16b's premise. One line to wire; it moves the ladder and the
+composite, which is behaviour Robert sees, so it is his and not this task's.
+AND A PROCESS FAILURE WORTH THE LINE: this session's headed max60 rig FROZE ROBERT'S MACHINE and he had
+to restart it. CLAUDE.md already says heavy runs are announced and never run while he is at the machine;
+it was not announced. Announce first, every time — an 8 GB M3 encoding 3024x1964@60 in a headed Chrome
+is not a background task.
