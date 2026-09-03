@@ -10,6 +10,11 @@ rewrite or delete the stale line; never append a log — git history is the arch
 Read first: `.ai/STATE` (what is true now), `.ai/ARCH` (how it is built), `.ai/TASKS` (roadmap, READY
 map, task specs, operating rules — evidence gates are mandatory). `BACKLOG.md` = bugs and ideas
 (Robert dumps to Inbox; whoever picks one up triages it; done items are deleted on sight).
+`.ai/PROPOSALS` = designs offered to Robert and NOT decided — nothing there is a task, nothing there is
+built without his word, and every entry names what it would take away (2026-09-03, DECISIONS robert
+(23): before proposing an engine, name what it removes; if the answer is anything, it is not a
+proposal). Accepted → it becomes a TASKS row and the entry is deleted; refused → deleted, one line in
+DECISIONS.
 `docs/*.md` = agent playbooks, one per instrument, listed in `docs/INDEX.md`; `docs/FLAGS.md` = every
 switch and its default — keep it current when a default moves.
 

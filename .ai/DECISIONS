@@ -859,3 +859,44 @@ mix, one code path with the export); sync and quality are never traded for speed
 carry every future edit kind — J2's three-kind rule (copies · small patches · new pixels) is the
 answer, and every future feature declares its kind in code. How to talk to him about it: plain words,
 one number per limit, costs and risks in a table, never a menu.
+
+2026-09-03 robert (23) — J2 IS DELETED, AND WITH IT THE WHOLE BITSTREAM FAMILY. THE ORDER IS: FIX THE
+BUGS, FIX MAX, MAKE SMALL EDITS CHEAP, CLEAN THE SWITCHES. Reviewed J2 the morning after it was
+written and rejected it in stages, each stage narrowing what may be proposed:
+(a) THE EXPORT IS A PLAIN VIDEO FILE. "i told it to make it convert to fucking plain video file when
+exported, not recoverable copy" — J2 shipped the capture encode hidden INSIDE the delivered MP4, so
+anything an overlay covered or a layout cropped stayed recoverable by the recipient, and the file only
+looked right on decoders that honour `pic_output_flag`. Both are out. Nothing we ship carries a hidden
+layer.
+(b) NOTHING THE USER HAS TODAY MAY BE TAKEN AWAY TO BUY SPEED. "no changing frame size, no croping, no
+moving camera outside, nothing must change what works now, but search for better design anyway", then
+"no, not removing any features we have now, stop fucking offering it". This kills, and they are not to
+be re-offered: frames that grow the canvas instead of scaling the screen · zoom holds exported as a
+crop · the camera confined to the margin · recording the composite in place of the raw channels ·
+choosing the frame or the camera pose before the take as a CONDITION of speed. Any of them may be
+offered as an ADDITION Robert chooses; none may be the price of a fix.
+(c) NO SPECULATIVE RENDER. "render in background while editing is fucked up, it goes back and forth
+and it wastage of resourses, i dont want it" → TASKS J3: the edit-triggered pre-render is deleted, not
+paced. Nothing renders until Export is pressed.
+(d) WHAT HE ASKED FOR INSTEAD, verbatim: "i want video rendered while recording so non edit export
+instantly as we supposed to have now but dont fucking work" (→ B14 first: max is recording 30 fps, and
+the instant path at max is PROPOSALS A, his call) · "i want small changes with small duration way to be
+found to apply this changes only on part of video it applies to" (→ J1, narrowed to this) · "what is
+supposed to be big changes like moving camera from the begining of video, which is will happen almost
+everytime for users, or background for video most effective way to be rendered".
+(e) AND THEN HE KILLED THE ONLY ANSWER TO (d)'s last clause, correctly: "if you cant make background
+frame then i dont need your fucking shit with camera moving blocks". A block-rewriter would have taken
+a whole-take camera move from ~1 h to minutes, at 2-4 months and real risk — but a background frame
+SCALES the screen, so every pixel lands somewhere new and no block-reuse scheme of any kind can help
+it. A design that leaves the most common edit at full cost does not earn months. The family is parked
+in Phase 5 as research so nobody re-walks it, and it is not a task.
+(f) "make priority task to clean up test switches mess" → TASKS U4, first on the map. 37 switches are
+read in the code, docs/FLAGS.md mentions 85, the panel shows a fraction, and there is no way to see or
+reset what is on. Robert's own U4 ruling of 2026-09-02 (every flag becomes a product decision or is
+deleted) had not been executed.
+(g) "save your propositions i ll discuss it with other session" → .ai/PROPOSALS. Nothing in that file
+is a task, none of it is built, and each entry names what it would cost the product.
+THE LESSON FOR THE NEXT AGENT WHO WANTS TO BE CLEVER: J2 was competent codec work — the even-pixel
+derivation is correct, the hidden-picture trick is real — and it was still wrong, because it paid for
+speed with the shipped file, with player compatibility, and with edits the user already has. Before
+proposing an engine, name what it takes away. If the answer is anything, it is not a proposal.
