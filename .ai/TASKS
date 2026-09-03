@@ -29,7 +29,7 @@ Done means (proposed; Robert decides): two ≥60-min max60 takes with camera + t
 |---|---|---|---|---|
 | ~~A1~~ | tab-audio starvation — **DONE 2026-09-02**, gate 2 read on rec_gpsoujs2sydf (124.8 min, prod): capture path green, Robert confirms the silence was real (DECISIONS robert (18)). Instrument half → G6(g)(h); his audio complaints → B13 | heavy | **CLOSED** | — |
 | ~~E2~~ | governor biased UP — **DONE 2026-09-02**. Picture moves at `critical` only and only for the take's OWN work with the unseen work already shed; up on one confirming sample (~500 ms); a probe no reading can veto at 15 s; a byte-bounded burst absorber before the picture; every shed and recovery in the take (`stopStats.elastic`) and graded (`elastic` dimension). Same load, same machine: dropped 55 → 14, time at half rate 18.0 s → 11.1 s | medium | **CLOSED** | — |
-| M1 | the combine — ONE elastic system for ALL SEVEN, behind ONE DOOR that records every decision (S1 folded in 2026-09-02 on Robert's word) | heavy | READY TO BUILD, flag OFF | default flip is Robert's word |
+| M1 | the combine — ONE elastic system for ALL SEVEN, behind ONE DOOR that records every decision (S1 folded in 2026-09-02 on Robert's word) | heavy | **BUILT ON `task/m1`, NOT MERGED** — the door is in and enforced, the floor works on a real max60 take (evidence in the block below); gates green | Robert's flip; a session to land it |
 | A2 | shadow audio — record the sound twice, splice the gaps | light-medium | READY (Robert "try it") | after A1 gate 2 lands or in parallel |
 | J1 | THE RENDER REMEMBERS — chunked, keyed by the edit restricted to each chunk, concatenated by packet copy; length and edits stop mattering. Absorbs resumable renders and the shipping cursor | heavy | READY, and RULED 2026-09-02 (DECISIONS robert (14)) — no length heuristic is an acceptable answer | — |
 | B10 | size probe off the main thread (editor stalls 35-201 ms) | light | READY | — |
@@ -114,6 +114,69 @@ LIKE WATER (DECISIONS robert (12)): continuous adaptation, no perceptible steppi
 THE EMERGENCY FLOOR (the original M1): at max, E1's predictive detector, sampled from rawVideo.worker.ts (max opens no composite — the ONE elastic system, no fork), arms an EMERGENCY FLOOR when starvation is COMING: sacrifice order, every event certified — composite (none at max) → camera fps → screen fps 60→30 → resolution LAST. AUDIO IS NEVER SACRIFICED. Recovery = O16's segmenting, automatic, seconds. Inherits E2's bias. TECH CANDIDATE first: temporal SVC L1T2 on the max60 encoders — `isConfigSupported` on Robert's Chrome per codec, never from memory; sheds become mux-time packet selection on `metadata.svc.temporalLayerId`; a 30 fps export of a 60 take = base-layer packet copy; where hardware refuses, today's rung mechanism stands.
 GATES: induced load spike on a max60 take → audio silentTail 0, picture loss < 5 s, recovery automatic with seams inside O16's bands (30 ms step, 69 ms seam), every event in the certification and the report card · without the spike nothing engages (max byte-identical) · flag off = byte-identical at every gate · oracle v2+v1 green · oracle:long quoted.
 GATES FROM THE FOLDED S1: one take's decision list readable from its black box with ZERO decisions missing on a run that deliberately triggers (a)-(f) · the report card carries the dimension · a test asserts a rate step, a composite drop and a codec fallback each append an entry THROUGH THE DOOR · a test proves the door is the only way in (a bypassing path fails the build) · Chrome's own adaptation is DETECTED and recorded even though it cannot be owned · the smooth-dials-first ordering demonstrated on one induced spike (rate is the last dial that moves, and the trace shows it) · costs nothing measurable on a clean take (G7's main-thread lateness unmoved) · the (a) latency fix quoted against X14's current 40-66 ms audio-late reading.
+
+HANDOFF 2026-09-03 — BUILT ON `task/m1`, NOT MERGED (branch head has it all; the worktree is
+~/.inout-worktrees/inout-m1 because the system wiped $TMPDIR mid-session and took every worktree with it).
+THE DOOR IS IN AND IT IS ENFORCED. `core/door.ts`: `passDoor(request, apply)` writes the decision and
+hands `apply` the only `DoorTicket` that reaches a dial-moving primitive; the ticket is branded with a
+module-private unique symbol, so a bypassing path cannot be written, only imagined. Outcomes are
+applied / refused / failed. `core/doorOnly.test.ts` scans the shipped source: `applyConstraints` exists
+in ONE file (the door), `noteElastic` in two (its definition and the door's mirror), every
+`encoder.configure` is an allowlist entry that has to say why it is not a dial. PROVEN TO BITE — adding
+a bypassing fallback to deviceGuard.ts turns the suite red and names the file.
+ROUTED (17 sites): the ladder step · the step max REFUSES · encoder-budget composite drop ·
+encoder-budget screen narrowing · watchdog composite drop (d) · acquire export-ceiling cap · F15 rate
+budget · CAPTURE_MAX cap (h) · odd-side evening · raw tab-audio re-ask · P0-tail throttle · a
+timed-out drain (b) · background broker · burst absorber · capture codec rung · export codec rung
+skips (f) · the For-AI 28 MB truncation (c) · Chrome's own adaptation, DETECTED at 1 Hz against what
+our own last decision produced.
+ONE WRITE, TWO VIEWS: a decision carrying a `layer` mirrors into E2's ledger ON ITS OUTCOME, so
+`stopStats.elastic` still means what E2 grades. `stopStats.decisions` is the door's own, the report
+card grades a `decisions` dimension, `__inoutDoor()` reads it mid-take, and the certification carries
+`capture.gaveUp` (12 entries + a count) so a shared FILE says what the take gave up.
+THE FLOOR (`?floor=1`, OFF; `?floorres=1` for the size rung, also OFF). One instrument: the
+compositor's sampler is now `capture/pressureSampler.ts` and BOTH workers use it (equivalence pinned
+by test); rawVideo.worker samples only when asked. `emergencyFloor.ts` is the ORDER, `floorController.ts`
+re-decides nothing — it asks `ladderDecision` and turns the DIRECTION into a rung, asking the same
+function again with the rate moved to the end that leaves room where the floor's ladder is wider.
+GATES, AS NUMBERS (`node scripts/exp.mjs floor --headed --query='screenfps=60&camfps=60'`, 2560x1440@60
+screen + camera through the production session, encoder load 12→24 s of a 45 s take):
+ · CALM LANE (armed, no spike): 0 rungs, one screen segment, 60 fps throughout, 5 decisions. Nothing
+   engages without a spike — the gate, met.
+ · FLOOR LANE, shipping shape (rate rungs): engaged +841 ms (camera 60→30), screen 60→30 at 15.9 s,
+   screen back at 60 +895 ms after the load lifted, camera +3,975 ms, ONE segment, ZERO seams, audio
+   silentTail 0 on both channels, 13 decisions, 0 refused, 0 failed, elastic order held.
+ · WITH THE SIZE RUNG: camera 12.8 s → screen rate 15.9 s → size 2560→1920 at 19.0 s → size back at
+   27.1 s → rate back 30.1 s → camera back 33.2 s. Order held, audio silentTail 0, 18 decisions.
+ · THE ONE GATE THAT FAILED ITS BAND, and why `?floorres=` exists: the size step's seam is 5,047 ms
+   taken while critical, against 30 ms for the step back up on the same take (O16's own band). The
+   seam is the LOAD's cost — closing a segment means draining an encoder that is behind — and it lands
+   on the take that can least afford it. The same run could not show the rung EARNING it either (the
+   step landed at 19.0 s, the load lifted at 24.0 s). So the rung is built, tested, in the order, and
+   OFF; a size already given up is always restored whatever the flag says.
+ · OFF LANE (the positive control, same spike): 0 floor decisions, no sampler, 60 fps throughout, one
+   segment — max exactly as it ships.
+ · COMPOSITE-DROP LANE: `5.6 s channels watchdog applied — the live composite stopped being recorded`.
+   With codecDoor.test.ts and the floor runs, all three paths this gate names by hand are proven in the
+   product.
+TWO DEFECTS THE RIG FOUND AND THIS BRANCH FIXES: `requestedRate` was assigned only inside
+startComposite, past its own early return, so every MAX take reported `asked for 30 fps` however fast
+it recorded (and the floor could never have given a 60 fps take its rate back) · the floor's reason
+line named the worst SIGNAL when what fired was pressure.ts's loss floor ("worker-lateness: 0.47 ms"
+for a step caused by 4 dropped frames).
+AND ONE THE DOOR ITSELF REMOVED: liveCompositeV2 wrote the picture step into the elastic ledger at the
+VERDICT and session.ts then refused to step in max — every loaded max take carried a shed that never
+happened. The record now belongs to the act, with its outcome.
+GATES: typecheck green · 1099 unit tests (was 1061) · drill 29 checks · oracle v2 PASS (sync
+35.6/48.7 ms, instant 51.6, smartcut 52.8, tail 76, export 4.95x) · oracle v1 PASS (sync 56.4/73.3,
+instant 48.3, render 42.3, tail 77, export 1.51x) · oracle:long PASS (120 s: sync 46.8/69.1, instant
+55.1, smartcut 54.2, tail 68, export 6.13x — the instant and smart-cut paths did not move) ·
+oracle:load PASS (source ALIVE, fps PASS, stopMs 25/28, tailGap 16 ms) · armcancel green.
+STILL OWED: Robert's flip (both flags) · entry (a), which is B13's · two instrument findings this work
+turned up, filed in BACKLOG for G6 — the card cannot see a hole between two segments of one kind (it
+graded a take with a 5,047 ms screen gap "all full length"), and after M1 the `rate` dimension reds
+the very takes the floor rescues while `elastic` and `decisions` pass them.
+
 ### A2 shadow-audio [light-medium · capture, additive · Robert "try it"]
 An audio-only MediaRecorder (opus, browser-process buffered) records the same tracks beside the measured path into its own OPFS key; at stop, gaps the report card names are spliced from the shadow (aligned by shared startOffset, ≤1 s cross-correlation per gap edge, resampled; deterministic DSP). Differential witness: a gap in both = below the page; measured-only = ours. Shadow deleted once the take grades green.
 GATES: a take with induced bursts (tapstarve lane) exports with the gaps FILLED — envelope continuous across each splice, no click (spur gate holds), silentTail matching a clean control · a clean take is byte-identical on the measured path and discards the shadow · splice alignment error ≤ 5 ms per seam, quoted · no measurable load at max60 (tapstarve table unchanged) · oracle v2+v1 green · the report card names every splice.
