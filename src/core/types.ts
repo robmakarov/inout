@@ -460,6 +460,23 @@ export interface TakeStopStats {
   /** Ledger lines dropped off the front of the ring (bounded at 400). 0 or
    *  absent on every ordinary take. */
   elasticDropped?: number
+  /**
+   * M1 — EVERY DECISION THIS TAKE MADE ABOUT ITSELF, in order, through the door
+   * (core/door.ts). Wider than `elastic` above and deliberately so: the elastic
+   * ledger holds the three layers of the ORDER OF DEFENCE, and this holds every
+   * change to rate, resolution, quality or which channels ran — including the
+   * ones taken before the first frame (the encoder budget, the rate this
+   * machine agreed to attempt) and the ones nobody chose (Chrome's own capture
+   * adaptation, which cannot be owned and can only be detected).
+   *
+   * Absent on every take made before M1. A decision that was REFUSED or that
+   * FAILED is here too, with its outcome: "the ladder wanted to step and max
+   * would not let it" is a fact about the take, and the old ledger recorded it
+   * as if the picture had actually moved.
+   */
+  decisions?: DoorDecision[]
+  /** Door lines dropped off the front of the ring (bounded at 400). */
+  decisionsDropped?: number
 }
 
 export interface ChannelEdit {
@@ -941,6 +958,95 @@ export interface ElasticEvent {
   /** The hardware block the deciding signal was about, when there was one. */
   block?: HardwareBlock
   level?: PressureLevel
+}
+
+/**
+ * M1 — THE FOUR DIALS THE DOOR GOVERNS, and there are exactly four because
+ * Robert's ruling names four: "every change to quality, rate, resolution or
+ * which channels run". `work` is the fifth and it is not one of his: it is the
+ * UNSEEN work (the background render, the prerender), which is not part of the
+ * take at all — it is the thing that must be given up BEFORE any of the four,
+ * and it is on the same ledger so the order can be read.
+ */
+export type CaptureDial = 'rate' | 'resolution' | 'quality' | 'channels' | 'work'
+
+/**
+ * WHO DECIDED. The audit of 2026-09-02 found seven adaptive systems and no way
+ * to tell, afterwards, which of them had moved a take — so the answer is a
+ * field rather than a guess from the wording.
+ *
+ * `chrome` is the one that is not ours: the browser adapts a capture source on
+ * its own (acquire.ts's note), and that cannot be owned. It can only be
+ * DETECTED and written down, which is what makes it a decider here instead of a
+ * mystery in the numbers.
+ * `device` is the platform taking a channel away (a track that ended, a sensor
+ * that never delivered) — also not a decision anyone made, also recorded.
+ */
+export type DoorDecider =
+  | 'ladder'
+  | 'floor'
+  | 'budget'
+  | 'watchdog'
+  | 'broker'
+  | 'absorber'
+  | 'codec'
+  | 'geometry'
+  | 'drain'
+  | 'user'
+  | 'chrome'
+  | 'device'
+  | 'segment'
+
+/**
+ * WHAT BECAME OF IT. The old ledger recorded intentions: liveCompositeV2 wrote
+ * `60 → 30 fps` into the elastic log at the moment the LADDER decided it, and
+ * in max mode the session then refused to step — so a take that never lost a
+ * frame carried a line saying its picture had halved. An outcome makes that
+ * unrepresentable.
+ */
+export type DoorOutcome = 'applied' | 'refused' | 'failed'
+
+/** The numbers a decision was made on, and the ones it turned out to produce.
+ *  Free-form on purpose: every dial measures something different, and a fixed
+ *  shape would either be mostly null or exclude the next dial. */
+export type DoorMeasured = Record<string, number | string | boolean | null>
+
+/**
+ * ONE DECISION, AS THE ACT OF MAKING IT (M1, folding in S1 — Robert 2026-09-02
+ * robert (17): "a WRITTEN RULE is not structural prevention — it decays").
+ *
+ * Persisted in `TakeStopStats.decisions`, so this is a contract: a take
+ * recorded today is read by a build shipped months from now.
+ */
+export interface DoorDecision {
+  /** ms since the take's epoch. NEGATIVE before the first frame — the encoder
+   *  budget and the arm-time rate decision are taken while the take is being
+   *  armed, and they belong to it. */
+  atMs: number
+  dial: CaptureDial
+  decidedBy: DoorDecider
+  /** `shed` = the take gave something up · `restore` = it took it back ·
+   *  `set` = a one-off decision with no opposite (a codec rung, a geometry). */
+  action: 'shed' | 'restore' | 'set'
+  /** What moved, in a few words — `60 → 30 fps`, `composite dropped`. */
+  what: string
+  /** Why, quoting the signal that decided it. */
+  why: string
+  outcome: DoorOutcome
+  /** Set when the outcome is `refused` or `failed`. */
+  outcomeWhy?: string
+  measured?: DoorMeasured
+  block?: HardwareBlock
+  level?: PressureLevel
+  /**
+   * Present when this decision is part of E2's ORDER OF DEFENCE, and then it is
+   * also mirrored into `elastic` above — one write, two views, so the two
+   * ledgers cannot disagree about a take.
+   */
+  layer?: ElasticLayer
+  /** True when the decision was taken inside a worker and adopted by the main
+   *  thread (its `atMs` is the instant of adoption, ±one message). */
+  fromWorker?: boolean
 }
 
 /**

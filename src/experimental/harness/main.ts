@@ -579,6 +579,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'floor',
+    title: 'M1 — does the emergency floor catch a max take, and cost a calm one nothing?',
+    detail:
+      'three max60 takes through the PRODUCTION session (two raw encoders, no composite): `calm` with the floor armed and no load — it must take no rung at all; `floor` with an induced spike — audio silentTail 0, the sacrifice order camera→screen rate→resolution, recovery automatic; `off` is the POSITIVE CONTROL, the same spike with the floor off, i.e. max as it ships. Reports the take\'s own door ledger, its report card, every audio channel\'s continuity and the seam between screen segments. {"takeMs":40000,"loadAtMs":12000,"loadMs":14000,"lanes":["calm","floor","off"]}. HEAVY — it saturates the machine on purpose, three times.',
+    run: async (args) => {
+      const { runFloorSpike } = await import('../perf/floorSpike')
+      return runFloorSpike({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        loadAtMs: typeof args?.loadAtMs === 'number' ? args.loadAtMs : undefined,
+        loadMs: typeof args?.loadMs === 'number' ? args.loadMs : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        load: (args?.load as 'none' | 'cpu' | 'encode' | 'all') ?? undefined,
+        lanes: Array.isArray(args?.lanes)
+          ? (args.lanes as ('calm' | 'floor' | 'off')[])
+          : undefined,
+      })
+    },
+  },
+  {
     id: 'syncload',
     title: 'A/V sync when the machine is BUSY (Robert 4K-game take)',
     detail:

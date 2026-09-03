@@ -27,6 +27,8 @@
  * default is Robert's to flip, on evidence, as O4's was. `?rawcodec=webcodecs`.
  */
 import { rawVideoCodec } from './rawCodec'
+import { passDoor } from '@core/door'
+import type { PressureSignals } from '@core/pressure'
 import type { RawVideoMsg, RawVideoReply, RawVideoStats } from './rawVideo.worker'
 
 export const MEASURED_VIDEO_MIME = 'video/mp4'
@@ -130,6 +132,16 @@ export async function startMeasuredVideoCapture(opts: {
    * picture instead of audio only. Absent = the shipped cadence.
    */
   earlyFragmentSec?: number
+  /**
+   * M1 — ASK THIS WORKER TO SAMPLE PRESSURE, and take the readings here.
+   *
+   * The emergency floor reads the detector at MAX, where no composite exists to
+   * sample it. Both are absent on every take that is not running the floor, and
+   * the worker then does nothing at all: no ticker, no counters, byte-identical
+   * to the worker that shipped.
+   */
+  pressure?: boolean
+  onPressure?: (signals: PressureSignals) => void
 }): Promise<MeasuredVideoHandle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('measured video: MediaStreamTrackProcessor unavailable')
@@ -151,6 +163,13 @@ export async function startMeasuredVideoCapture(opts: {
   worker.onmessage = (ev: MessageEvent<RawVideoReply>) => {
     const reply = ev.data
     if ('event' in reply) {
+      // M1 — the emergency floor's reading, when this channel was asked to
+      // sample (max only, `?floor=1`). It arrives on the same channel as the
+      // fatal because there is nothing else this worker ever says unprompted.
+      if (reply.event === 'pressure') {
+        opts.onPressure?.(reply.signals)
+        return
+      }
       if (!fatalReported) {
         fatalReported = true
         opts.onFatal?.(new Error(reply.error), 'encoder-error')
@@ -184,6 +203,7 @@ export async function startMeasuredVideoCapture(opts: {
     killEncoderInMs: opts.killEncoderInMs,
     killWorkerInMs: opts.killWorkerInMs,
     earlyFragmentSec: opts.earlyFragmentSec,
+    ...(opts.pressure ? { pressure: true } : null),
   })
   const startReply = await withDeadline(started, START_TIMEOUT_MS, 'raw video start').catch(
     (err: Error) => {
@@ -202,6 +222,35 @@ export async function startMeasuredVideoCapture(opts: {
   console.info(
     `[capture] raw ${opts.track.kind} channel on WebCodecs: ${startReply.cmd === 'start' ? `${startReply.codec} (${startReply.hardware})` : ''}`,
   )
+  // M1, AUDIT ITEM (f) — SILENCE ONLY, AND THIS IS THE CAPTURE HALF OF IT. The
+  // worker walks its candidates (prefer-hardware → no-preference →
+  // prefer-software, then down the AVC profile/level list) and the take carried
+  // only a console line saying where it landed. A SOFTWARE encode at native
+  // resolution is the thing that froze Robert's machine on 2026-08-30 — it
+  // belongs in the take's ledger, not in a console nobody has open, so the rung
+  // this channel actually got is recorded as the decision it is.
+  if (startReply.cmd === 'start') {
+    const software = startReply.hardware === 'prefer-software'
+    passDoor(
+      {
+        dial: 'quality',
+        decidedBy: 'codec',
+        action: software ? 'shed' : 'set',
+        what: `raw ${opts.track.kind} channel encoding ${startReply.codec} (${startReply.hardware})`,
+        why: software
+          ? 'no hardware encoder accepted this geometry — this channel is on a SOFTWARE encoder'
+          : 'the first candidate this browser accepted for the channel geometry',
+        measured: {
+          codec: startReply.codec,
+          hardware: startReply.hardware,
+          width: opts.width,
+          height: opts.height,
+          fps: opts.fps,
+        },
+      },
+      () => undefined,
+    )
+  }
 
   // ---- the frame pump ------------------------------------------------------
   // Read on THIS thread and transfer each frame, exactly as liveCompositeV2

@@ -42,6 +42,7 @@ import {
 } from 'mediabunny'
 import type { PressureSignals } from '../pressure'
 import { burstFramesFor } from './burstBudget'
+import { LATE_TICK_MS, PressureSampler, type PressureCounters } from './pressureSampler'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
@@ -97,17 +98,6 @@ function sizeBurst(width: number, height: number): void {
 /** A static composition still needs a frame occasionally or the timeline
  * stalls and players show nothing between events. */
 const KEEPALIVE_MS = 1000
-/**
- * E1's pressure cadence. The stats event is 1 Hz and that is a whole second of
- * lost frames before anything can react — Robert's bar is "up and down very
- * fast and responsive", so the leading signals get their own tick. 250 ms is
- * four readings inside the shortest sustain window the ladder uses, which is
- * what stops one bad quarter-second from moving a take.
- *
- * It costs a timestamp and a subtraction per tick, on a thread measured to run
- * a 16 ms ticker at 59 Hz with 2-4 ms of lateness while the page is hidden.
- */
-const PRESSURE_TICK_MS = 250
 /** How long the ticker holds off after start — see the comment where it is
  *  scheduled. Comfortably inside the ladder's own 4 s warmup, so nothing that
  *  could have acted on a reading is delayed by this. */
@@ -1182,22 +1172,23 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   // same machine without it. The delay costs nothing that could be wanted, and
   // it removes the only window in which the instrument could be the subject.
   pressureStartTimer = setTimeout(() => {
-  pressureLastTickMs = performance.now()
-  pressureWindowStartMs = pressureLastTickMs
-  pressurePrev = snapshotForPressure()
+  // M1 — the sampler is core/capture/pressureSampler.ts now, shared with
+  // rawVideo.worker.ts, because max opens no composite and the emergency floor
+  // has to read the same instrument rather than a second one that agrees by
+  // coincidence. The formulas are unchanged and pinned by pressureSampler.test.ts.
+  sampler = new PressureSampler(performance.now(), countersForPressure())
   pressureTimer = setInterval(() => {
-    if (stopped) return
+    if (stopped || !sampler) return
     const now = performance.now()
-    const late = Math.max(0, now - pressureLastTickMs - LATE_TICK_MS)
-    pressureLastTickMs = now
+    const { lateMs, due } = sampler.tick(now)
     stats.lateTicks++
-    stats.lateSumMs += late
-    if (late > stats.lateMaxMs) stats.lateMaxMs = late
-    if (late > lateMaxWindowMs) lateMaxWindowMs = late
-    lateSumWindowMs += late
-    lateTicksWindow++
-    if (lateTicksWindow < TICKS_PER_PRESSURE_POST) return
-    post({ event: 'pressure', signals: readSignals(now) })
+    stats.lateSumMs += lateMs
+    if (lateMs > stats.lateMaxMs) stats.lateMaxMs = lateMs
+    if (!due) return
+    post({
+      event: 'pressure',
+      signals: sampler.read(now, countersForPressure(), FPS, MAX_ENCODER_QUEUE, PROBE_GPU),
+    })
   }, LATE_TICK_MS)
   }, PRESSURE_START_DELAY_MS)
 
@@ -1315,32 +1306,16 @@ let lastHandlerEndedAt = 0
 const submittedAt: number[] = []
 
 // ---- E1 pressure state ----------------------------------------------------
-/** The ticker's own period. One 60 fps frame budget: fine enough to resolve a
- *  stall of a single frame, coarse enough to cost nothing. */
-const LATE_TICK_MS = 16
-/** 16 ticks ≈ PRESSURE_TICK_MS of wall clock per posted sample. */
-const TICKS_PER_PRESSURE_POST = Math.max(1, Math.round(PRESSURE_TICK_MS / LATE_TICK_MS))
-let pressureLastTickMs = 0
-let pressureWindowStartMs = 0
-let lateMaxWindowMs = 0
-let lateSumWindowMs = 0
-let lateTicksWindow = 0
+/** M1 — the ticker's period and the post cadence live with the sampler now, so
+ *  the two workers cannot drift apart on the one number that decides how fast a
+ *  stall can be seen. */
+let sampler: PressureSampler | null = null
 
-interface PressureSnapshot {
-  framesIn: number
-  framesEncoded: number
-  framesDropped: number
-  framesStale: number
-  queueSum: number
-  queueSamples: number
-  encodeLatencyMs: number
-  outputs: number
-  workMs: number
-  gpuMs: number
-  framesBurst: number
-}
-
-function snapshotForPressure(): PressureSnapshot {
+/** This worker's counters, in the sampler's vocabulary. `workMs` is the whole
+ *  cost of a frame here — paint, transfer and encode — because all three happen
+ *  on this thread and a frame the compositor cannot afford is a frame however
+ *  the cost splits. */
+function countersForPressure(): PressureCounters {
   return {
     framesIn: stats.framesIn,
     framesEncoded: stats.framesEncoded,
@@ -1354,53 +1329,6 @@ function snapshotForPressure(): PressureSnapshot {
     outputs: stats.outputs,
     workMs: stats.paintMs + stats.frameMs + stats.encodeMs,
   }
-}
-
-let pressurePrev: PressureSnapshot = snapshotForPressure()
-
-/**
- * The interval just ended, as ratios rather than totals. A counter that has run
- * since the start of the take answers a question about the whole take; the
- * ladder is asking about NOW, and a take that recovers has to stop being judged
- * on how it began.
- *
- * Every quotient is null when its denominator is zero — a window in which
- * nothing was submitted has not measured the queue, and saying 0 there would be
- * saying the encoder was empty when in truth nobody looked (R1's rule).
- */
-function readSignals(now: number): PressureSignals {
-  const p = pressurePrev
-  const s = snapshotForPressure()
-  const intervalMs = Math.max(1, now - pressureWindowStartMs)
-  const arrivals = s.framesIn - p.framesIn
-  const outputs = s.outputs - p.outputs
-  const queueSamples = s.queueSamples - p.queueSamples
-  const encoded = s.framesEncoded - p.framesEncoded
-  const signals: PressureSignals = {
-    intervalMs,
-    frameBudgetMs: 1000 / Math.max(1, FPS),
-    queueMean: queueSamples > 0 ? (s.queueSum - p.queueSum) / queueSamples : null,
-    queueCliff: MAX_ENCODER_QUEUE,
-    encodeLatencyMs: outputs > 0 ? (s.encodeLatencyMs - p.encodeLatencyMs) / outputs : null,
-    workerLateMaxMs: lateMaxWindowMs,
-    workerLateMeanMs: lateTicksWindow > 0 ? lateSumWindowMs / lateTicksWindow : null,
-    perFrameCostMs: encoded > 0 ? (s.workMs - p.workMs) / encoded : null,
-    // E2's `gpu` block. PROBE_GPU is off by default and gl.finish() is what
-    // makes gpuMs mean anything, so on an ordinary take this is null and the
-    // block reads `unmeasured` — which is the honest answer, not `nominal`.
-    gpuPerFrameMs: PROBE_GPU && encoded > 0 ? (s.gpuMs - p.gpuMs) / encoded : null,
-    stale: arrivals > 0 ? s.framesStale - p.framesStale : null,
-    arrivals: arrivals > 0 ? arrivals : null,
-    dropped: s.framesDropped - p.framesDropped,
-    burst: s.framesBurst - p.framesBurst,
-    platform: null,
-  }
-  pressurePrev = s
-  pressureWindowStartMs = now
-  lateMaxWindowMs = 0
-  lateSumWindowMs = 0
-  lateTicksWindow = 0
-  return signals
 }
 
 self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {

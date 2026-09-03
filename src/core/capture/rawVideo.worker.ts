@@ -29,6 +29,13 @@
  * be the document's. Every sync number this project owns was expensive; none of
  * them is worth a clock calibration nobody asked for.
  */
+import type { PressureSignals } from '../pressure'
+import {
+  EMPTY_COUNTERS,
+  LATE_TICK_MS,
+  PressureSampler,
+  type PressureCounters,
+} from './pressureSampler'
 import { evenDown } from '@core/frame'
 import {
   EncodedPacket,
@@ -105,6 +112,17 @@ export interface RawVideoStartMsg {
    * (`?crashfloor=0`).
    */
   earlyFragmentSec?: number
+  /**
+   * M1 — SAMPLE PRESSURE FROM THIS WORKER (the emergency floor's instrument).
+   *
+   * Max opens no composite, so at max nothing was sampling the one signal the
+   * whole elastic system reads. With this true the worker runs the SHARED
+   * sampler (pressureSampler.ts — the compositor's, extracted, not a second
+   * one) and posts a reading four times a second. Absent/false and this worker
+   * is byte-for-byte the worker that shipped: no ticker, no counters, nothing.
+   * The main thread sets it from `?floor=1`, which is OFF.
+   */
+  pressure?: boolean
 }
 
 export interface RawVideoFrameMsg {
@@ -160,6 +178,8 @@ export type RawVideoReply =
   | { ok: true; cmd: 'cancel' }
   | { ok: false; cmd: string; error: string }
   | { event: 'fatal'; error: string }
+  /** M1 — one pressure reading, ~4/s, only when `pressure` was asked for. */
+  | { event: 'pressure'; signals: PressureSignals }
 
 /**
  * AVC PROFILE/LEVEL CANDIDATES, IN ASCENDING CAPACITY.
@@ -449,6 +469,17 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
       stats.framesEncoded++
       stats.videoBytes += chunk.byteLength
       if (chunk.type === 'key') stats.keyframeCount++
+      // M1 — how long this frame spent inside the encoder, which is one of the
+      // four leading signals. Only kept while something is sampling; the map is
+      // otherwise never written, so this costs a branch.
+      if (sampler !== null) {
+        const submitted = submittedAtUs.get(chunk.timestamp)
+        if (submitted !== undefined) {
+          submittedAtUs.delete(chunk.timestamp)
+          encodeLatencySum += performance.now() - submitted
+          outputs++
+        }
+      }
       const packet = EncodedPacket.fromEncodedChunk(chunk)
       muxChain = muxChain
         .then(async () => {
@@ -461,6 +492,9 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
   encoder.configure(config)
 
   armInducedFaults(msg)
+
+  // M1 — the emergency floor's instrument, and ONLY when it was asked for.
+  if (msg.pressure) startPressureSampling()
 
   keepAliveTimer = setInterval(() => {
     if (stopped || fatal || encoderPending || !lastFrame || firstFrameAtMs === null) return
@@ -522,9 +556,22 @@ function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   const keyFrame = gopDue || earlyDue
   if (earlyKeySec !== null && tSec >= earlyKeySec) earlyKeySec = null
   let stamped: VideoFrame | null = null
+  // M1 — the queue depth AT SUBMIT: the only instant it answers "how far behind
+  // is the encoder right now" rather than "how far behind was it at some point".
+  const sampling = sampler !== null
+  const submitAt = sampling ? performance.now() : 0
+  if (sampling) {
+    queueSum += encoder.encodeQueueSize
+    queueSamples++
+    submittedAtUs.set(tUs, submitAt)
+    // A submit whose output never comes back (a dropped or flushed frame) must
+    // not hold a stamp forever on an hour-long take.
+    if (submittedAtUs.size > 240) submittedAtUs.clear()
+  }
   try {
     stamped = new VideoFrame(picture, { timestamp: tUs })
     encoder.encode(stamped, { keyFrame })
+    if (sampling) workMs += performance.now() - submitAt
     encodeCalls++
     if (gopDue) lastKeySec = tSec
     lastEncodedTsUs = tUs
@@ -614,6 +661,82 @@ function armInducedFaults(msg: RawVideoStartMsg): void {
   }
 }
 
+// ---- M1: the emergency floor's instrument, in the worker that has it -------
+/**
+ * The same detector the composite reads, on the thread that is actually
+ * encoding at max. Off unless the start message asked for it (`?floor=1`), and
+ * then it is a 16 ms ticker whose own lateness is one of the four signals — see
+ * pressureSampler.ts for why the tick that measures is the tick that posts.
+ */
+let sampler: PressureSampler | null = null
+let pressureTimer: ReturnType<typeof setInterval> | null = null
+let pressureStartTimer: ReturnType<typeof setTimeout> | null = null
+/** Sampled at SUBMIT, which is the only instant the queue depth means
+ *  "how far behind is the encoder right now". */
+let queueSum = 0
+let queueSamples = 0
+/** Encode call → output callback, summed, with the number of outputs. */
+let encodeLatencySum = 0
+let outputs = 0
+/** Wall clock this worker spent inside encode(), which is its whole per-frame
+ *  cost: there is no paint here (that is the compositor's) and the muxer runs
+ *  on a promise chain the encoder does not wait for. */
+let workMs = 0
+/** Submit instants, by presentation timestamp, so an output can be dated. */
+const submittedAtUs = new Map<number, number>()
+
+/**
+ * The same 1 s hold the compositor takes before its first tick, for the same
+ * measured reason: nothing may ACT on a reading before the ladder's warmup, and
+ * a ticker running through a cold encoder's multi-second init lands 60 wakeups
+ * a second on the one thread that is paying for that init.
+ */
+const PRESSURE_START_DELAY_MS = 1_000
+/** The raw channel drops at this depth (see onFrame) — the cliff the detector
+ *  measures distance to. */
+const QUEUE_CLIFF = MAX_ENCODER_QUEUE
+
+function countersForPressure(): PressureCounters {
+  return {
+    ...EMPTY_COUNTERS,
+    framesIn: stats.framesIn,
+    framesEncoded: stats.framesEncoded,
+    framesDropped: stats.framesDropped,
+    // A keep-alive is this worker's "the source sent nothing new" — the same
+    // fact the compositor calls stale.
+    framesStale: stats.keepAliveFrames,
+    queueSum,
+    queueSamples,
+    encodeLatencyMs: encodeLatencySum,
+    outputs,
+    workMs,
+  }
+}
+
+function startPressureSampling(): void {
+  pressureStartTimer = setTimeout(() => {
+    sampler = new PressureSampler(performance.now(), countersForPressure())
+    pressureTimer = setInterval(() => {
+      if (stopped || fatal || !sampler) return
+      const now = performance.now()
+      const { due } = sampler.tick(now)
+      if (!due) return
+      post({
+        event: 'pressure',
+        signals: sampler.read(now, countersForPressure(), fps, QUEUE_CLIFF, false),
+      })
+    }, LATE_TICK_MS)
+  }, PRESSURE_START_DELAY_MS)
+}
+
+function stopPressureSampling(): void {
+  if (pressureStartTimer) clearTimeout(pressureStartTimer)
+  if (pressureTimer) clearInterval(pressureTimer)
+  pressureStartTimer = null
+  pressureTimer = null
+  sampler = null
+}
+
 function onFrame(msg: RawVideoFrameMsg): void {
   const frame = msg.frame
   stats.framesIn++
@@ -660,6 +783,7 @@ function onFrame(msg: RawVideoFrameMsg): void {
 async function stop(atMs: number): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   keepAliveTimer = null
+  stopPressureSampling()
   // ONE LAST KEEP-ALIVE AT THE STOP INSTANT, before anything is torn down.
   // A channel's LENGTH is how long it was live, not how long frames happened
   // to arrive — a static screen delivers ONE frame and would otherwise declare
@@ -715,6 +839,7 @@ async function cancel(): Promise<void> {
   stopped = true
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   keepAliveTimer = null
+  stopPressureSampling()
   lastFrame?.close()
   lastFrame = null
   try {

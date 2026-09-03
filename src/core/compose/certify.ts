@@ -66,9 +66,32 @@ export interface CertifiedExport {
     /** True when the stats came from capture rather than a decode pass. */
     fromCaptureStats?: boolean
   }
-  capture: { stalled?: string[]; missing?: string[]; cuts?: number }
+  capture: {
+    stalled?: string[]
+    missing?: string[]
+    cuts?: number
+    /**
+     * M1 — WHAT THE TAKE GAVE UP, IN THE FILE ITSELF.
+     *
+     * The take's full ledger lives in `stopStats.decisions`, which travels with
+     * the RECORDING; a file that is shared has left that behind. So the
+     * certification carries the shed list: what moved, who decided it, and when
+     * — bounded, because this string is embedded in every export.
+     *
+     * Absent on every take that gave nothing up, which is most of them, and on
+     * every take made before M1.
+     */
+    gaveUp?: { atMs: number; what: string; by: string }[]
+    /** Sheds beyond the ones listed — "there were more" is a different fact
+     *  from "there were none". */
+    gaveUpMore?: number
+  }
   syncBoundMs: number
 }
+
+/** How many sheds the certification carries. A take that hunted for an hour
+ *  must not put a kilobyte of ledger in every file it exports. */
+const CERTIFIED_SHEDS = 12
 
 export function buildCertification(args: {
   recording: Recording
@@ -107,8 +130,29 @@ export function buildCertification(args: {
       stalled: recording.stalled?.length ? recording.stalled : undefined,
       missing: recording.missing?.length ? recording.missing : undefined,
       cuts: args.cuts && args.cuts > 0 ? args.cuts : undefined,
+      ...gaveUpFrom(recording),
     },
     syncBoundMs: CERTIFIED_SYNC_BOUND_MS,
+  }
+}
+
+/**
+ * The take's applied sheds, compressed for the file. Only what was APPLIED and
+ * only what was given UP: a restore is the take getting better, and a refusal
+ * is not something the file is missing.
+ */
+function gaveUpFrom(recording: Recording): {
+  gaveUp?: { atMs: number; what: string; by: string }[]
+  gaveUpMore?: number
+} {
+  const sheds = (recording.stopStats?.decisions ?? []).filter(
+    (d) => d.action === 'shed' && d.outcome === 'applied',
+  )
+  if (!sheds.length) return {}
+  const kept = sheds.slice(0, CERTIFIED_SHEDS)
+  return {
+    gaveUp: kept.map((d) => ({ atMs: Math.round(d.atMs), what: d.what, by: d.decidedBy })),
+    ...(sheds.length > kept.length ? { gaveUpMore: sheds.length - kept.length } : null),
   }
 }
 
