@@ -7,13 +7,13 @@ import {
 } from '@core/types'
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
-import { captureRateCeiling, rateForSurface } from '@core/rate'
+import { DEFAULT_FRAME_RATE, captureRateCeiling, rateDecisionForSurface } from '@core/rate'
 import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { constrainThroughDoor, measuredFromSettings, passDoor } from '@core/door'
 import { detectPlatform } from '@core/platform'
 import { preemptiveRefusalAllowed } from './captureQuality'
-import { measuredEncoderThroughput } from './encoderBudget'
+import { measuredEncoderReading } from './encoderBudget'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
 import {
@@ -625,9 +625,26 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     // MAX MODE ATTEMPTS WHAT THE SOURCE OFFERS, full stop. The measurement
     // below is a protection, and max is the mode where the user has said they
     // will pay for the picture instead of being protected from it.
-    const rate = preemptiveRefusalAllowed()
-      ? rateForSurface(now.width, now.height, ceiling, measuredEncoderThroughput())
-      : ceiling
+    const reading = measuredEncoderReading()
+    const decision = preemptiveRefusalAllowed()
+      ? rateDecisionForSurface(
+          now.width,
+          now.height,
+          ceiling,
+          reading.pixelRate,
+          { width: reading.width, height: reading.height },
+        )
+      : { fps: ceiling, branch: 'max-mode' as const, wantMpxPerS: 0, canMpxPerS: 0, measuredAt: '' }
+    const rate = decision.fps
+    /** What the take carries about this decision, whichever way it went (B14). */
+    const rateMeasured = {
+      ...measuredFromSettings(now),
+      askedFps: ceiling,
+      rateBranch: decision.branch,
+      wantMpxPerS: decision.wantMpxPerS,
+      canMpxPerS: decision.canMpxPerS,
+      canMeasuredAt: decision.measuredAt,
+    }
     if (rate < ceiling && (now.frameRate ?? 0) > rate + 1) {
       try {
         // M1 — through the door, and this is the one the audit called item (h)'s
@@ -642,14 +659,10 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
             what: `${now.frameRate ?? '?'} → ${rate} fps before the take started`,
             why:
               `${now.width}×${now.height} at ${ceiling} fps wants ` +
-              `${(((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6).toFixed(0)} Mpx/s and this ` +
-              `machine's encoder measured ${(measuredEncoderThroughput() / 1e6).toFixed(0)} Mpx/s (F15/O15)`,
-            measured: {
-              ...measuredFromSettings(now),
-              askedFps: ceiling,
-              wantMpxPerS: ((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6,
-              canMpxPerS: measuredEncoderThroughput() / 1e6,
-            },
+              `${decision.wantMpxPerS.toFixed(0)} Mpx/s, this machine measured ` +
+              `${decision.canMpxPerS.toFixed(0)} Mpx/s at ${decision.measuredAt} — ` +
+              `branch ${decision.branch} (F15/O15/B14)`,
+            measured: rateMeasured,
           },
           (ticket) =>
             withTimeout(
@@ -658,28 +671,56 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
               'applyConstraints(display rate budget)',
             ),
         )
-        const want = ((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6
-        const can = measuredEncoderThroughput() / 1e6
         console.info(
-          `[capture] ${now.width}×${now.height} at ${ceiling} fps wants ${want.toFixed(0)} Mpx/s and ` +
-            (can > 0
-              ? `this machine's encoder measured ${can.toFixed(0)} Mpx/s — holding at ${rate} fps. ` +
-                `The rate is what gives, never the resolution; the ladder puts it back as soon as the ` +
-                `machine eases (F15/O15)`
-              : `this machine has not been measured yet — holding at ${rate} fps on the old size rule. ` +
-                `The next take on this profile decides from the measurement (F15)`),
+          `[capture] ${now.width}×${now.height} at ${ceiling} fps wants ` +
+            `${decision.wantMpxPerS.toFixed(0)} Mpx/s and ` +
+            (decision.branch === 'measured-over'
+              ? `this machine's encoder measured ${decision.canMpxPerS.toFixed(0)} Mpx/s at ` +
+                `${decision.measuredAt} — holding at ${rate} fps. The rate is what gives, never the ` +
+                `resolution; the ladder puts it back as soon as the machine eases (F15/O15)`
+              : `this machine has no reading at this surface's own size (branch ` +
+                `${decision.branch}) — holding at ${rate} fps on the old size rule. The next take on ` +
+                `this profile decides from the measurement (F15/B14)`),
         )
       } catch (err) {
         console.warn('[capture] could not hold the rate down — the ladder is the remaining guard', err)
       }
     } else {
+      // B14 — A RATE THAT WAS *NOT* HELD DOWN IS ALSO A DECISION, and until this
+      // task it was the one nothing wrote down. Every "60" in the Phase-1 gates
+      // rested on a number no take carried: `rateForSurface` refused 60 twice
+      // over on Robert's own machine — once on the size constant and once on a
+      // reading taken at the wrong frame — and both refusals were invisible in
+      // the take. So the door records the decision either way, as REFUSED when
+      // the budget looked and did not take anything.
+      if (ceiling > DEFAULT_FRAME_RATE) {
+        passDoor(
+          {
+            dial: 'rate',
+            decidedBy: 'budget',
+            action: 'shed',
+            what: `${ceiling} fps kept for a ${now.width}×${now.height} surface`,
+            why:
+              `${decision.wantMpxPerS.toFixed(0)} Mpx/s wanted against ` +
+              `${decision.canMpxPerS.toFixed(0)} Mpx/s measured at ${decision.measuredAt} — ` +
+              `branch ${decision.branch}`,
+            measured: rateMeasured,
+          },
+          (ticket) => ticket.refuse(`the arm-time rate budget took nothing (${decision.branch})`),
+        )
+      }
       // Report what is being RECORDED, not what arrived. This read `before`,
       // so a surface that had just been capped printed the size it used to be —
       // "recording 2560x1663" followed by "leaving display at 3024x1964@60" in
       // the same take, which is how the 2026-08-30 freeze log read.
       const at = track.getSettings()
       console.info(
-        `[capture] native-res capture: leaving display at ${at.width}×${at.height}@${at.frameRate ?? '?'} (O6)`,
+        `[capture] native-res capture: leaving display at ${at.width}×${at.height}@${at.frameRate ?? '?'} (O6)` +
+          (ceiling > DEFAULT_FRAME_RATE
+            ? ` — ${ceiling} fps kept: ${decision.wantMpxPerS.toFixed(0)} Mpx/s wanted, ` +
+              `${decision.canMpxPerS.toFixed(0)} Mpx/s measured at ${decision.measuredAt} ` +
+              `(branch ${decision.branch}, B14)`
+            : ''),
       )
     }
   } else if (exceedsCaptureCeiling(before)) {

@@ -80,9 +80,64 @@ export function rateForSurface(
    * without a browser.
    */
   measuredPixelRate = 0,
+  /** The frame that reading was taken at, or 0×0 when it is not known. */
+  measuredAt: { width: number; height: number } = { width: 0, height: 0 },
 ): number {
-  if (ceiling <= DEFAULT_FRAME_RATE) return ceiling
-  if (!width || !height || width <= 0 || height <= 0) return ceiling
+  return rateDecisionForSurface(width, height, ceiling, measuredPixelRate, measuredAt).fps
+}
+
+/** Which of `rateDecisionForSurface`'s branches answered. Written into the
+ *  take (`stopStats.decisions`) so the next agent reads a fact and not a
+ *  suspicion — B14 cost a session precisely because it could not be read. */
+export type RateBranch =
+  /** The ceiling is 30: there is no decision to take. */
+  | 'no-ceiling'
+  /** The surface reported no geometry — nothing to weigh, so nothing is refused. */
+  | 'no-geometry'
+  /** This machine was measured at this surface's size or larger, and it fits. */
+  | 'measured-fits'
+  /** Measured at this surface's size or larger, and it does not fit. */
+  | 'measured-over'
+  /**
+   * A reading exists but was taken at a SMALLER frame than this surface, so it
+   * UNDER-states this surface's throughput and may not be spent as a refusal.
+   * Falls through to the size rule below, exactly as an absent reading does.
+   */
+  | 'measured-below-surface'
+  /** No usable reading: the pre-O15 size constant answered. */
+  | 'unmeasured'
+
+export interface RateDecision {
+  fps: number
+  branch: RateBranch
+  /** Mpx/s the surface would need at the ceiling. */
+  wantMpxPerS: number
+  /** Mpx/s this machine was measured at, and the frame it was measured at. */
+  canMpxPerS: number
+  measuredAt: string
+}
+
+export function rateDecisionForSurface(
+  width: number | undefined,
+  height: number | undefined,
+  ceiling: number,
+  measuredPixelRate = 0,
+  measuredAt: { width: number; height: number } = { width: 0, height: 0 },
+): RateDecision {
+  const wantMpxPerS = ((width ?? 0) * (height ?? 0) * ceiling) / 1e6
+  const canMpxPerS = measuredPixelRate / 1e6
+  const at = measuredAt.width > 0 && measuredAt.height > 0
+    ? `${measuredAt.width}x${measuredAt.height}`
+    : 'unknown'
+  const say = (fps: number, branch: RateBranch): RateDecision => ({
+    fps,
+    branch,
+    wantMpxPerS,
+    canMpxPerS,
+    measuredAt: at,
+  })
+  if (ceiling <= DEFAULT_FRAME_RATE) return say(ceiling, 'no-ceiling')
+  if (!width || !height || width <= 0 || height <= 0) return say(ceiling, 'no-geometry')
   // THE MACHINE ANSWERS, NOT A CONSTANT — 2026-08-30, Robert: "record froze on
   // game tab again … i need 3024x1964/60fps on my computer running easily".
   //
@@ -105,12 +160,37 @@ export function rateForSurface(
   // Robert set — "if something needs to be dropped it must be fps not
   // resolution" — and it is the only thing that can know about a game.
   const wanted = width * height * ceiling
-  if (measuredPixelRate > 0) {
-    return wanted <= measuredPixelRate ? ceiling : DEFAULT_FRAME_RATE
+  // A READING IS ONLY ABOUT THE FRAME IT WAS TAKEN AT — task B14, and this is
+  // the bug that cost every 3024x1964 max take its 60 fps.
+  //
+  // Mpx/s is not a machine constant. It RISES with frame size, on every machine
+  // and every day it has been measured: 362/410/416/435 across
+  // 1080p/2560x1662/3024x1964/4K on 2026-08-30, and 330/389/~405/417 on the same
+  // machine on 2026-09-03 through the take's own codec ladder. The meter used to
+  // run at a hard-coded 1920x1080, so the number arriving here was a LOWER BOUND
+  // on the surface's real throughput — and it was being spent as an upper one:
+  // 3024x1964@60 wants 356 Mpx/s, the reading said 330 (1080p), the truth at
+  // that frame is ~405, and the take was held at 30.
+  //
+  // encoderWarm.ts now measures at the display's own size, so the ordinary case
+  // is a reading at or above the surface. The rule below is what makes that
+  // safe rather than merely likely: a reading taken SMALLER than the surface
+  // understates it and is therefore not allowed to refuse anything. It is not a
+  // margin and not a correction — it is the direction of the error, which is
+  // known, and the only claim made from it is the one that direction supports.
+  const measuredPixels = measuredAt.width * measuredAt.height
+  if (measuredPixelRate > 0 && measuredPixels >= width * height) {
+    return wanted <= measuredPixelRate
+      ? say(ceiling, 'measured-fits')
+      : say(DEFAULT_FRAME_RATE, 'measured-over')
   }
+  const understates = measuredPixelRate > 0
   // UNMEASURED: the old constant stands. It is a poor rule, but a machine that
   // could not be asked is not a machine to experiment on.
-  return Math.max(width, height) > MAX_OUTPUT_LONG_EDGE ? DEFAULT_FRAME_RATE : ceiling
+  return say(
+    Math.max(width, height) > MAX_OUTPUT_LONG_EDGE ? DEFAULT_FRAME_RATE : ceiling,
+    understates ? 'measured-below-surface' : 'unmeasured',
+  )
 }
 
 const STORAGE_KEY = 'inout.frame.rate'

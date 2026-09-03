@@ -67,22 +67,28 @@ describe('the size an encoder is configured at', () => {
  */
 describe('what a machine may attempt', () => {
   const MEASURED = 416e6 // Robert's machine, one hardware AVC encoder, idle
+  // AND THE FRAME IT WAS MEASURED AT (B14). 416 Mpx/s is what that machine
+  // reads AT 3024x1964; at 1920x1080 the same encoder reads 330-362, and
+  // spending the small frame's number on the big frame's demand is what held
+  // every max take at 30. A reading now carries its own geometry, and one
+  // taken below the surface may inform an attempt but never a refusal.
+  const AT = { width: 3024, height: 1964 }
 
   it("allows his own screen at 60 — 356 Mpx/s against a measured 416", () => {
-    expect(rateForSurface(3024, 1964, 60, MEASURED)).toBe(60)
+    expect(rateForSurface(3024, 1964, 60, MEASURED, AT)).toBe(60)
   })
 
   it('refuses a rate the machine measurably cannot carry, and drops the RATE', () => {
     // 4K60 is 498 Mpx/s. Resolution is never the thing that gives — his rule.
-    expect(rateForSurface(3840, 2160, 60, MEASURED)).toBe(30)
+    expect(rateForSurface(3840, 2160, 60, MEASURED, { width: 3840, height: 2160 })).toBe(30)
   })
 
   it('THE CLIFF THE FREEZE FELL THROUGH is gone', () => {
     // The old rule allowed 60 at a 2559 long edge and forced 30 at 2561, so the
     // worst case this product can make — just under the ceiling, at full rate —
     // was the one case nothing checked.
-    expect(rateForSurface(2559, 1662, 60, MEASURED)).toBe(60)
-    expect(rateForSurface(2561, 1663, 60, MEASURED)).toBe(60)
+    expect(rateForSurface(2559, 1662, 60, MEASURED, AT)).toBe(60)
+    expect(rateForSurface(2561, 1663, 60, MEASURED, AT)).toBe(60)
   })
 
   it('an UNMEASURED machine keeps exactly the old rule — no experiments', () => {

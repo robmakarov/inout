@@ -84,12 +84,27 @@ function parseArgs(argv) {
   // has no GPU here, the raw channel's WebCodecs path times out and falls back
   // to MediaRecorder — a different file answering a different question. Headed
   // is also what makes rAF run at all, which this test depends on absolutely.
-  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '' }
+  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '', armAfterMs: 0, profile: null }
   for (const a of argv) {
     if (a === '--headed') o.headed = true
     else if (a === '--headless') o.headed = false
     else if (a.startsWith('--url=')) o.url = a.slice(6)
     else if (a.startsWith('--takeMs=')) o.takeMs = Number(a.slice(9))
+    // B14 — HOW LONG THE PAGE IS LEFT ALONE BEFORE THE RECORD PRESS. The rig
+    // arms ~4 s after load, which is inside the window where the encoder warm
+    // has not yet published its measurement (encoderWarmYield.ts: the warm
+    // lands ~4.2 s in, and it stands down entirely for a take that commits
+    // first). What a take may attempt is decided from that measurement, so
+    // "cold" and "a minute in" are two different products and the difference
+    // is invisible unless the rig can wait.
+    else if (a.startsWith('--armAfterMs=')) o.armAfterMs = Number(a.slice(13))
+    // B14 — REUSE A CHROME PROFILE ACROSS RUNS. Every lane cuts a throwaway
+    // profile, which makes every run the FIRST-EVER take on a fresh machine —
+    // a real case, but not the one a returning user is in. What this machine
+    // measured about itself is cached in localStorage across launches, so
+    // "pressed cold, on a profile that has used the app before" is a different
+    // product from "pressed cold, ever" and only a kept profile can show it.
+    else if (a.startsWith('--profile=')) o.profile = a.slice(10)
     else if (a.startsWith('--out=')) o.out = a.slice(6)
     else if (a.startsWith('--bin=')) o.bin = a.slice(6)
     else if (a.startsWith('--lane=')) o.lanes = [Number(a.slice(7))]
@@ -387,7 +402,8 @@ async function runLane(sourceFps) {
     recorded: null,
     gates: {},
   }
-  const profile = mkdtempSync(join(tmpdir(), `inout-fps-${sourceFps}-`))
+  const profile = opts.profile ?? mkdtempSync(join(tmpdir(), `inout-fps-${sourceFps}-`))
+  if (opts.profile) mkdirSync(opts.profile, { recursive: true })
   let browser
   try {
     const args = [
@@ -517,6 +533,20 @@ async function runLane(sourceFps) {
     lane.gates.windowPaints = (lane.rafFps ?? 0) >= sourceFps - 5
 
     await sleep(400)
+    // B14 — LEAVE THE PAGE ALONE FIRST, when asked to. Nothing is clicked and
+    // nothing is measured in here; the point is only that the record press
+    // lands on a page that has had time to finish its own warm.
+    if (opts.armAfterMs > 0) {
+      lane.armAfterMs = opts.armAfterMs
+      await sleep(opts.armAfterMs)
+    }
+    // WHAT THE MACHINE HAD BEEN MEASURED AT, READ AT THE PRESS. This is the
+    // input `rateForSurface` decides on, and reading it after the fact would
+    // read a number the deferred measurement wrote when the take ended.
+    lane.throughputAtArm = await evalJson(
+      `(() => { try { return localStorage.getItem('inout.encoderBudget.v1') ?? 'null' } catch { return 'null' } })()`,
+      null,
+    )
     await evaluate(`document.querySelector('button[aria-label="Start recording"]').click()`)
     await sleep(opts.takeMs)
     lane.gates.recorded = !!(await evaluate(
@@ -689,9 +719,11 @@ async function runLane(sourceFps) {
       browser?.kill('SIGTERM')
     } catch {}
     await sleep(700)
-    try {
-      rmSync(profile, { recursive: true, force: true })
-    } catch {}
+    if (!opts.profile) {
+      try {
+        rmSync(profile, { recursive: true, force: true })
+      } catch {}
+    }
   }
   lane.pass = Object.values(lane.gates).every(Boolean) && !lane.error
   return lane

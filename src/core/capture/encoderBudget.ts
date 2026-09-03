@@ -128,6 +128,16 @@ interface BudgetState {
    * it can attempt on its FIRST take instead of after its first freeze.
    */
   throughput: number
+  /**
+   * THE FRAME IT WAS MEASURED AT (B14). Mpx/s is not constant across frame
+   * sizes — it rises with them (330 at 1920x1080 against ~405 at 3024x1964 on
+   * one machine, prod, 2026-09-03) — so the number above means nothing without
+   * this, and the take that spends it is entitled to know whether it was
+   * measured under its own geometry. 0 = a reading from a build that did not
+   * record it, i.e. a 1920x1080 one.
+   */
+  throughputW: number
+  throughputH: number
 }
 
 let mem: BudgetState | null = null
@@ -143,13 +153,15 @@ function load(): BudgetState {
         collapsed: num(s.collapsed),
         collapses: num(s.collapses) | 0,
         throughput: num(s.throughput),
+        throughputW: num(s.throughputW),
+        throughputH: num(s.throughputH),
       }
       return mem
     }
   } catch {
     /* absent, corrupt, or storage refused — memory-only is fine */
   }
-  mem = { sustained: 0, collapsed: 0, collapses: 0, throughput: 0 }
+  mem = { sustained: 0, collapsed: 0, collapses: 0, throughput: 0, throughputW: 0, throughputH: 0 }
   return mem
 }
 
@@ -407,10 +419,12 @@ export function resetEncoderBudgetForTests(): void {
  * game already running is a different machine from the one that was measured
  * yesterday. The freshest reading is the truthful one.
  */
-export function rememberEncoderThroughput(mpxPerSec: number): void {
+export function rememberEncoderThroughput(mpxPerSec: number, width = 0, height = 0): void {
   if (!(mpxPerSec > 0)) return
   const s = load()
   s.throughput = Math.round(mpxPerSec * 1e6)
+  s.throughputW = width > 0 ? Math.round(width) : 0
+  s.throughputH = height > 0 ? Math.round(height) : 0
   save()
 }
 
@@ -429,4 +443,15 @@ export function rememberEncoderThroughput(mpxPerSec: number): void {
  */
 export function measuredEncoderThroughput(): number {
   return load().throughput
+}
+
+/**
+ * THE READING AND THE FRAME IT WAS TAKEN AT (B14), so a caller can say which
+ * and a take can carry the fact instead of the next agent inferring it.
+ * `width`/`height` are 0 for a number stored by a build that measured at a
+ * fixed 1920x1080 and did not write the geometry down.
+ */
+export function measuredEncoderReading(): { pixelRate: number; width: number; height: number } {
+  const s = load()
+  return { pixelRate: s.throughput, width: s.throughputW, height: s.throughputH }
 }
