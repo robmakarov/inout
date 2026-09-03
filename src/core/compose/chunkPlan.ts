@@ -52,11 +52,10 @@
  */
 import {
   cameraPoseAt,
-  cameraTrackIsActive,
   keptSegments,
   outputDurationMs,
   segmentSpeed,
-  viewportTrackIsActive,
+  viewportAt,
 } from '@core/timeline'
 import {
   DEFAULT_EXPORT_SETTINGS,
@@ -204,40 +203,59 @@ function bracketingKeyframes<T extends { atMs: number }>(
 }
 
 /**
- * CAMERA MOTION IS EASED, not linear, and the ease reaches CAMERA_MOVE_MS past
- * the pair — so the honest restriction is not "which keyframes bracket this
- * span" but "what pose does the render actually produce in it". Sampling the
- * pose is exact by construction: it asks the same function the render asks.
+ * WHAT THE RENDER ACTUALLY DRAWS IN THIS CHUNK — not which keyframes exist.
  *
- * Sampled at the chunk's own frame cadence, capped so a long chunk cannot make
- * the descriptor grow without bound. The cap is a RESOLUTION, not a length
- * heuristic: it is the same for every chunk of every take.
+ * This distinction is the difference between a cache that works and one that
+ * does not, and a test found it rather than an argument (2026-09-03). Listing
+ * the bracketing keyframes is EXACT, but it is exact about the wrong question:
+ * a zoom keyframe placed at 40:00 becomes "the nearest keyframe before" for
+ * every chunk after it, so every one of them changed its description while
+ * drawing pixel for pixel what it drew before. Measured on a 120 s take: 24
+ * chunks planned, 24 invalidated by one zoom. That is the feature failing at
+ * its own headline.
+ *
+ * So the descriptor holds the RESOLVED value — `viewportAt` and `cameraPoseAt`,
+ * the functions the render itself calls — and collapses the constant case:
+ *
+ *  · no keyframe strictly inside the chunk AND the resolved value equal at both
+ *    edges ⇒ the value is constant across it, and that constant is the whole
+ *    description. The proof is the interpolation: between one pair of keyframes
+ *    the value is `a + (b−a)·ease(u)` with `ease` strictly increasing, so equal
+ *    values at two distinct instants force a === b.
+ *  · anything else ⇒ the value MOVES inside this chunk, and the keyframes that
+ *    shape it go in whole. The eased curve between a pair is not recoverable
+ *    from its endpoints — it depends on where those keyframes sit — so what is
+ *    recorded is the keyframes, never samples of the result.
+ *
+ * The collapse is also what makes an ABSENT track and a track resting at the
+ * default the same key, which they must be: `cameraPoseAt(undefined, …)`
+ * returns `defaultCameraPose` and `viewportAt(undefined, …)` returns
+ * DEFAULT_VIEWPORT, so those two takes draw the same frame and now say so.
  */
-const POSE_SAMPLES_PER_CHUNK = 16
-
-function poseSamples(
-  edit: EditState,
-  recAtSec: (outSec: number) => number | null,
-  outStartSec: number,
-  outEndSec: number,
-  frameAspect: number,
-  cameraAspect: number,
-): number[] {
-  if (!cameraTrackIsActive(edit.camera)) return []
-  const out: number[] = []
-  const span = outEndSec - outStartSec
-  for (let i = 0; i <= POSE_SAMPLES_PER_CHUNK; i++) {
-    const outSec = outStartSec + (span * i) / POSE_SAMPLES_PER_CHUNK
-    const recMs = recAtSec(outSec)
-    if (recMs === null) {
-      out.push(-1)
-      continue
-    }
-    const p = cameraPoseAt(edit.camera, recMs, { frameAspect, cameraAspect })
-    out.push(n6(p.xFrac), n6(p.yFrac), n6(p.widthFrac))
-  }
-  return out
+function trackPrint<K extends { atMs: number }>(
+  keyframes: readonly K[] | undefined,
+  recFromMs: number,
+  recToMs: number,
+  resolve: (recMs: number) => number[],
+): unknown[] {
+  const bracket = bracketingKeyframes(keyframes, recFromMs, recToMs)
+  const inside = bracket.filter((k) => k.atMs > recFromMs && k.atMs < recToMs)
+  const at0 = resolve(recFromMs).map(n6)
+  const at1 = resolve(recToMs).map(n6)
+  if (inside.length === 0 && at0.every((v, i) => v === at1[i])) return ['=', at0]
+  return ['~', at0, at1, bracket.map((k) => keyframePrint(k))]
 }
+
+/** A keyframe as numbers, field order fixed so two equal ones hash the same. */
+function keyframePrint(k: Record<string, unknown> & { atMs: number }): unknown[] {
+  return Object.keys(k)
+    .sort()
+    .map((name) => {
+      const v = k[name]
+      return [name, typeof v === 'number' ? n6(v) : v]
+    })
+}
+
 
 /**
  * What a VIDEO channel contributes to this span: whether it is on, and where its
@@ -401,6 +419,11 @@ export function planChunks(input: ChunkPlanInput): ChunkPlan {
     const layout = globalLayoutPrint(recording, edit)
     const settingsKey = settingsPrint(settings, flags)
     const videoChannels = recording.channels.filter((c) => c.media === 'video')
+    const hasCamera = videoChannels.some((c) => {
+      if (c.kind !== 'camera') return false
+      const ce = edit.channels.find((x) => x.channelId === c.id)
+      return !ce || ce.enabled
+    })
 
     // outputToRecordingMs walks the spans on every call; over a two-hour take
     // that is quadratic. The chunk's own pieces already hold the mapping, so
@@ -413,17 +436,7 @@ export function planChunks(input: ChunkPlanInput): ChunkPlan {
       const pieces = spanPieces(edit, startSec, endSec)
       const recFromMs = pieces.length ? pieces[0]!.recStartMs : 0
       const recToMs = pieces.length ? pieces[pieces.length - 1]!.recEndMs : 0
-      const recAtSec = (outSec: number): number | null => {
-        const rel = (outSec - startSec) * 1000
-        for (const p of pieces) {
-          const lenOut = ((p.recEndMs - p.recStartMs) / p.speed)
-          if (rel <= p.atSec * 1000 + lenOut + EPS) {
-            return p.recStartMs + Math.max(0, rel - p.atSec * 1000) * p.speed
-          }
-        }
-        return pieces.length ? pieces[pieces.length - 1]!.recEndMs : null
-      }
-
+      const geometry = { frameAspect, cameraAspect }
       const descriptor = JSON.stringify([
         KEY_VERSION,
         recording.id,
@@ -433,14 +446,20 @@ export function planChunks(input: ChunkPlanInput): ChunkPlan {
         endFrame - startFrame,
         pieces,
         videoChannels.map((c) => channelPrint(c, edit, recFromMs, recToMs)),
-        bracketingKeyframes(edit.viewport?.keyframes, recFromMs, recToMs).map((k) => [
-          n6(k.atMs),
-          n6(k.xFrac),
-          n6(k.yFrac),
-          n6(k.widthFrac),
-        ]),
-        viewportTrackIsActive(edit.viewport),
-        poseSamples(edit, recAtSec, startSec, endSec, frameAspect, cameraAspect),
+        // The zoom/pan the render will resolve over this span.
+        trackPrint(edit.viewport?.keyframes, recFromMs, recToMs, (ms) => {
+          const v = viewportAt(edit.viewport, ms)
+          return [v.xFrac, v.yFrac, v.widthFrac]
+        }),
+        // The camera PiP's pose, and ONLY when a camera is drawn at all: a take
+        // with no camera channel draws none, so its track cannot move a pixel
+        // and must not be allowed to invalidate a chunk.
+        hasCamera
+          ? trackPrint(edit.camera?.keyframes, recFromMs, recToMs, (ms) => {
+              const p = cameraPoseAt(edit.camera, ms, geometry)
+              return [p.xFrac, p.yFrac, p.widthFrac]
+            })
+          : null,
         edit.background ?? null,
       ])
 
