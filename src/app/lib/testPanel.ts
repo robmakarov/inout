@@ -77,6 +77,7 @@ export function urlOverrides(): string[] {
     'rawcodec',
     'engine',
     'chunked',
+    'resamp',
   ]
   const p = new URLSearchParams(location.search)
   return known.filter((k) => p.has(k))

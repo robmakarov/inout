@@ -5,9 +5,26 @@ import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate
 import { loadQualityStep } from '@core/qualityStep'
 import { noteTakeActive } from '@core/backgroundWork'
 import { startElasticLog, takeElasticLog } from '@core/elasticLog'
+import {
+  armDoor,
+  constrainThroughDoor,
+  measuredFromSettings,
+  openDoor,
+  passDoor,
+  takeDoorLog,
+} from '@core/door'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
-import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import { captureQualityMode, preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import {
+  FLOOR_FPS,
+  emergencyFloorEnabled,
+  floorLongEdge,
+  type FloorRung,
+  type FloorState,
+} from './emergencyFloor'
+import { FloorController } from './floorController'
+import type { PressureSignals } from '@core/pressure'
 import { AUDIO_BITS, videoBitsFor } from './captureBitrate'
 import { diskVerdict } from './diskGuard'
 import {
@@ -63,7 +80,7 @@ import {
   type MeasuredAudioHandle,
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
-import { drainRecorder } from './recorderDrain'
+import { DRAIN_BUDGET_MS, drainRecorder } from './recorderDrain'
 import {
   MEASURED_VIDEO_MIME,
   canMeasureVideoCapture,
@@ -71,7 +88,7 @@ import {
   type MeasuredVideoHandle,
 } from './measuredVideo'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
-import type { LadderRung } from './captureLadder'
+import type { LadderRung, LadderStepMeta } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, probeDurationMs, writePendingManifest } from './recovery'
@@ -147,6 +164,13 @@ const THROTTLE_BUDGET_MS = 400
 const SUSTAINED_TAKE_MIN_MS = 10_000
 /** B5 — how often the disk is asked how much room is left. */
 const DISK_CHECK_MS = 5_000
+/**
+ * M1 — how often the platform-adaptation witness looks at a track. One second,
+ * and it is a witness rather than a control loop: nothing acts on what it sees,
+ * so looking faster would only cost the take. Chrome's own adaptation is not a
+ * transient either — a surface it narrowed stays narrow.
+ */
+const ADAPT_CHECK_MS = 1_000
 /**
  * Deadlines on the stop path, for the same reason arming has them (note 3): a
  * recorder that never answers must not be able to freeze a finished take.
@@ -349,6 +373,17 @@ interface ChannelRuntime {
   height?: number
   /** The rate this channel's file is being written at (F15). Absent = 30. */
   fps?: number
+  /**
+   * M1 — WHAT THIS TRACK LAST LOOKED LIKE WHEN SOMEBODY LOOKED ON PURPOSE.
+   *
+   * Chrome adapts a capture source on its own — it narrows a display surface or
+   * drops a camera's rate under load, and nothing asks us. That decision cannot
+   * be OWNED (it is the browser's), so the door's answer is to DETECT it: this
+   * is the last settings any decision of ours produced, and a difference from
+   * it at tick time is the platform having moved something. Undefined until the
+   * channel is activated.
+   */
+  seen?: { width?: number; height?: number; frameRate?: number }
   /** Capture-time witnesses from the measured path — persisted with the take. */
   diagnostics?: import('@core/types').ChannelDiagnostics
   stopped: Promise<void>
@@ -383,14 +418,6 @@ function mergeAnchor(
       (typeof ch.startOffsetMs === 'number' ? Math.round(ch.startOffsetMs * 10) / 10 : undefined),
     ...(existing?.reportedInputLatencyMs !== undefined
       ? { reportedInputLatencyMs: existing.reportedInputLatencyMs }
-      : {}),
-    // B13. The companion to the line above, and it must travel WITH it: the
-    // reported latency alone cannot say whether it was subtracted, so a take
-    // recorded under `?looplat=0` and one recorded normally would persist an
-    // identical anchor block. This merge rebuilds the anchor field by field,
-    // so a field not named here is a field the take never carries.
-    ...(existing?.inputLatencyApplied !== undefined
-      ? { inputLatencyApplied: existing.inputLatencyApplied }
       : {}),
     ...(fromResult?.firstFrameDelayMs !== undefined
       ? { firstFrameDelayMs: fromResult.firstFrameDelayMs }
@@ -460,6 +487,22 @@ class Session implements CaptureSession {
   private sizeDifferingSinceMs: number | null = null
   /** B5 — the disk is asked every few seconds, not every tick. */
   private lastDiskCheckMs = 0
+  /** M1 — the platform-adaptation witness's own clock (see watchPlatformAdaptation). */
+  private lastAdaptCheckMs = 0
+  /**
+   * M1 — THE EMERGENCY FLOOR. Null on every take that is not max with `?floor=1`,
+   * which is every take until Robert flips it.
+   */
+  private floor: FloorController | null = null
+  /** What the floor has actually spent, on the take's own terms. */
+  private floorScreenFps = 0
+  private floorCameraFps: number | null = null
+  private floorScreenLongEdge: number | null = null
+  private floorRequestedLongEdge: number | null = null
+  private floorCameraRequestedFps: number | null = null
+  /** One rung at a time: an application in flight is not a reason to start a
+   *  second (the ladder's settle rule assumes the step landed). */
+  private floorApplying = false
   /** B5 — the origin's storage usage at this take's FIRST sample, and when it
    *  was taken. The growth since is what this take has actually consumed. */
   private diskBaseline: { usageBytes: number; atMs: number } | null = null
@@ -565,6 +608,12 @@ class Session implements CaptureSession {
    */
   async arm(): Promise<void> {
     const armT0 = performance.now()
+    // M1 — THE DOOR OPENS WITH THE ARM, NOT WITH THE PRESS. The two most
+    // consequential decisions this engine makes about a take are taken before
+    // it has a clock: O15's encoder budget narrows the screen, and F15's rate
+    // budget holds the frame rate down, both inside this method. They read as
+    // negative milliseconds in the take's ledger, which is what they are.
+    armDoor()
     // H6 — THE WARM STANDS DOWN, HERE, SYNCHRONOUSLY, BEFORE ANY AWAIT.
     // encoderWarm.ts pays the process's first-VideoEncoder cost at mount so a
     // take does not; press record while it is still paying and the two fight
@@ -1029,6 +1078,11 @@ class Session implements CaptureSession {
   private async stepDisplayDown(
     rung: LadderRung,
     reason: string,
+    step: LadderStepMeta,
+    /** M1 — WHO ASKED. The ladder is one caller; the emergency floor is the
+     *  other, and a take that reads `[floor]` against a step is a take that can
+     *  be told apart from one the composite's ladder moved. */
+    decidedBy: 'ladder' | 'floor' = 'ladder',
   ): Promise<void> {
     const ch = this.channels.find((c) => c.kind === 'screen' && !c.ended)
     if (!ch) return
@@ -1042,12 +1096,39 @@ class Session implements CaptureSession {
       // `screen channel recorded 3024x1964 (the track said 2217x1440)`. And
       // his rule is the same rule: "if something needs to be dropped it must be
       // fps not resolution", "no screen proportion changes".
-      await withTimeout(
-        ch.track.applyConstraints({ frameRate: { max: rung.fps } }),
-        THROTTLE_BUDGET_MS,
-        `${ch.kind} to ${rung.label}`,
+      //
+      // M1 — AND IT GOES THROUGH THE DOOR, which is where the elastic ledger's
+      // picture line is now written: at the act, with the outcome, instead of
+      // at the verdict (liveCompositeV2's note on `onDegradeStep`).
+      const after = await passDoor(
+        {
+          dial: 'rate',
+          decidedBy,
+          layer: 'picture',
+          action: step.direction === 'down' ? 'shed' : 'restore',
+          what: `${step.previousFps} → ${rung.fps} fps`,
+          why: reason,
+          ...(step.block ? { block: step.block } : null),
+          ...(step.level ? { level: step.level } : null),
+          measured: measuredFromSettings(before),
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, ch.track, { frameRate: { max: rung.fps } }),
+            THROTTLE_BUDGET_MS,
+            `${ch.kind} to ${rung.label}`,
+          )
+          const settings = ch.track.getSettings()
+          // WHAT THE PLATFORM ACTUALLY GAVE, not what was asked for. Chrome
+          // agrees to a constraint and then hands back something else often
+          // enough that this is the difference between a ledger and a wish.
+          ticket.note({ fpsAfter: settings.frameRate ?? null })
+          return settings
+        },
       )
-      const after = ch.track.getSettings()
+      // M1 — this is OUR change, so the platform-adaptation witness must not
+      // report it as Chrome's a second later.
+      ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
       console.info(
         `[capture] display ${before.frameRate ?? '?'} → ${after.frameRate ?? '?'} fps ` +
           `at ${after.width}×${after.height} (${reason})`,
@@ -1075,6 +1156,162 @@ class Session implements CaptureSession {
     }
   }
 
+  // ---- M1: THE EMERGENCY FLOOR ---------------------------------------------
+  /**
+   * IS THE FLOOR ARMED? Max, and the flag, and nothing else. Off, every line
+   * below is unreachable and max is the max that shipped — the raw worker is
+   * not even asked to sample, so there is no ticker and no counters.
+   */
+  private floorArmed(): boolean {
+    return captureQualityMode() === 'max' && emergencyFloorEnabled()
+  }
+
+  /** What the floor has to work with, read fresh: a channel can end mid-take. */
+  private floorState(): FloorState {
+    const camera = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+    return {
+      cameraFps: camera ? this.floorCameraFps : null,
+      cameraRequestedFps: camera ? this.floorCameraRequestedFps : null,
+      screenFps: this.floorScreenFps || this.requestedRate,
+      screenRequestedFps: this.requestedRate,
+      screenLongEdge: this.floorScreenLongEdge,
+      screenRequestedLongEdge: this.floorRequestedLongEdge,
+    }
+  }
+
+  /**
+   * ONE READING FROM THE SCREEN'S ENCODER. Four a second, from the worker that
+   * is doing the encoding — the thread whose contention is the thing that
+   * starves a max take (core/pressure.ts's probe: the page's own main thread is
+   * clamped to 1 Hz while a take runs, and cannot see any of this).
+   */
+  private onFloorPressure(signals: PressureSignals): void {
+    if (this.stateInternal !== 'recording') return
+    const now = performance.now()
+    if (!this.floor) {
+      const screen = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+      const camera = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+      this.floorScreenFps = screen?.fps ?? this.requestedRate
+      this.floorScreenLongEdge = screen ? Math.max(screen.width ?? 0, screen.height ?? 0) : null
+      this.floorRequestedLongEdge = this.floorScreenLongEdge
+      this.floorCameraFps = camera?.fps ?? null
+      this.floorCameraRequestedFps = this.floorCameraFps
+      this.floor = new FloorController({ startedAtMs: this.epoch, requestedFps: this.requestedRate })
+    }
+    const tick = this.floor.tick(now, signals, this.floorState())
+    if (!tick.action || this.floorApplying) return
+    this.floorApplying = true
+    void this.applyFloorRung(tick.action.rung, tick.action.direction, tick.action.reason, tick.action.step)
+      .then(() => {
+        this.floor?.noteApplied(performance.now(), tick.action!.direction)
+      })
+      .finally(() => {
+        this.floorApplying = false
+      })
+  }
+
+  /**
+   * SPEND (or GIVE BACK) ONE RUNG, through the door like everything else.
+   *
+   * AUDIO IS NOT REACHABLE FROM HERE. There is no branch for it, in either
+   * direction, and emergencyFloor.ts's order has no name for it — the ruling is
+   * that audio is never sacrificed, and the way to keep a ruling is to make the
+   * code that would break it not exist.
+   */
+  private async applyFloorRung(
+    rung: FloorRung,
+    direction: 'down' | 'up',
+    reason: string,
+    step: LadderStepMeta,
+  ): Promise<void> {
+    if (rung === 'screen-fps') {
+      const target = direction === 'down' ? FLOOR_FPS : this.requestedRate
+      await this.stepDisplayDown({ label: `${target} fps`, fps: target }, reason, step, 'floor')
+      this.floorScreenFps = target
+      return
+    }
+    if (rung === 'camera-fps') {
+      const ch = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+      if (!ch) return
+      const target = direction === 'down' ? FLOOR_FPS : (this.floorCameraRequestedFps ?? this.requestedRate)
+      const before = ch.track.getSettings()
+      try {
+        await passDoor(
+          {
+            dial: 'rate',
+            decidedBy: 'floor',
+            layer: 'picture',
+            action: direction === 'down' ? 'shed' : 'restore',
+            what: `camera ${step.previousFps} → ${target} fps`,
+            why: reason,
+            ...(step.block ? { block: step.block } : null),
+            ...(step.level ? { level: step.level } : null),
+            measured: measuredFromSettings(before),
+          },
+          async (ticket) => {
+            await withTimeout(
+              constrainThroughDoor(ticket, ch.track, { frameRate: { max: target } }),
+              THROTTLE_BUDGET_MS,
+              `camera to ${target} fps`,
+            )
+            const after = ch.track.getSettings()
+            ticket.note({ fpsAfter: after.frameRate ?? null })
+            ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
+          },
+        )
+        this.floorCameraFps = target
+      } catch (err) {
+        console.warn('[capture] the floor could not move the camera rate', err)
+      }
+      return
+    }
+    // RESOLUTION, LAST, and it is the only rung that costs a seam: the raw
+    // encoder is configured once and cannot follow a frame-size change, so the
+    // segment has to close and reopen (O16 — 30 ms step, 69 ms seam). That is
+    // why it sits below both rate rungs and why it is spent once.
+    const ch = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+    if (!ch) return
+    const current = Math.max(ch.width ?? 0, ch.height ?? 0)
+    const target = direction === 'down' ? floorLongEdge(current) : this.floorRequestedLongEdge
+    if (!target) return
+    const before = ch.track.getSettings()
+    try {
+      await passDoor(
+        {
+          dial: 'resolution',
+          decidedBy: 'floor',
+          layer: 'picture',
+          action: direction === 'down' ? 'shed' : 'restore',
+          what: `screen long edge ${current} → ${target}`,
+          why: `${reason} — the rate rungs are spent, so the size moves (LAST)`,
+          ...(step.block ? { block: step.block } : null),
+          ...(step.level ? { level: step.level } : null),
+          measured: measuredFromSettings(before),
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, ch.track, {
+              width: { max: target },
+              height: { max: target },
+            }),
+            THROTTLE_BUDGET_MS,
+            `screen to a ${target} long edge`,
+          )
+          const after = ch.track.getSettings()
+          ticket.note({ widthAfter: after.width ?? null, heightAfter: after.height ?? null })
+          ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
+        },
+      )
+      // The file cannot change size mid-segment, so close this one and open the
+      // next at the size the source is now delivering — the move O16 built.
+      await this.stepScreenSegment(`the emergency floor stepped the size: ${reason}`)
+      const now = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+      this.floorScreenLongEdge = now ? Math.max(now.width ?? 0, now.height ?? 0) : target
+    } catch (err) {
+      console.warn('[capture] the floor could not move the screen size', err)
+    }
+  }
+
   /**
    * @param blameEncoder O15's budget files a permanent "this machine collapsed
    * at N Mpx/s" mark against the plan, so an equal or larger take is bounded
@@ -1089,6 +1326,22 @@ class Session implements CaptureSession {
   private markCompositeUnusable(reason: string, blameEncoder = true): void {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
+    // M1, AUDIT ITEM (d) — SILENCE ONLY. Robert's split of 2026-09-02: this
+    // behaviour is CORRECT (the take is unharmed, the unedited export renders
+    // instead of copying), and what was wrong was that it happened with no
+    // flag, no grade and no line anywhere a take could be read from. So it is
+    // not changed, it is announced — through the door, like everything else.
+    passDoor(
+      {
+        dial: 'channels',
+        decidedBy: blameEncoder ? 'watchdog' : 'device',
+        action: 'shed',
+        what: 'the live composite stopped being recorded',
+        why: reason,
+        measured: { blamedOnTheEncoder: blameEncoder },
+      },
+      () => undefined,
+    )
     console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
     if (blameEncoder) this.noteEncoderCollapse(`the composite degraded: ${reason}`)
     else console.info(`[capture] not an encoder collapse (${reason}) — the budget is untouched`)
@@ -1155,8 +1408,28 @@ class Session implements CaptureSession {
     // clock, so every shed and every recovery is stamped relative to a press
     // rather than to a page load.
     startElasticLog(this.epoch)
+    // M1 — and the door takes the same clock, so an arming decision reads
+    // negative against the press and a step at minute 40 reads +2,400,000.
+    openDoor(this.epoch)
 
     for (const ch of this.channels) this.activateChannel(ch, startT0)
+    /**
+     * THE TAKE'S REQUESTED RATE IS SET HERE, NOT INSIDE startComposite — M1, and
+     * it is a defect that fix uncovers rather than a refactor.
+     *
+     * `this.requestedRate` was assigned in ONE place: the middle of
+     * `startComposite`, past its own early return. Max never reaches that line
+     * (max opens no composite by design), so every max take reported
+     * `stopStats.requestedFps = 30` however fast it was actually recorded, and
+     * the report card's `rate` dimension said "asked for 30 fps" on a 60 fps
+     * take. Measured 2026-09-03 on the M1 floor rig: a 2560x1440 max take with
+     * the ladder's own ceiling at 60 read `asked for 30 fps`.
+     *
+     * It is also load-bearing now: the emergency floor's ceiling — the rate it
+     * may climb BACK to — is this number, and a floor that believes the take
+     * asked for 30 will never give a 60 fps take its rate back.
+     */
+    this.requestedRate = this.compositeRate()
     console.info(
       `[capture:arming] all start calls kicked +${(performance.now() - startT0).toFixed(0)}ms`,
     )
@@ -1402,6 +1675,25 @@ class Session implements CaptureSession {
       this.budgetDroppedComposite = true
       this.encoderPlan = drop.plan
       workingPlan = drop.plan
+      // M1 — THROUGH THE DOOR. This one is taken before the take has a clock and
+      // was invisible in every ledger the product had: a machine that once
+      // collapsed silently stopped recording a whole channel on every later
+      // take, and the only trace was one console line nobody reads.
+      passDoor(
+        {
+          dial: 'channels',
+          decidedBy: 'budget',
+          action: 'shed',
+          what: 'the live composite is not opened at all on this take',
+          why: drop.why,
+          measured: {
+            ceilingMpxPerS: ceiling / 1e6,
+            plannedMpxPerS: plan.pixelRate / 1e6,
+            newPlanMpxPerS: drop.plan.pixelRate / 1e6,
+          },
+        },
+        () => undefined,
+      )
       console.info(
         `[capture] encoder budget: the composite is NOT being recorded — ${drop.why}. ` +
           `New plan: ${describePlan(drop.plan)}. The unedited export re-renders instead of ` +
@@ -1421,20 +1713,41 @@ class Session implements CaptureSession {
     })
     if (!verdict) return
     try {
-      await withTimeout(
-        screenCh.track.applyConstraints({
-          width: { max: verdict.screenLongEdge },
-          height: { max: verdict.screenLongEdge },
-        }),
-        THROTTLE_BUDGET_MS,
-        'applyConstraints(encoder budget)',
+      const before = screenCh.track.getSettings()
+      const after = await passDoor(
+        {
+          dial: 'resolution',
+          decidedBy: 'budget',
+          action: 'shed',
+          what: `screen ${screen.width}x${screen.height} → long edge ${verdict.screenLongEdge}`,
+          why: verdict.why,
+          measured: {
+            ...measuredFromSettings(before),
+            ceilingMpxPerS: ceiling / 1e6,
+            plannedMpxPerS: workingPlan.pixelRate / 1e6,
+          },
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, screenCh.track, {
+              width: { max: verdict.screenLongEdge },
+              height: { max: verdict.screenLongEdge },
+            }),
+            THROTTLE_BUDGET_MS,
+            'applyConstraints(encoder budget)',
+          )
+          const settings = screenCh.track.getSettings()
+          ticket.note({ widthAfter: settings.width ?? null, heightAfter: settings.height ?? null })
+          return settings
+        },
       )
-      const after = screenCh.track.getSettings()
       // The runtime's own dimensions are what singleGenerationTake and
       // compositeFrame read, so they have to follow the track or the take
       // would be planned at one size and recorded at another.
       screenCh.width = after.width ?? screenCh.width
       screenCh.height = after.height ?? screenCh.height
+      // M1 — ours, not the platform's (watchPlatformAdaptation).
+      screenCh.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
       this.encoderPlan = this.planEncoders()
       console.info(
         `[capture] encoder budget: screen ${screen.width}x${screen.height} → ` +
@@ -1604,17 +1917,37 @@ class Session implements CaptureSession {
         // O6: the gentler rung of the same ladder — ask the SOURCE for less
         // before giving up on the composite. Only ever fires when native-res
         // capture is on, because otherwise the track is already at the floor.
-        onDegradeStep: (rung, reason) => {
+        onDegradeStep: (rung, reason, from, step) => {
           // MAX MODE DOES NOT STEP. The ladder still MEASURES — its verdict is
           // what tells the take it is behind, and O15 still files the collapse
           // against the plan — but nothing is taken away from the picture the
           // user asked for. What they get instead is dropped frames, reported
           // rather than hidden, which is the price max exists to let them pay.
           if (!rateLadderAllowed()) {
+            // M1 — A REFUSAL IS A DECISION. It used to be silent here while the
+            // elastic ledger, written one function earlier, said the picture
+            // had stepped: every loaded max take claimed a shed that never
+            // happened. Now the take says the ladder asked and max said no.
+            passDoor(
+              {
+                dial: 'rate',
+                decidedBy: 'ladder',
+                layer: 'picture',
+                action: step.direction === 'down' ? 'shed' : 'restore',
+                what: `${step.previousFps} → ${rung.fps} fps (${from})`,
+                why: reason,
+                ...(step.block ? { block: step.block } : null),
+                ...(step.level ? { level: step.level } : null),
+              },
+              (ticket) =>
+                ticket.refuse(
+                  'max mode: nothing steps down in max (Robert 2026-08-30, "max must not have ladder")',
+                ),
+            )
             this.noteEncoderCollapse(`the rate ladder wanted to step: ${reason}`)
             return
           }
-          void this.stepDisplayDown(rung, reason)
+          void this.stepDisplayDown(rung, reason, step)
         },
         onDegrade: (reason) => {
           this.markCompositeUnusable(`compositor v2: ${reason}`)
@@ -1718,6 +2051,17 @@ class Session implements CaptureSession {
           console.error(`[capture] ${ch.kind} ${cause}: ${err.message}`)
           void this.containSegment(ch, cause)
         },
+        // M1 — THE EMERGENCY FLOOR'S INSTRUMENT, on the screen channel only and
+        // only when the floor is armed (max, `?floor=1`, OFF by default). The
+        // screen is the encoder that decides whether a max take survives; the
+        // camera is an inset. With the floor off this is `undefined` and the
+        // worker never starts a ticker.
+        ...(this.floorArmed() && ch.kind === 'screen'
+          ? {
+              pressure: true,
+              onPressure: (signals: PressureSignals) => this.onFloorPressure(signals),
+            }
+          : null),
       })
       ch.measured = handle
       ch.mimeType = handle.mimeType
@@ -1764,10 +2108,6 @@ class Session implements CaptureSession {
         epoch: this.epoch,
         writer,
         label: ch.kind,
-        // B13. Tab / system audio is an internal loopback: no microphone, no
-        // device buffer, nothing physical to be late by. Descriptive unless
-        // `?looplat=0` is set — see measuredAudio.subtractsInputLatency.
-        loopback: ch.kind === 'system-audio',
         audioCtx: ch.audioCtx ?? undefined,
         // H1 harness. An audio channel has no worker, so only `?killenc=`.
         killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
@@ -2171,7 +2511,74 @@ class Session implements CaptureSession {
     this.emit({ type: 'tick', elapsedMs, remainingMs })
     if (remainingMs !== null && remainingMs <= 0) return this.autoStop()
     this.watchScreenSize()
+    this.watchPlatformAdaptation()
     this.watchDisk()
+  }
+
+  /**
+   * M1 — CHROME'S OWN CAPTURE ADAPTATION: DETECTED, BECAUSE IT CANNOT BE OWNED.
+   *
+   * The audit of 2026-09-02 counted seven adaptive systems and this is the
+   * seventh: the browser narrows or slows a capture source on its own
+   * (acquire.ts:467 and 614 are the two places the code already knows it
+   * happens), and no ladder, budget or watchdog of ours is involved. There is
+   * no door to route it through — nobody here decides it. What there can be is
+   * a witness, so that "the take was recorded at 24 fps" stops being a mystery
+   * in the numbers and becomes a line saying WHO did it.
+   *
+   * The comparison is against what OUR OWN last decision produced (`ch.seen`,
+   * written by every door application that touches this track), so a rate step
+   * we asked for is never reported as the platform's.
+   *
+   * ONE getSettings() PER VIDEO CHANNEL PER SECOND, on a tick that already runs
+   * four times a second for the timer. It is a dictionary copy, it happens on
+   * the thread that is NOT encoding, and it is the whole cost of the detector.
+   */
+  private watchPlatformAdaptation(): void {
+    const now = performance.now()
+    if (now - this.lastAdaptCheckMs < ADAPT_CHECK_MS) return
+    this.lastAdaptCheckMs = now
+    for (const ch of this.channels) {
+      if (ch.media !== 'video' || ch.ended) continue
+      const s = ch.track.getSettings()
+      const seen = ch.seen
+      if (!seen) {
+        ch.seen = { width: s.width, height: s.height, frameRate: s.frameRate }
+        continue
+      }
+      const sizeMoved =
+        (s.width !== undefined && seen.width !== undefined && s.width !== seen.width) ||
+        (s.height !== undefined && seen.height !== undefined && s.height !== seen.height)
+      // A frame rate is a float that wobbles; only a real step is a step.
+      const rateMoved =
+        s.frameRate !== undefined &&
+        seen.frameRate !== undefined &&
+        Math.abs(s.frameRate - seen.frameRate) > 1
+      if (!sizeMoved && !rateMoved) continue
+      const smaller = sizeMoved
+        ? (s.width ?? 0) * (s.height ?? 0) < (seen.width ?? 0) * (seen.height ?? 0)
+        : (s.frameRate ?? 0) < (seen.frameRate ?? 0)
+      passDoor(
+        {
+          dial: sizeMoved ? 'resolution' : 'rate',
+          decidedBy: 'chrome',
+          action: smaller ? 'shed' : 'restore',
+          what:
+            `${ch.kind} track moved on its own: ${seen.width ?? '?'}×${seen.height ?? '?'}` +
+            `@${seen.frameRate ?? '?'} → ${s.width ?? '?'}×${s.height ?? '?'}@${s.frameRate ?? '?'}`,
+          why: 'the platform changed the source without being asked — detected, not decided',
+          measured: {
+            widthBefore: seen.width ?? null,
+            heightBefore: seen.height ?? null,
+            fpsBefore: seen.frameRate ?? null,
+            ...measuredFromSettings(s),
+          },
+          nowMs: now,
+        },
+        () => undefined,
+      )
+      ch.seen = { width: s.width, height: s.height, frameRate: s.frameRate }
+    }
   }
 
   /**
@@ -2751,14 +3158,27 @@ class Session implements CaptureSession {
           try {
             // Keep the frame SIZE exactly as it is — only the rate drops.
             // Re-constraining the resolution mid-file would change it mid-file.
-            await withTimeout(
-              t.applyConstraints({
-                ...(settings.width ? { width: { max: settings.width } } : {}),
-                ...(settings.height ? { height: { max: settings.height } } : {}),
-                frameRate: { max: TAIL_THROTTLE_FPS },
-              }),
-              THROTTLE_BUDGET_MS,
-              `${ch.kind} tail throttle`,
+            // M1 — through the door: it is a rate change like any other, and a
+            // ledger with a hole where the stop is cannot be read at stop.
+            await passDoor(
+              {
+                dial: 'rate',
+                decidedBy: 'drain',
+                action: 'set',
+                what: `${ch.kind} source throttled to ${TAIL_THROTTLE_FPS} fps for the tail drain`,
+                why: 'P0-tail: a MediaRecorder backlog can only be drained if the source stops feeding it',
+                measured: measuredFromSettings(settings),
+              },
+              (ticket) =>
+                withTimeout(
+                  constrainThroughDoor(ticket, t, {
+                    ...(settings.width ? { width: { max: settings.width } } : {}),
+                    ...(settings.height ? { height: { max: settings.height } } : {}),
+                    frameRate: { max: TAIL_THROTTLE_FPS },
+                  }),
+                  THROTTLE_BUDGET_MS,
+                  `${ch.kind} tail throttle`,
+                ),
             )
             throttled = true
           } catch (err) {
@@ -2772,6 +3192,37 @@ class Session implements CaptureSession {
           `[capture] ${ch.kind} drained in ${stats.drainMs}ms (+${stats.drainedBytes} B)` +
             `${stats.timedOut ? ' — TIMED OUT, the end of this channel is missing' : ''}`,
         )
+        // M1, AUDIT ITEM (b) — AND THIS IS THE HALF THAT WAS MISSING. The drain
+        // gives up after DRAIN_BUDGET_MS = 2000, records `timedOut`, and — until
+        // now — surfaced NOTHING: the take ended with the end of a channel not
+        // in the file and nothing anywhere said so. The budget itself is left
+        // exactly where it is (sizing it is a measurement, not a guess), but a
+        // take that hit it now says so where the report card can read it.
+        //
+        // WHICH PATH IT IS, confirmed rather than assumed (the audit asked):
+        // this drain runs ONLY on the MediaRecorder lanes — the filter above
+        // requires `ch.recorder`, and the default raw/measured path (X6 video,
+        // A1 audio) flushes its own encoder with no budget at all. Composite v1
+        // carries its own copy of the same 2 s. So (b) is a FALLBACK-LANE
+        // defect, not a default-path one.
+        if (stats.timedOut) {
+          passDoor(
+            {
+              dial: 'quality',
+              decidedBy: 'drain',
+              action: 'shed',
+              what: `the end of the ${ch.kind} channel is missing — the tail drain ran out of budget`,
+              why: `the MediaRecorder was still emitting after ${stats.drainMs} ms`,
+              measured: {
+                drainMs: stats.drainMs,
+                drainedBytes: stats.drainedBytes,
+                budgetMs: DRAIN_BUDGET_MS,
+                lane: 'mediarecorder',
+              },
+            },
+            () => undefined,
+          )
+        }
       }),
     )
   }
@@ -3197,6 +3648,10 @@ class Session implements CaptureSession {
       // Closes the ledger: whatever the take did is now the take's, and the
       // next press starts an empty one.
       const elastic = takeElasticLog()
+      // M1 — and the door's, which is wider: every decision this take made
+      // about itself, including the ones taken before the first frame and the
+      // ones nobody chose (Chrome's own adaptation).
+      const door = takeDoorLog()
       const stats: NonNullable<Recording['stopStats']> = {
         requestedFps: this.requestedRate,
         ...(mem?.usedJSHeapSize !== undefined ? { heapBytes: mem.usedJSHeapSize } : null),
@@ -3214,6 +3669,12 @@ class Session implements CaptureSession {
         // given up in, and an order cannot be read off one string.
         ...(elastic.events.length ? { elastic: elastic.events } : null),
         ...(elastic.droppedEvents ? { elasticDropped: elastic.droppedEvents } : null),
+        // M1 — THE DOOR'S LEDGER. `elastic` above is the order of defence, three
+        // layers of it; this is every change to rate, resolution, quality or
+        // which channels ran, with who decided it, what it was measured on, and
+        // whether it was applied, refused or failed.
+        ...(door.decisions.length ? { decisions: door.decisions } : null),
+        ...(door.droppedDecisions ? { decisionsDropped: door.droppedDecisions } : null),
       }
       recording.stopStats = stats
     } catch {

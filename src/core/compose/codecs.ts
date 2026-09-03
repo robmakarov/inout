@@ -1,3 +1,4 @@
+import { passDoor } from '@core/door'
 import {
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
@@ -164,6 +165,39 @@ const HW_PROBE_STRINGS: Partial<Record<VideoCodec, string>> = {
   av1: 'av01.0.08M.08',
 }
 
+/**
+ * M1 — A RUNG THAT WAS NOT TAKEN IS A DECISION ABOUT THE PICTURE.
+ *
+ * The codec ladder is Robert's split of 2026-09-02 in miniature: the behaviour
+ * is CORRECT (a rung the machine cannot encode has to be skipped, and the floor
+ * is AVC precisely so an export always happens) and only its silence was wrong
+ * — one console line, never graded, so "why is this export AVC on a machine
+ * with an AV1 encoder" was unanswerable after the fact.
+ *
+ * It runs in the export worker as well as on the page, and the door is module
+ * state per thread: on the page it lands in the take's ledger, in the worker it
+ * lands in that worker's own and is read by whoever asks it. Either way the
+ * decision cannot happen unrecorded, which is the whole of the mechanism.
+ */
+function noteCodecRungSkipped(
+  rung: string,
+  codec: string,
+  why: string,
+  measured: { width: number; height: number; bitrate: number },
+): void {
+  passDoor(
+    {
+      dial: 'quality',
+      decidedBy: 'codec',
+      action: 'shed',
+      what: `export codec rung ${rung} (${codec}) skipped`,
+      why,
+      measured: { rung, codec, ...measured },
+    },
+    () => undefined,
+  )
+}
+
 /** Picks the first container/codec chain whose encoders this browser supports. */
 export async function pickEncodingTarget(
   width: number,
@@ -182,9 +216,24 @@ export async function pickEncodingTarget(
       height,
       bitrate: videoBitrate,
     })
-    if (!video) continue
+    if (!video) {
+      // M1, AUDIT ITEM (f) — SILENCE ONLY. A rung the browser cannot encode at
+      // all. Correct behaviour (the ladder exists to find one that works); what
+      // was wrong is that the export said nothing about which rungs it lost.
+      noteCodecRungSkipped(chain.rung, chain.video, 'this browser cannot encode it at this geometry', {
+        width,
+        height,
+        bitrate: videoBitrate,
+      })
+      continue
+    }
     if (chain.hardwareOnly && !(await hasHardwareVideoEncoder(chain.video, width, height, videoBitrate))) {
       console.info(`compose: ladder rung ${chain.rung} skipped — no hardware encoder here`)
+      noteCodecRungSkipped(chain.rung, chain.video, 'no hardware encoder for it on this machine', {
+        width,
+        height,
+        bitrate: videoBitrate,
+      })
       continue
     }
     if (needAudio) {

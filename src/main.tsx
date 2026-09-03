@@ -85,6 +85,18 @@ createRoot(document.getElementById('root')!).render(
       .map((r) => buildReportCard(r, ev))
   }
   g.__inoutTakeLog = async () => (await import('@core/report')).readTakeReports()
+  /**
+   * M1 — THE DOOR'S LEDGER, READABLE WHILE THE TAKE IS STILL RUNNING.
+   *
+   * `__inoutReport()` reads a take that has STOPPED, off the store. The door's
+   * log is the same evidence a second earlier: every change to rate, resolution,
+   * quality or which channels run, with who decided it and what became of it.
+   * A rig watching an induced load spike needs it live — by the time a take has
+   * stopped, the question "did the floor engage before the loss" is a guess.
+   *
+   *   __inoutDoor()   every decision this session has made, newest last
+   */
+  g.__inoutDoor = async () => (await import('@core/door')).readDoorLog()
 }
 
 // Offline start (task P2). PRODUCTION ONLY: a service worker in front of the

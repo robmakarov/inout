@@ -44,6 +44,7 @@ export type DimensionId =
   | 'picture'
   | 'rate'
   | 'elastic'
+  | 'decisions'
   | 'sync'
   | 'storage'
   | 'memory'
@@ -551,6 +552,69 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
             `while the background work was still running: ${audit.outOfOrder
               .map((e) => `${(e.atMs / 1000).toFixed(1)} s ${e.what}`)
               .join('; ')}`,
+        })
+      }
+    }
+  }
+
+  /* 6c. DECISIONS — DID ANYTHING MOVE THAT NOBODY DECIDED? (task M1.)
+
+        `elastic` above grades the ORDER of the three defence layers. This
+        grades the door's whole ledger: every change to rate, resolution,
+        quality or which channels ran, including the ones taken before the first
+        frame (the encoder budget, the arm-time rate hold) and the ones nobody
+        chose — Chrome adapting a capture source on its own, which cannot be
+        owned and is therefore detected.
+
+        WHAT MAKES IT RED, and it is deliberately narrow, because G6(g) is the
+        standing lesson about a dimension that reds every honest take: a
+        decision this take could not carry out (`failed` — the platform refused
+        a constraint, so the take is running unprotected), or a dial the
+        PLATFORM moved on us. Everything else — a step taken, a rung skipped, a
+        composite dropped, a refusal recorded — is the machinery working, and it
+        is reported rather than graded. */
+  {
+    const decisions = recording.stopStats?.decisions
+    if (!decisions?.length) {
+      dims.push({
+        id: 'decisions',
+        status: 'pass',
+        detail:
+          'no decision was taken about this take — it recorded what it was asked for ' +
+          '(or predates the door, in which case there is nothing to grade)',
+      })
+    } else {
+      const failed = decisions.filter((d) => d.outcome === 'failed')
+      const platform = decisions.filter((d) => d.decidedBy === 'chrome')
+      const refused = decisions.filter((d) => d.outcome === 'refused')
+      const sheds = decisions.filter((d) => d.action === 'shed' && d.outcome === 'applied')
+      const say = (d: (typeof decisions)[number]): string =>
+        `${(d.atMs / 1000).toFixed(1)} s ${d.what} [${d.decidedBy}]`
+      const line =
+        `${decisions.length} decision(s) — ${sheds.length} applied shed(s), ` +
+        `${refused.length} refused, ${failed.length} failed` +
+        (platform.length ? `, ${platform.length} taken by the platform itself` : '') +
+        (sheds.length ? ` · ${sheds.map(say).join('; ')}` : '')
+      if (failed.length || platform.length) {
+        const first = failed[0] ?? platform[0]
+        dims.push({
+          id: 'decisions',
+          status: 'fail',
+          headline: failed.length
+            ? `the take could not carry out its own decision at ${((first?.atMs ?? 0) / 1000).toFixed(1)} s: ${first?.what}`
+            : `the platform moved the source on its own at ${((first?.atMs ?? 0) / 1000).toFixed(1)} s: ${first?.what}`,
+          detail:
+            `${line}` +
+            (failed.length
+              ? ` · FAILED: ${failed.map((d) => `${say(d)} — ${d.outcomeWhy ?? 'no reason recorded'}`).join('; ')}`
+              : '') +
+            (platform.length ? ` · PLATFORM: ${platform.map(say).join('; ')}` : ''),
+        })
+      } else {
+        dims.push({
+          id: 'decisions',
+          status: 'pass',
+          detail: `${line} — every one of them through the door, with its reason and its outcome`,
         })
       }
     }

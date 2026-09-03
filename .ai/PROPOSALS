@@ -1,0 +1,91 @@
+# PROPOSALS — NOT TASKS. NOTHING HERE IS BUILT OR DECIDED.
+# Written 2026-09-03 at Robert's word: "save your propositions i ll discuss it with other session"
+# (DECISIONS robert (23)(g)). For agents only. Rules for this file:
+#  - Every entry names WHAT IT COSTS and WHAT IT TAKES AWAY. If it takes anything away, that is the
+#    first line, not a footnote — robert (23)(b): "no, not removing any features we have now".
+#  - A proposal accepted becomes a task in .ai/TASKS and its entry here is DELETED. A proposal refused
+#    is deleted too, with one line in DECISIONS. This file never grows a history.
+#  - Nothing here is started without Robert saying so.
+
+## A — INSTANT UNEDITED EXPORT AT MAX, WITH NOTHING REMOVED [medium · capture + compose]
+WHAT ROBERT ASKED FOR: "i want video rendered while recording so non edit export instantly as we
+supposed to have now but dont fucking work".
+
+WHY IT DOESN'T WORK NOW, and it is one deliberate line, not a mystery: below max the app already
+encodes the finished picture during the take and the INSTANT path packet-copies it — that is why an
+unedited export is instant at every step except max. At max the composite is never opened, and
+session.ts:1231 says why in its own comment: three encoders wanted 555 Mpx/s against the ~416 this
+machine measures; without the composite it is 411, which fits. So max+camera has no fast path at all.
+
+THE PROPOSAL — record THREE things at max instead of two, and lose nothing:
+  1. THE FINISHED PICTURE — screen with the camera drawn on it, the stage exactly as recorded.
+  2. THE PATCH — the small rectangle of clean screen hidden BEHIND the camera.
+  3. THE CAMERA at 720p, exactly as today.
+(1) + (2) ARE THE CLEAN SCREEN, pixel for pixel: the finished picture holds clean screen everywhere
+except under the camera, the patch holds what is under it, both first generation off the same source
+frames. So every edit that works today still works — move the camera anywhere, resize it up or down,
+hide it, zoom, change the frame, change the step — because the clean screen is still there, stored in
+two pieces instead of one. NOTHING IS REMOVED. What is ADDED is that the take now contains the
+finished video, so an unedited max+camera export is a packet copy.
+
+THE COST, and it is the whole argument:
+  today at max      screen 356 + camera 55                    = 411 Mpx/s, 2 encoders
+  proposed          finished picture 356 + patch ~21 + cam 55 = 431 Mpx/s, 3 encoders   (+5 %)
++5 % against a ceiling of ~416 that has never been measured at max/60 — and B14 says max is currently
+recording at 30 fps, i.e. ~205 Mpx/s, so half the budget may be sitting unused behind a bug. B14 LANDS
+FIRST AND ITS NUMBER DECIDES THIS. If the 5 % does not fit, this proposal dies there; O15's encoder
+budget already drops the composite first, so the failure is graceful and not a lost take.
+OPEN, MUST BE ANSWERED BEFORE ANY CODE: at max the finished picture becomes load-bearing, and today the
+composite watchdog DROPS the mix after 5 s under 12 fps (liveCompositeV2.ts:366) — safe now because max
+uses no composite, fatal if it is the take. Its failure has to open a raw-screen segment
+(segmentContain's shape), never drop. Also: the composite runs `latencyMode:'realtime'` and the raw
+path runs `'quality'`; if the composite becomes the shipped file that has to change and be re-measured.
+WHAT IT DOES NOT BUY: an edited export. A camera move over the whole take, a frame preset, a step
+change — all still render. This buys the unedited and cut cases at max, nothing more.
+
+## B — "SAME AS LAST FRAME" FRAMES [light-medium · compose · nothing a user sees changes]
+THE FACT, already in DECISIONS 2026-08-25 (4) and never acted on: capture is frame-driven and stores
+~1 fps while the screen is still, and the render then re-inflates that to constant rate and encodes
+30-60 identical pictures per second of a motionless screen. It was written down as "the order-of-
+magnitude lever on screen content" and parked as X10=O5e because the fix on the table made the file
+variable-rate, and Robert said "fuck this".
+THE DIFFERENT FIX: every video format already has a picture that means "identical to the previous
+one" — all blocks skipped, no residual. It costs ~10 bytes, needs no encoder, no decoder and no draw,
+every player on earth plays it, and THE FILE STAYS CONSTANT RATE. Same duration, same timestamps, same
+pixels. So when an output frame is identical to the one before it, write that instead of making a new
+one. We already know which frames those are without touching a pixel: capture told us when it stored
+one frame instead of sixty.
+NOT A FORMAT AND NOT AN ENCODER: one all-skip P-slice against the stream's own SPS/PPS. Days of work,
+and the gate is exact — the file must decode to the same pixels as today, frame for frame.
+WHAT IT DOES NOT BUY, said plainly so nobody oversells it: WITH THE CAMERA ON THE PICTURE IS NEVER
+STILL, so this does nothing for a camera take. It is a large win for screen-only exports and zero for
+Robert's own headline case.
+MEASURE FIRST, one number: what fraction of a real ≥60-min take is byte-identical frame to frame. The
+detector exists (X17's census). That number decides whether the days are worth spending.
+
+## C — ADDITIVE UI, NEVER A CONDITION OF SPEED [light]
+Offered ONLY as things Robert may want anyway, never as the price of a fix (robert (23)(b) forbids
+that framing): the frame preset chosen on the CAPTURE screen as well as in the editor, and the camera
+pose set before the record press as well as dragged during the take (UI1 already allows the live drag).
+Both are recorded into the take, so a take set up that way exports through the fast path instead of the
+render. If either is refused, nothing else on this page changes.
+
+## D — CHECKED AND DEAD. Do not re-derive; each cost a session or a measurement.
+- OVERLAPPING DECODE AND ENCODE IS NOT A LEVER. R1's row still names it at ~1.4×. O5b says the export
+  is already pipelined, and X4 measured the decode farm at 0.99-1.08× against a ≥2× gate — because
+  decode and encode CONTEND for one media engine: the same decode takes 4.7 s alone and 17-23 s while
+  the encoder runs beside it. A second JS thread does not create a second engine. R1's remaining lever
+  should be re-read against that before anyone spends a session on it.
+- A BACKGROUND FRAME SCALES THE SCREEN, so every pixel lands somewhere new and NO reuse scheme of any
+  kind — chunks, block copies, hidden layers — can make it cheaper than a full pass. This is arithmetic.
+  It is also why Robert killed the block-rewriter family (DECISIONS robert (23)(e)); see the Phase 5
+  parking note in TASKS for what was learned before it died.
+- Everything J2 researched and ruled out is listed in that same Phase 5 note: H.264 block patching,
+  H.264 hidden pictures, a second full composite encoder at max, the 64 px and 4 px camera grids.
+
+## E — THE ONE MEASUREMENT EVERYTHING ABOVE RESTS ON
+Nobody has measured this machine's sustained encode at max and 60 fps. rate.ts says 416 Mpx/s;
+scripts/encode-cost.mjs's header says 120-188 through a real render; Robert's own 124.8-min take ran at
+309. They disagree 3.5×, and B14 says max is not even reaching 60 today. Until that number exists,
+every encoder-budget argument on the roadmap — including proposal A's +5 % — is an argument about
+numbers nobody has. B14 produces it as a side effect. Do B14.

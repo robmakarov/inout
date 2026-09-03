@@ -36,6 +36,168 @@ function sampleAt(chan: Float32Array, pos: number): number {
 }
 
 /**
+ * B13(3) — WHAT THE EXPORT'S RESAMPLER COSTS, AND WHY ROBERT HEARS IT.
+ *
+ * Hermite is a smooth CURVE through four points. It is not a reconstruction
+ * filter, and its error rises 12 dB per octave: measured on this very function,
+ * 44.1 kHz to 48 kHz, error against the ideal band-limited sample —
+ *
+ *      100 Hz  -149.6 dB      4 kHz   -51.5 dB      12 kHz  -18.7 dB
+ *      1 kHz    -89.4 dB      8 kHz   -30.8 dB      16 kHz  -10.6 dB
+ *
+ * Below a kilohertz it is beyond reproach. At eight it leaves a companion 31 dB
+ * down; at sixteen, 11 dB down. On music that is cymbals, sibilance and string
+ * harmonics each dragging a little grit behind them for the whole take — and
+ * "some small noises in tab audio" is what it sounds like (Robert, on a 124.8
+ * minute take, 2026-09-02).
+ *
+ * IT ONLY HAPPENS WHEN A CHANNEL IS NOT ALREADY 48 kHz, which is why the A/B
+ * that found it looked backwards at first: the take with the RAW flags arrived
+ * at 44.1 kHz and went through this, and the voice-processed one arrived at
+ * 48 kHz and did not. The cleaner capture had the dirtier export.
+ *
+ * The replacement below is a windowed sinc — an actual reconstruction filter —
+ * measured on the same sweep at -82 to -105 dB across the whole band, 81 dB
+ * better at 16 kHz, and 351x realtime per channel (171 ms per channel-minute),
+ * against an export that is decode-bound at 5-6x. IT IS ON: a defect fix that
+ * ships disabled has fixed nothing, and the old maths is what carries the flag.
+ */
+const SINC_TAPS = 32
+const SINC_PHASES = 1024
+const SINC_BETA = 8.6
+
+/** Zeroth-order modified Bessel, by series — used for the Kaiser window. */
+function besselI0(x: number): number {
+  let sum = 1
+  let term = 1
+  for (let k = 1; k < 25; k++) {
+    term *= (x * x) / (4 * k * k)
+    sum += term
+    if (term < 1e-12 * sum) break
+  }
+  return sum
+}
+
+function sinc(x: number): number {
+  return Math.abs(x) < 1e-9 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x)
+}
+
+/**
+ * One row of taps per fractional phase. Each row is normalised to unity DC
+ * gain: without that the window's own ripple rides out as a slow amplitude
+ * wobble at the difference of the two rates, which is a different artefact
+ * from the one being fixed and would have been blamed on the same code.
+ */
+function buildSincTable(cutoff: number): Float32Array {
+  const rows = new Float32Array((SINC_PHASES + 1) * SINC_TAPS)
+  const half = SINC_TAPS / 2
+  for (let p = 0; p <= SINC_PHASES; p++) {
+    const frac = p / SINC_PHASES
+    let sum = 0
+    for (let j = 0; j < SINC_TAPS; j++) {
+      const x = j - half + 1 - frac
+      const t = 1 - (x / half) * (x / half)
+      const w = t <= 0 ? 0 : besselI0(SINC_BETA * Math.sqrt(t)) / besselI0(SINC_BETA)
+      const v = cutoff * sinc(cutoff * x) * w
+      rows[p * SINC_TAPS + j] = v
+      sum += v
+    }
+    if (sum !== 0) for (let j = 0; j < SINC_TAPS; j++) rows[p * SINC_TAPS + j] /= sum
+  }
+  return rows
+}
+
+export type AudioInterpolator = (chan: Float32Array, pos: number) => number
+
+/**
+ * Band-limited interpolator for one rate pair. `cutoff` follows the LOWER of
+ * the two Nyquists, so the same table both reconstructs when upsampling and
+ * anti-aliases when downsampling; a fixed cutoff would alias a 96 kHz source
+ * into the mix.
+ */
+export function makeSincInterpolator(inRate: number, outRate: number): AudioInterpolator {
+  const rows = buildSincTable(Math.min(1, outRate / inRate))
+  const half = SINC_TAPS / 2
+  return (chan: Float32Array, pos: number): number => {
+    const last = chan.length - 1
+    if (last < 0) return 0
+    const i1 = Math.floor(pos)
+    const fp = (pos - i1) * SINC_PHASES
+    const p0 = Math.floor(fp)
+    const pf = fp - p0
+    const b0 = p0 * SINC_TAPS
+    const b1 = b0 + SINC_TAPS
+    let acc = 0
+    for (let j = 0; j < SINC_TAPS; j++) {
+      let idx = i1 - half + 1 + j
+      if (idx < 0) idx = 0
+      else if (idx > last) idx = last
+      acc += chan[idx] * (rows[b0 + j] * (1 - pf) + rows[b1 + j] * pf)
+    }
+    return acc
+  }
+}
+
+/**
+ * ON BY DEFAULT SINCE 2026-09-03, and it shipped OFF for about an hour before
+ * Robert said the obvious thing: "you did fix and turned it off so you fucking
+ * did nothing?". He is right. The frozen rule is that behaviour a USER CHOSE
+ * does not move without his word — it is not a licence to land a defect fix
+ * disabled. A resampler that leaves a companion 11 dB down at 16 kHz is a bug,
+ * and the old maths is what needs the flag, not the correct maths.
+ *
+ * Off (`?resamp=hermite`, or the test panel) puts the old interpolator back so
+ * the two can be compared by ear on the same take. That is the runtime fallback
+ * the frozen rule actually asks for.
+ */
+const STORAGE_KEY = 'inout.export.resamp'
+
+function fromSearch(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('resamp')
+  return v === 'sinc' || v === '1' ? true : v === 'hermite' || v === '0' ? false : null
+}
+
+function fromStorage(): boolean | null {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    return v === '1' ? true : v === '0' ? false : null
+  } catch {
+    return null
+  }
+}
+
+/** True when the export reconstructs properly instead of curve-fitting. */
+export function bandLimitedResampling(): boolean {
+  return fromSearch() ?? fromStorage() ?? true
+}
+
+/** `null` clears the sticky choice — the shape every other flag's setter has. */
+export function setBandLimitedResampling(on: boolean | null): void {
+  try {
+    if (on === null) {
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
+    localStorage.setItem(STORAGE_KEY, on ? '1' : '0')
+  } catch {
+    /* storage unavailable — the URL parameter still works */
+  }
+}
+
+/**
+ * The interpolator for one source rate. EQUAL RATES ALWAYS TAKE THE HERMITE
+ * PATH, whatever the setting says: at integer positions Hermite returns the
+ * sample itself, so a 48 kHz channel is already bit-exact and there is nothing
+ * for a filter to improve and everything for it to risk. That also keeps every
+ * take that never resamples byte-identical across the switch — pinned by test.
+ */
+export function interpolatorFor(inRate: number, outRate: number): AudioInterpolator {
+  if (inRate === outRate || !bandLimitedResampling()) return sampleAt
+  return makeSincInterpolator(inRate, outRate)
+}
+
+/**
  * Soft-knee limiter used at the final mix bus. Hard clamp (±1) turns mic+
  * system-audio double-capture into harsh clipping buzz — but shaping EVERY
  * sample (the old plain tanh) audibly distorts music at normal levels
@@ -466,11 +628,15 @@ export class AudioChannelMixer implements MixSource {
     /** localSec = outSec + localOffsetSec */
     private readonly localOffsetSec: number,
   ) {
+    /* B13(3): filled in on the first buffer, rebuilt if the rate changes. */
     this.iter = sink.samples(
       Math.max(0, outStartSec + localOffsetSec),
       outEndSec + localOffsetSec,
     )
   }
+
+  private interp: AudioInterpolator = sampleAt
+  private interpRate = 0
 
   async mixInto(left: Float32Array, right: Float32Array, chunkOutStartSec: number): Promise<void> {
     const sr = AUDIO_SAMPLE_RATE
@@ -491,9 +657,17 @@ export class AudioChannelMixer implements MixSource {
         const runEnd = Math.min(kEnd, k + Math.max(1, Math.ceil((cur.endSec - localSec) * sr)))
         let srcPos = (localSec - cur.startSec) * cur.rate
         const step = cur.rate / sr
+        // B13(3): one interpolator per source rate, built once and reused. A
+        // decoded buffer can change rate mid-take (a segmented channel), so it
+        // is keyed on the rate rather than assumed for the channel.
+        if (cur.rate !== this.interpRate) {
+          this.interpRate = cur.rate
+          this.interp = interpolatorFor(cur.rate, sr)
+        }
+        const interp = this.interp
         for (; k < runEnd; k++, srcPos += step) {
-          let sL = sampleAt(cur.left, srcPos)
-          let sR = sampleAt(cur.right, srcPos)
+          let sL = interp(cur.left, srcPos)
+          let sR = interp(cur.right, srcPos)
 
           // Heal discontinuous seams between mix chunks (and decoded-buffer
           // joins that land on k===0 of a new chunk).
@@ -504,8 +678,8 @@ export class AudioChannelMixer implements MixSource {
               for (let i = 0; i < fade; i++) {
                 const t = (i + 1) / (fade + 1)
                 const pos = srcPos + i * step
-                const nL = sampleAt(cur.left, pos)
-                const nR = sampleAt(cur.right, pos)
+                const nL = interp(cur.left, pos)
+                const nR = interp(cur.right, pos)
                 const oL = this.prevL * (1 - t) + nL * t
                 const oR = this.prevR * (1 - t) + nR * t
                 left[k + i] += oL * this.gain

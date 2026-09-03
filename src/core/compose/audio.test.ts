@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   audioMixInternals,
+  interpolatorFor,
+  makeSincInterpolator,
   measureMixLoudness,
   LIMIT_USABLE_MAX,
   NORMALIZE_PEAK_OVERDRIVE,
@@ -326,5 +328,74 @@ describe('the probe pass carries the robust ceiling (X1 found it dropping it)', 
     // …and that is the whole point: the tight licence now applies.
     const g = makeupGainForLoudness(loud)
     expect(g * loud.peakRobust!).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE * 0.95 + 1e-9)
+  })
+})
+
+/**
+ * B13(3) — THE EXPORT RESAMPLER.
+ *
+ * Robert, on a 124.8-minute take: "some small noises in tab audio". Measured to
+ * the 4-point Hermite interpolator the mix uses whenever a channel is not
+ * already 48 kHz: its error rises 12 dB per octave and reaches -10.6 dB at
+ * 16 kHz. These pin the replacement's two properties and, more importantly, the
+ * one thing that must not move: a take that never resamples is untouched.
+ */
+describe('B13 band-limited resampling', () => {
+  const errDb = (at: (c: Float32Array, p: number) => number, f: number, inRate = 44100, outRate = 48000) => {
+    const n = inRate
+    const src = new Float32Array(n)
+    for (let i = 0; i < n; i++) src[i] = 0.5 * Math.sin((2 * Math.PI * f * i) / inRate)
+    const outN = Math.floor((n * outRate) / inRate) - 40
+    let sig = 0
+    let err = 0
+    for (let i = 40; i < outN; i++) {
+      const got = at(src, (i * inRate) / outRate)
+      const ideal = 0.5 * Math.sin((2 * Math.PI * f * i) / outRate)
+      sig += ideal * ideal
+      err += (got - ideal) * (got - ideal)
+    }
+    return 10 * Math.log10(err / sig)
+  }
+
+  it('reconstructs the top octaves the shipped interpolator cannot', () => {
+    const sinc = makeSincInterpolator(44100, 48000)
+    // The number that matters: at 16 kHz the shipped path leaves a companion
+    // 11 dB down. This one must be far below anything audible under program.
+    expect(errDb(sinc, 16000)).toBeLessThan(-70)
+    expect(errDb(sinc, 8000)).toBeLessThan(-70)
+    // And it must not have traded the bottom away to get it.
+    expect(errDb(sinc, 100)).toBeLessThan(-70)
+    expect(errDb(sinc, 1000)).toBeLessThan(-70)
+  })
+
+  it('is a large improvement exactly where the defect is, and no worse anywhere', () => {
+    const sinc = makeSincInterpolator(44100, 48000)
+    // Equal rates always return the OLD interpolator, so this is the honest
+    // handle on it without reaching past the module's exports.
+    const hermite = interpolatorFor(48000, 48000)
+    expect(errDb(sinc, 16000)).toBeLessThan(errDb(hermite, 16000) - 50)
+    expect(errDb(sinc, 8000)).toBeLessThan(errDb(hermite, 8000) - 20)
+  })
+
+  it('leaves a 48 kHz channel bit-identical — the path the flag must never touch', () => {
+    // Equal rates return the shipped interpolator whatever the flag says, and
+    // at integer positions that is the sample itself. A take with nothing to
+    // resample cannot change by one byte when the flag flips.
+    const same = interpolatorFor(48000, 48000)
+    const src = new Float32Array(256)
+    for (let i = 0; i < src.length; i++) src[i] = Math.sin(i / 3) * 0.7
+    for (let i = 4; i < 200; i++) expect(same(src, i)).toBe(src[i])
+  })
+
+  /**
+   * THE DEFAULT IS THE FIX. It shipped off for about an hour and Robert said
+   * the obvious thing — a defect fix that is disabled has fixed nothing. The
+   * old interpolator is what carries the switch now, so it can be put back for
+   * an A/B; this pins which way round that is.
+   */
+  it('resamples properly BY DEFAULT — the old maths is what needs the switch', () => {
+    const hermite = interpolatorFor(48000, 48000)
+    expect(interpolatorFor(44100, 48000)).not.toBe(hermite)
+    expect(errDb(interpolatorFor(44100, 48000), 16000)).toBeLessThan(-70)
   })
 })

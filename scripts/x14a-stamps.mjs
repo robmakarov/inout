@@ -35,9 +35,17 @@
  *   node scripts/x14a-stamps.mjs --headless         # no camera light, no window
  *   node scripts/x14a-stamps.mjs --json=/tmp/x14a.json
  *
- * `--use-fake-ui-for-media-stream` answers the SITE prompt while keeping the
- * REAL devices; it is not `--use-fake-device-for-media-stream`, which would
- * substitute a test pattern whose stamps say nothing about a real capturer.
+ * HOW IT GETS A REAL SCREEN, and this cost three wrong turns before it worked.
+ * `--use-fake-ui-for-media-stream` is the obvious way to answer the permission
+ * prompt, and for getDisplayMedia it is POISON: it auto-answers the surface
+ * picker with nothing, and every request comes back
+ * `NotReadableError: Could not start video source` — headed, headless, with or
+ * without transient activation, under every auto-select switch Chrome has. It
+ * also starves a real camera. So this script does NOT use it. Permissions are
+ * granted through CDP (`Browser.grantPermissions`), and the surface is chosen by
+ * `--auto-accept-this-tab-capture` answering a `preferCurrentTab: true` request.
+ * That yields a real `web-contents-media-stream://` capturer at the window's own
+ * size, which is what the stamps are being read off.
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -52,7 +60,7 @@ const CHROME = {
   linux: ['/usr/bin/google-chrome', '/usr/bin/chromium'],
 }
 
-const opts = { url: PROD_URL, takeMs: 120000, headed: true, json: null, fake: false }
+const opts = { url: PROD_URL, takeMs: 120000, headed: true, json: null, fake: false, rung: 'raw' }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6)
   else if (a.startsWith('--takeMs=')) opts.takeMs = Number(a.slice(9))
@@ -60,6 +68,7 @@ for (const a of process.argv.slice(2)) {
   else if (a === '--headed') opts.headed = true
   else if (a.startsWith('--json=')) opts.json = a.slice(7)
   else if (a === '--fake') opts.fake = true
+  else if (a.startsWith('--rung=')) opts.rung = a.slice(7)
 }
 
 let bin = process.env.CHROME_BIN
@@ -70,7 +79,7 @@ if (!bin) {
 }
 
 const profile = mkdtempSync(join(tmpdir(), 'inout-x14a-'))
-const report = { url: opts.url, takeMs: opts.takeMs, fakeDevices: opts.fake, sources: {}, verdict: null }
+const report = { url: opts.url, takeMs: opts.takeMs, fakeDevices: opts.fake, rung: opts.rung, sources: {}, verdict: null }
 let browser
 let exitCode = 1
 
@@ -81,7 +90,9 @@ let exitCode = 1
  * and whatever metadata() hands over. Frames are closed immediately — a 120 s
  * run that held them would be an OOM, not a measurement.
  */
-const PROBE = (takeMs) => `(async () => {
+const PROBE = (takeMs, which, rung) => `(async () => {
+  const WHICH = ${JSON.stringify(which)}
+  const RUNG = ${JSON.stringify(rung)}
   const out = { sources: {}, errors: [] }
   const has = (o, k) => { try { return typeof o[k] } catch { return 'throw' } }
 
@@ -227,24 +238,49 @@ const PROBE = (takeMs) => `(async () => {
     return rec
   }
 
-  // ---- open the three real sources ----------------------------------------
+  /**
+   * KEEP THE TAB PAINTING, or the display source measures nothing.
+   * A web-contents-media-stream source is DAMAGE-DRIVEN: a still page produces one
+   * frame and then silence. The first real-capturer run of this probe read
+   * exactly one frame in 120 s for that reason and reported the source as
+   * starved. A moving element is not decoration here — it is what makes the
+   * capturer produce the stream whose stamps are the measurement.
+   */
+  if (WHICH.includes('display')) {
+    const bar = document.createElement('div')
+    bar.style.cssText = 'position:fixed;z-index:2147483647;left:0;top:0;width:120px;height:120px;background:#0f0;pointer-events:none'
+    document.body.appendChild(bar)
+    const tick = () => { bar.style.transform = 'translateX(' + ((performance.now() / 6) % 600) + 'px)'; requestAnimationFrame(tick) }
+    requestAnimationFrame(tick)
+  }
+
+  // ---- open only the sources this pass's launch flags can serve ------------
   let display = null, cam = null
   // An unanswered picker is silence, not an error — bound it or the probe hangs.
   const within = (p, ms, what) =>
     Promise.race([p, new Promise((_, j) => setTimeout(() => j(new Error(what + ' timed out after ' + ms + 'ms')), ms))])
-  try {
-    // The --auto-accept-this-tab-capture switch only answers a request that ASKS for the
-    // current tab; without preferCurrentTab the picker is never auto-answered
-    // and the source comes back NotReadableError (measured, first run).
-    display = await within(navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 60 } },
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      preferCurrentTab: true,
-    }), 20000, 'getDisplayMedia')
-  } catch (e) { out.errors.push('getDisplayMedia: ' + String(e)) }
-  try {
-    cam = await within(navigator.mediaDevices.getUserMedia({ video: true, audio: true }), 20000, 'getUserMedia')
-  } catch (e) { out.errors.push('getUserMedia: ' + String(e)) }
+  if (WHICH.includes('display')) {
+    try {
+      // The --auto-accept-this-tab-capture switch only answers a request that ASKS for the
+      // current tab; without preferCurrentTab the picker is never auto-answered
+      // and the source comes back NotReadableError (measured, first run).
+      // RUNG 'floor' asks for bare audio:true — what acquire.ts's degraded
+      // rung asks, and what Robert's 124.8-minute take was recorded under.
+      // The stamps are read the same way either way; only the request differs.
+      display = await within(navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 60 } },
+        audio: RUNG === 'floor'
+          ? { suppressLocalAudioPlayback: true }
+          : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: true },
+        preferCurrentTab: true,
+      }), 20000, 'getDisplayMedia')
+    } catch (e) { out.errors.push('getDisplayMedia: ' + String(e)) }
+  }
+  if (WHICH.includes('gum')) {
+    try {
+      cam = await within(navigator.mediaDevices.getUserMedia({ video: true, audio: true }), 20000, 'getUserMedia')
+    } catch (e) { out.errors.push('getUserMedia: ' + String(e)) }
+  }
 
   const jobs = []
   const dv = display?.getVideoTracks()[0]
@@ -261,88 +297,119 @@ const PROBE = (takeMs) => `(async () => {
   return JSON.stringify(out)
 })()`
 
-try {
+/**
+ * TWO PASSES, AND THAT IS NOT TIDINESS — the two source families need launch
+ * flags that CONTRADICT each other.
+ *
+ *   display + tab audio : must NOT have --use-fake-ui-for-media-stream. That
+ *     switch auto-answers the surface picker with nothing, and every request
+ *     comes back NotReadableError. The surface is chosen instead by
+ *     --auto-accept-this-tab-capture answering a preferCurrentTab request, and
+ *     the site permission is granted over CDP.
+ *   camera + mic : DOES need it. Without it the getUserMedia prompt is shown
+ *     and never answered, and the call times out at 20 s (measured).
+ *
+ * One launch cannot be both, so each family gets its own.
+ */
+async function pass(which, extraSwitches, label) {
+  const dir = `${profile}-${label}`
   const args = [
     `--remote-debugging-port=${DEBUG_PORT}`,
-    `--user-data-dir=${profile}`,
+    `--user-data-dir=${dir}`,
     '--no-first-run',
     '--no-default-browser-check',
-    '--use-fake-ui-for-media-stream',
-    /**
-     * `--fake` SUBSTITUTES THE DEVICES, AND IT IS A DIFFERENT QUESTION.
-     * A fake camera answers "does a VideoFrame off a MediaStreamTrackProcessor
-     * carry metadata() at all, and is its timestamp on the page clock" — that
-     * is a property of the VideoFrame plumbing, not of the capturer. It CANNOT
-     * answer what a real capturer's stamp is worth. Rows measured this way are
-     * labelled, and the verdict says so.
-     */
-    ...(opts.fake ? ['--use-fake-device-for-media-stream'] : []),
-    '--auto-accept-this-tab-capture',
-    '--auto-select-tab-capture-source-by-title=INOUT',
+    ...extraSwitches,
     '--autoplay-policy=no-user-gesture-required',
     '--disable-background-timer-throttling',
     '--window-size=1280,900',
   ]
   if (!opts.headed) args.unshift('--headless=new')
   args.push(opts.url)
-  console.log(`x14a: ${opts.headed ? 'headed' : 'headless'} Chrome → ${opts.url} · ${opts.takeMs} ms probe`)
-  browser = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
-
-  let ws = null
-  for (let i = 0; i < 200 && !ws; i++) {
+  const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
+  try {
+    let ws = null
+    for (let i = 0; i < 200 && !ws; i++) {
+      try {
+        const list = await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/list`)).json()
+        const page = list.find((x) => x.type === 'page' && x.url.startsWith(new URL(opts.url).origin))
+        if (page) ws = page.webSocketDebuggerUrl
+      } catch {
+        /* not up yet */
+      }
+      if (!ws) await sleep(200)
+    }
+    if (!ws) throw new Error('Chrome never exposed a debuggable page')
+    const sock = new WebSocket(ws)
+    await new Promise((r, j) => {
+      sock.addEventListener('open', r, { once: true })
+      sock.addEventListener('error', () => j(new Error('cdp connect failed')), { once: true })
+    })
+    let seq = 0
+    const pending = new Map()
+    sock.addEventListener('message', (ev) => {
+      const m = JSON.parse(ev.data)
+      if (m.id && pending.has(m.id)) {
+        const { resolve, reject } = pending.get(m.id)
+        pending.delete(m.id)
+        m.error ? reject(new Error(m.error.message)) : resolve(m.result)
+      }
+    })
+    const send = (method, params = {}) =>
+      new Promise((resolve, reject) => {
+        const id = ++seq
+        pending.set(id, { resolve, reject })
+        sock.send(JSON.stringify({ id, method, params }))
+      })
+    await send('Runtime.enable')
+    await send('Page.enable')
+    await send('Browser.grantPermissions', {
+      origin: new URL(opts.url).origin,
+      permissions: ['videoCapture', 'audioCapture'],
+    }).catch(() => undefined)
+    await sleep(2500)
+    const raw = (
+      await send('Runtime.evaluate', {
+        expression: PROBE(opts.takeMs, which, opts.rung),
+        returnByValue: true,
+        awaitPromise: true,
+        timeout: opts.takeMs + 60000,
+      })
+    ).result?.value
+    return typeof raw === 'string' ? JSON.parse(raw) : raw
+  } finally {
     try {
-      const list = await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/list`)).json()
-      const page = list.find((x) => x.type === 'page' && x.url.startsWith(new URL(opts.url).origin))
-      if (page) ws = page.webSocketDebuggerUrl
+      child.kill('SIGKILL')
     } catch {
-      /* not up yet */
+      /* already gone */
     }
-    if (!ws) await sleep(200)
+    await sleep(400)
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* best effort */
+    }
   }
-  if (!ws) throw new Error('Chrome never exposed a debuggable page')
+}
 
-  const sock = new WebSocket(ws)
-  await new Promise((r, j) => {
-    sock.addEventListener('open', r, { once: true })
-    sock.addEventListener('error', () => j(new Error('cdp connect failed')), { once: true })
-  })
-  let seq = 0
-  const pending = new Map()
-  sock.addEventListener('message', (ev) => {
-    const m = JSON.parse(ev.data)
-    if (m.id && pending.has(m.id)) {
-      const { resolve, reject } = pending.get(m.id)
-      pending.delete(m.id)
-      m.error ? reject(new Error(m.error.message)) : resolve(m.result)
-    }
-  })
-  const send = (method, params = {}) =>
-    new Promise((resolve, reject) => {
-      const id = ++seq
-      pending.set(id, { resolve, reject })
-      sock.send(JSON.stringify({ id, method, params }))
-    })
-  await send('Runtime.enable')
-  await send('Page.enable')
-  await send('Browser.grantPermissions', {
-    origin: new URL(opts.url).origin,
-    permissions: ['videoCapture', 'audioCapture'],
-  }).catch(() => undefined)
+try {
+  console.log(`x14a: ${opts.headed ? 'headed' : 'headless'} Chrome → ${opts.url} · ${opts.takeMs} ms per pass`)
+  report.errors = []
+  /**
+   * `--fake` SUBSTITUTES THE DEVICES, AND IT IS A DIFFERENT QUESTION. A fake
+   * camera answers "does a VideoFrame off a MediaStreamTrackProcessor carry
+   * metadata() at all, and is its timestamp on the page clock" — a property of
+   * the VideoFrame plumbing, not of a capturer. Rows measured that way are
+   * labelled and the verdict says so.
+   */
+  const fakeSwitches = opts.fake ? ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] : []
 
-  await sleep(2500)
+  console.log('  pass 1/2 — display video + tab audio (real surface, no fake-ui)')
+  const a = await pass(['display'], [...fakeSwitches, '--auto-accept-this-tab-capture'], 'display')
+  console.log('  pass 2/2 — camera + mic (real devices, prompt auto-answered)')
+  const b = await pass(['gum'], ['--use-fake-ui-for-media-stream', ...(opts.fake ? ['--use-fake-device-for-media-stream'] : [])], 'gum')
 
-  const raw = (
-    await send('Runtime.evaluate', {
-      expression: PROBE(opts.takeMs),
-      returnByValue: true,
-      awaitPromise: true,
-      timeout: opts.takeMs + 60000,
-    })
-  ).result?.value
-  const probe = typeof raw === 'string' ? JSON.parse(raw) : raw
-  if (!probe) throw new Error('probe returned nothing')
-  report.sources = probe.sources
-  report.errors = probe.errors
+  report.sources = { ...(a?.sources ?? {}), ...(b?.sources ?? {}) }
+  report.errors = [...(a?.errors ?? []), ...(b?.errors ?? [])]
 
   // ---- the table, and then the sentence X14 needs --------------------------
   const ROWS = [
@@ -427,7 +494,14 @@ try {
       metadataFnPresent: s.hasMetadataFn === 'function',
       // Worth having only if it is steadier than the term it would replace.
       steadierThanG5: off.sd < 6.5,
-      holdsOverAnHour: Math.abs(su.driftMsPerMin ?? Infinity) < 1,
+      /**
+       * A DRIFT VERDICT NEEDS A SPAN. Least squares over 25 s put a mic at
+       * 1.12 ms/min and flipped this row to NOT USABLE, while 60 and 120 s runs
+       * of the same source read -0.07 and -0.37. The slope is not the finding
+       * on a short run; the absence of one is. Under a minute it says so.
+       */
+      driftReadable: (su.spanS ?? 0) >= 60,
+      holdsOverAnHour: (su.spanS ?? 0) < 60 ? null : Math.abs(su.driftMsPerMin ?? Infinity) < 1,
     }
   }
   const ROWKEYS = ROWS.map(([, k]) => k)
@@ -442,8 +516,28 @@ try {
     }
     console.log(
       `  ${label}: metadata() ${c.metadataFnPresent ? 'present' : 'ABSENT'} · captureTime ${c.captureTimePopulated ? 'POPULATED' : 'empty'} · ` +
-        `timestamp on ${c.epoch}, offset ${c.offsetMs} ms, sd ${c.sdMs} ms, drift ${c.driftMsPerMin} ms/min → ` +
-        `${c.steadierThanG5 && c.holdsOverAnHour ? 'USABLE as an anchor' : 'NOT usable'}`,
+        `timestamp on ${c.epoch}, offset ${c.offsetMs} ms, sd ${c.sdMs} ms, drift ${c.driftReadable ? c.driftMsPerMin + ' ms/min' : 'not readable under 60 s'} → ` +
+        `${!c.driftReadable ? 'span too short to rule on drift — rerun with --takeMs=120000' : c.steadierThanG5 && c.holdsOverAnHour ? 'USABLE as an anchor' : 'NOT usable'}`,
+    )
+  }
+
+  /**
+   * THE LINE B13 IS ACTUALLY ABOUT: what the platform REPORTS as this track's
+   * input latency, against what its capture-to-arrival delay MEASURES. The
+   * anchor subtracts the first; the second is what it should be subtracting.
+   */
+  console.log('\n── reported latency vs measured delay (the anchor subtracts the first) ──')
+  for (const [label, key] of [['mic audio', 'micAudio'], ['tab audio', 'tabAudio']]) {
+    const src = report.sources[key]
+    const c = report.classification[key]
+    if (!c) continue
+    const reported = typeof src?.track?.latency === 'number' ? src.track.latency * 1000 : null
+    const short = reported === null ? null : Math.round((c.offsetMs - reported) * 10) / 10
+    console.log(
+      `  ${label}: platform reports ${reported === null ? 'nothing' : reported.toFixed(1) + ' ms'} · ` +
+        `measured ${c.offsetMs} ms (sd ${c.sdMs}, batch ${src?.batchMs ? src.batchMs.toFixed(2) : '?'} ms, ` +
+        `ec=${src?.track?.echoCancellation ?? '?'} ch=${src?.track?.channelCount ?? '?'} sr=${src?.track?.sampleRate ?? '?'}) · ` +
+        (short === null ? '' : `the subtraction is ${short > 0 ? 'SHORT by ' + short + ' ms — the sound is placed that much LATE' : 'OVER by ' + Math.abs(short) + ' ms — the sound is placed that much EARLY'}`),
     )
   }
 
