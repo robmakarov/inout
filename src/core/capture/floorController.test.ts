@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FloorController } from './floorController'
-import { FLOOR_FPS, floorLongEdge, type FloorState } from './emergencyFloor'
+import { FLOOR_FPS, floorLongEdge, setFloorResolutionRung, type FloorState } from './emergencyFloor'
 import { WARMUP_MS, SETTLE_MS } from './captureLadder'
 import { currentPace, noteTakeActive } from '../backgroundWork'
 import type { PressureSignals } from '../pressure'
@@ -53,9 +53,14 @@ const max60: FloorState = {
 
 beforeEach(() => {
   noteTakeActive(true)
+  // The rung is flag-gated OFF by default (a 5,047 ms seam under load, measured
+  // on the rig — emergencyFloor.ts says why). These cases are about the ORDER,
+  // so they turn it on; the default is asserted in emergencyFloor.test.ts.
+  setFloorResolutionRung(true)
 })
 afterEach(() => {
   noteTakeActive(false)
+  setFloorResolutionRung(null)
 })
 
 /** Run the controller forward, applying whatever it asks for, and return the

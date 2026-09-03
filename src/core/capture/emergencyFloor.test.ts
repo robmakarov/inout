@@ -6,7 +6,7 @@
  * one that matters most is the one that cannot be written: there is no rung for
  * audio, in any state, in either direction.
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   FLOOR_FPS,
   RESOLUTION_FLOOR_LONG_EDGE,
@@ -14,8 +14,10 @@ import {
   atFullPlan,
   emergencyFloorEnabled,
   floorLongEdge,
+  floorResolutionRungEnabled,
   nextRestore,
   nextSacrifice,
+  setFloorResolutionRung,
   type FloorState,
 } from './emergencyFloor'
 
@@ -28,14 +30,34 @@ const max60: FloorState = {
   screenRequestedLongEdge: 3024,
 }
 
+afterEach(() => {
+  setFloorResolutionRung(null)
+})
+
 describe('the floor is off until Robert says otherwise', () => {
   it('is off by default', () => {
     expect(emergencyFloorEnabled()).toBe(false)
+  })
+
+  it('and the resolution rung is off even inside it — a 5,047 ms seam, measured', () => {
+    expect(floorResolutionRungEnabled()).toBe(false)
+    // With the rung off the order ends at the rate rungs and says so.
+    const spentRates: FloorState = { ...max60, cameraFps: FLOOR_FPS, screenFps: FLOOR_FPS }
+    expect(nextSacrifice(spentRates)).toBeNull()
+  })
+
+  it('but a size already given up is ALWAYS taken back, flag or not', () => {
+    // Capacity knowledge may shape a take UP, never down: a flag flipped
+    // mid-take must not strand a take at three quarters of its picture.
+    const stepped: FloorState = { ...max60, screenLongEdge: 1920 }
+    expect(floorResolutionRungEnabled()).toBe(false)
+    expect(nextRestore(stepped)).toBe('resolution')
   })
 })
 
 describe('the sacrifice order', () => {
   it('spends the camera first, then the screen rate, then resolution', () => {
+    setFloorResolutionRung(true)
     const order: string[] = []
     let s = { ...max60 }
     for (let i = 0; i < 4; i++) {

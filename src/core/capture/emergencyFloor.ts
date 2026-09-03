@@ -84,6 +84,65 @@ export function setEmergencyFloor(on: boolean | null): void {
   }
 }
 
+/**
+ * MAY THE FLOOR SPEND THE SIZE? `?floorres=1`, OFF EVEN WHEN THE FLOOR IS ON,
+ * and this is a MEASUREMENT and not caution.
+ *
+ * The rate rungs cost nothing but rate: the file keeps one geometry and the
+ * encoder keeps its configuration. The resolution rung cannot — a raw encoder
+ * is configured once and a frame size cannot change mid-file, so the size moves
+ * by CLOSING the segment and opening the next (O16), and closing a segment
+ * means draining an encoder that is, by definition, behind.
+ *
+ * MEASURED ON THE M1 RIG, 2026-09-03, 2560x1440@60 with an encoder load:
+ *   · the step down, taken while the machine was critical — a 5,047 ms seam.
+ *     Five seconds of screen that is not in the file.
+ *   · the step back up, taken once the load had lifted — a 30 ms seam, exactly
+ *     O16's own band (30 ms step, 69 ms seam), on the same take.
+ * So the seam is not the mechanism's cost, it is the LOAD's cost, and it lands
+ * on the one take that could least afford it. The rung stays built, tested and
+ * in the order — resolution is still LAST and still what a machine that cannot
+ * hold its plan gives up — but until the drain is fixed it is not something to
+ * turn on by default underneath another default-off flag.
+ *
+ * The same run also failed to show it EARNING that seam: the size step landed
+ * at 19.0 s and the load lifted at 24.0 s, so what recovered the take cannot be
+ * told apart from the spike ending. A rung that costs five seconds needs its
+ * own evidence before it is spent.
+ */
+const RES_FLAG_KEY = 'inout.capture.floorres'
+
+function resFromSearch(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('floorres')
+  return v === '1' ? true : v === '0' ? false : null
+}
+
+function resFromStorage(): boolean | null {
+  try {
+    const v = localStorage.getItem(RES_FLAG_KEY)
+    return v === '1' ? true : v === '0' ? false : null
+  } catch {
+    return null
+  }
+}
+
+let resOverride: boolean | null = null
+
+export function floorResolutionRungEnabled(): boolean {
+  return resFromSearch() ?? resOverride ?? resFromStorage() ?? false
+}
+
+export function setFloorResolutionRung(on: boolean | null): void {
+  resOverride = on
+  try {
+    if (on === null) localStorage.removeItem(RES_FLAG_KEY)
+    else localStorage.setItem(RES_FLAG_KEY, on ? '1' : '0')
+  } catch {
+    /* memory-only */
+  }
+}
+
 /** The dials, in the order they are given up. Audio is not on this list and
  *  there is no code path that could put it there. */
 export type FloorRung = 'camera-fps' | 'screen-fps' | 'resolution'
@@ -150,7 +209,12 @@ export function nextSacrifice(s: FloorState): FloorRung | null {
     s.screenLongEdge !== null &&
     s.screenRequestedLongEdge !== null &&
     s.screenLongEdge < s.screenRequestedLongEdge
-  if (!stepped && s.screenLongEdge !== null && floorLongEdge(s.screenLongEdge) !== null) {
+  if (
+    floorResolutionRungEnabled() &&
+    !stepped &&
+    s.screenLongEdge !== null &&
+    floorLongEdge(s.screenLongEdge) !== null
+  ) {
     return 'resolution'
   }
   return null
@@ -163,6 +227,11 @@ export function nextSacrifice(s: FloorState): FloorRung | null {
  * they were worth.
  */
 export function nextRestore(s: FloorState): FloorRung | null {
+  // NOTE THE ASYMMETRY, AND IT IS DELIBERATE: `floorResolutionRungEnabled()` is
+  // not consulted here. A size that was given up is always taken back, whatever
+  // the flag says now — "capacity knowledge may shape a take UP, never down".
+  // A flag flipped mid-take could otherwise strand a take at three quarters of
+  // the picture the user asked for.
   if (
     s.screenLongEdge !== null &&
     s.screenRequestedLongEdge !== null &&
