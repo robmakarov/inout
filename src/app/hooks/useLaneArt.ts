@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { Recording } from '@core/types'
 import { blobStore } from '@core/store'
 import { planFilmstrip } from '@app/lib/filmstripPlan'
+import type { LaneWave } from '@core/compose/lanewave'
+import type { LaneWaveReply, LaneWaveRequest } from '@core/compose/laneWave.worker'
 
 /**
  * What each timeline lane SHOWS (task F8): the take's own frames on a video
@@ -32,6 +34,59 @@ export interface LaneArt {
   wallMs: number
   /** Frames or columns that actually decoded. */
   decoded: number
+}
+
+/**
+ * B10 — ONE WAVEFORM, BUILT IN A WORKER.
+ *
+ * Returns `{ wave }` when a worker answered (its `wave` may itself be null:
+ * a silent or undecodable channel), and `null` only when there was no worker
+ * to ask. The caller needs that difference: a fallback that cannot tell them
+ * apart decodes every silent channel twice, on the thread this exists to keep
+ * free.
+ *
+ * A worker per call, torn down with the answer. A waveform is built once per
+ * channel per width bucket, so the pool this does not have would spend more
+ * lines than it saves — and a worker that outlives the take is a decoder
+ * holding a file the user has moved on from.
+ */
+async function waveInWorker(
+  blob: Blob,
+  durationSec: number,
+  width: number,
+  height: number,
+  signal: AbortSignal,
+): Promise<{ wave: LaneWave | null } | null> {
+  if (typeof Worker === 'undefined') return null
+  let worker: Worker
+  try {
+    worker = new Worker(new URL('../../core/compose/laneWave.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+  } catch {
+    return null
+  }
+  try {
+    return await new Promise<{ wave: LaneWave | null } | null>((resolve) => {
+      const done = (v: { wave: LaneWave | null } | null): void => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(v)
+      }
+      // An aborted build resolves as "the worker answered with nothing", not as
+      // "there is no worker": re-running it inline is the last thing an
+      // unmounting editor needs.
+      function onAbort(): void {
+        done({ wave: null })
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      worker.onmessage = (ev: MessageEvent<LaneWaveReply>) => done({ wave: ev.data.wave })
+      worker.onerror = () => done(null)
+      const req: LaneWaveRequest = { id: 'wave', blob, durationSec, width, height }
+      worker.postMessage(req)
+    })
+  } finally {
+    worker.terminate()
+  }
 }
 
 /** Width buckets, CSS px — see note 2 above. */
@@ -106,14 +161,33 @@ export function useLaneArt(
             decoded: strip.decoded,
           })
         } else {
-          lanewave ??= (await import('@core/compose/lanewave')).buildLaneWave
-          const wave = await lanewave(
+          // B10 — THE AUDIO DECODER GOES TO A WORKER, THE VIDEO ONE DOES NOT.
+          // G7 named the blocking task: `output() via AudioDataOutputCallback`,
+          // 192.7 ms of blocking in a 269 ms frame, while the filmstrip's video
+          // callback blocks 0 ms because it yields. A waveform built here is a
+          // frame the editor does not get to draw.
+          const offThread = await waveInWorker(
             blob,
             durationSec,
             Math.round(barPx * dpr),
             Math.round(WAVE_HEIGHT_PX * dpr),
-            { signal: abort.signal },
+            abort.signal,
           )
+          // `null` here means NO WORKER (an old browser, a blocked
+          // construction, a test environment) — not "no waveform". A worker
+          // that answered with nothing has already decided, and decoding the
+          // same channel a second time on this thread is the very cost B10 is
+          // about.
+          const wave =
+            offThread === null
+              ? await (lanewave ??= (await import('@core/compose/lanewave')).buildLaneWave)(
+                  blob,
+                  durationSec,
+                  Math.round(barPx * dpr),
+                  Math.round(WAVE_HEIGHT_PX * dpr),
+                  { signal: abort.signal },
+                )
+              : offThread.wave
           if (!alive || abort.signal.aborted) return
           if (!wave) continue
           console.info(

@@ -96,6 +96,7 @@ import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, probeDurationMs, writePendingManifest } from './recovery'
 import { crashFloorEnabled, EARLY_FRAGMENT_S } from './crashFloor'
 import { keepChannel } from './keptOnDisk'
+import { selfManifestKey } from './selfManifest'
 import { releaseEncoderWarmYield, yieldEncoderWarmToTake } from './encoderWarmYield'
 import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 import type { LivenessEvent } from './sourceLiveness'
@@ -851,7 +852,9 @@ class Session implements CaptureSession {
       : useMeasured
         ? 'audio/webm;codecs=opus'
         : pickMimeType(acq.media)
-    const blobKey = `${this.recordingId}_${id}.${containerExt(recordedMime)}`
+    // H7 — the file says which take and which role it is, in its own name, so
+    // a salvage can rebuild the take with no manifest to lose (selfManifest.ts).
+    const blobKey = selfManifestKey(this.recordingId, acq.kind, id, containerExt(recordedMime))
 
     let resolveStopped!: () => void
     const stopped = new Promise<void>((resolve) => {

@@ -9,6 +9,7 @@ import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { ChannelKind, ChannelRecording, MediaKind, Recording } from '../types'
 import { blobStore, recordingsRepo } from '@core/store'
 import { crashFloorEnabled } from './crashFloor'
+import { groupByRecording, selfManifestKey } from './selfManifest'
 
 const PENDING_KEY = 'inout.pending'
 const DISMISSED_KEY = 'inout.dismissed'
@@ -263,9 +264,107 @@ export async function probeDurationMs(blobKey: string): Promise<number> {
   }
 }
 
+/**
+ * H7 — THE TAKE WITH NO MANIFEST AT ALL, rebuilt by asking the files.
+ *
+ * Runs only when both manifests are gone, so the shipped path is untouched: a
+ * take whose manifest survives never reaches this function. Every fact comes
+ * from the file itself — the take and the role from its name (selfManifest.ts),
+ * the media kind, geometry and length from probing the bytes — and a key that
+ * does not match H7's exact shape is left alone, so a file from before H7, a
+ * composite, a chunk or a stranger is never adopted.
+ *
+ * WHAT IT CANNOT KNOW, and does not pretend to: the per-channel start offsets
+ * lived only in the manifest. Every channel is placed at 0 and the caller's
+ * usual normalisation is a no-op — the take is a few tens of milliseconds out
+ * of sync at worst, which is the difference between "a take that needs nudging"
+ * and "an hour of somebody's work that no longer exists".
+ */
+async function salvageBySelfManifest(): Promise<Recording | null> {
+  let keys: string[]
+  try {
+    keys = await blobStore.listKeys()
+  } catch {
+    return null
+  }
+  const takes = groupByRecording(keys)
+  if (takes.size === 0) return null
+
+  // Newest first, and a take the repo already holds is not lost — skip it
+  // rather than resurrect a second copy of something the user can already see.
+  const saved = await recordingsRepo.list().catch(() => [])
+  const known = new Set(saved.map((r) => r.id))
+  for (const [recordingId, parts] of takes) {
+    if (known.has(recordingId) || isRecordingDismissed(recordingId)) continue
+    const channels: ChannelRecording[] = []
+    for (const part of parts) {
+      try {
+        const key = selfManifestKey(recordingId, part.kind, part.channelId, part.ext)
+        const durationMs = await probeDurationMs(key)
+        if (durationMs <= 0) continue
+        const shape = await probeChannelShape(key)
+        if (!shape) continue
+        const rec: ChannelRecording = {
+          id: part.channelId,
+          kind: part.kind,
+          media: shape.media,
+          mimeType: shape.mimeType,
+          blobKey: key,
+          startOffsetMs: 0,
+          durationMs,
+        }
+        if (shape.media === 'video' && shape.width) {
+          rec.width = shape.width
+          rec.height = shape.height
+        }
+        channels.push(rec)
+      } catch {
+        /* one unreadable channel does not lose the others */
+      }
+    }
+    if (channels.length === 0) continue
+    const recording: Recording = {
+      id: recordingId,
+      createdAt: Date.now(),
+      durationMs: Math.max(...channels.map((c) => c.durationMs)),
+      channels,
+    }
+    await recordingsRepo.save(recording)
+    return recording
+  }
+  return null
+}
+
+/** Media kind, container and geometry read off the bytes, not off a manifest. */
+async function probeChannelShape(
+  blobKey: string,
+): Promise<{ media: MediaKind; mimeType: string; width?: number; height?: number } | null> {
+  const blob = await blobStore.read(blobKey)
+  if (!blob.size) return null
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  try {
+    const video = await input.getPrimaryVideoTrack()
+    if (video) {
+      return {
+        media: 'video',
+        mimeType: blob.type || 'video/mp4',
+        width: video.displayWidth,
+        height: video.displayHeight,
+      }
+    }
+    const audio = await input.getPrimaryAudioTrack()
+    if (audio) return { media: 'audio', mimeType: blob.type || 'audio/webm' }
+    return null
+  } finally {
+    input.dispose()
+  }
+}
+
 /** Rebuild a Recording from an interrupted session's surviving blobs. */
 export async function salvagePendingRecording(): Promise<Recording | null> {
   const m = readPendingManifest() ?? (crashFloorEnabled() ? await readDurableManifest() : null)
+  // H7: no manifest of either kind — ask the files themselves.
+  if (!m) return await salvageBySelfManifest()
   if (!m) return null
   // One-shot: a salvage that throws must not brick every subsequent boot. The
   // durable copy is AWAITED for exactly that reason — a fire-and-forget delete
