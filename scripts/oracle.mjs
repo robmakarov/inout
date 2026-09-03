@@ -361,8 +361,19 @@ async function runOracleOnceGated(opts, confirm) {
       `[oracle] RED on one reading (${a.gate.failures.map((f) => f.split(' (')[0]).join('; ')}) ` +
         `under ${loadLine(a.load)} — confirming with a second cell before calling it a regression`,
     )
-    const bLog = join(tmpdir(), `oracle-cdp-${Date.now()}-confirm`)
-    const b = await attemptOracle(opts, bLog)
+    // The confirming cell gets the same instrument retry the first one does.
+    // Without it a single CDP death here demotes a REPRODUCIBLE finding to
+    // INCONCLUSIVE — safe, but it throws away a five-minute cell and the answer
+    // with it.
+    let b = null
+    for (let bAttempt = 1; bAttempt <= 2; bAttempt++) {
+      b = await attemptOracle(opts, join(tmpdir(), `oracle-cdp-${Date.now()}-confirm${bAttempt}`))
+      if (!b.error && b.report && b.gate) break
+      console.error(
+        `[oracle] confirming cell attempt ${bAttempt}/2 INSTRUMENT error: ${b.error ?? 'no report'}`,
+      )
+      if (bAttempt < 2) await sleep(METRIC_RETRY_COOLDOWN_MS)
+    }
     if (b.error || !b.report || !b.gate || oracleMetricsIncomplete(b.gate.metrics)) {
       console.error(
         `[oracle] the confirming cell could not be measured (${b.error ?? 'incomplete metrics'}) — ` +
