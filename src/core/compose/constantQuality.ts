@@ -87,11 +87,16 @@ export const DEFAULT_QP = 20
  * technical one (a blind-shared file must play for a recipient we cannot
  * probe) — that trade is Robert's and worth re-pricing at two-hour takes.
  *
- * NO CEILING. Quantizer mode ignores `bitrate` entirely, so a pathological
- * source (grain, confetti, dither) can in principle cost more than the tier's
- * old cap. Every content measured came in far under it — the busiest lane
- * tested ran 3.17 Mbps at qp20 against 3.55 on the bitrate target — but the
- * guarantee is gone, and `?cq=off` is the way back.
+ * NO CEILING, AND IT IS RULED (Robert 2026-09-02, DECISIONS robert (16), Q1).
+ * Quantizer mode ignores `bitrate` entirely, so a pathological source (grain,
+ * confetti, dither) can cost more than the tier's old cap — measured at 2.6x on
+ * one 30 s motion take. That is accepted: "if file gets to big you are just
+ * going fix it other ways". Every content measured otherwise came in far under
+ * (the busiest lane tested ran 3.17 Mbps at qp20 against 3.55 on the bitrate
+ * target; still text 1.84 of 8), and `?cq=off` is still the way back to the
+ * bitrate target. The 2026-08-30 governor that used to live here is DELETED,
+ * with its cumulative-average defect; the finalize stall it was credited with
+ * fixing was the encode-queue await, which stays.
  */
 const CQ_DEFAULT: number | null = 20
 
@@ -179,12 +184,23 @@ export async function constantQualityCodec(
 }
 
 /**
- * How far the governor may give back quality before it stops. 32 is still a
- * watchable picture; past it the file would be small and worthless, and a
- * source that cannot fit its tier at 32 is telling us the tier is wrong, not
- * that the picture should be destroyed.
+ * THERE IS NO BYTE CEILING HERE, AND THAT IS A RULING, NOT AN OVERSIGHT.
+ *
+ * Robert 2026-09-02 (DECISIONS robert (16)), asked whether the export needed
+ * one at all: "we need or not? if file gets to big you are just going fix it
+ * other ways". Quantizer mode now means what its name says — the QP stays where
+ * the page put it and the size follows the content. Size is never bought by
+ * silently degrading the picture mid-file; it is bought the ways that cost the
+ * user nothing he did not choose: the quality slider he already owns, the codec
+ * lane, single generation, the screen-content work, and the disk guard — the
+ * only honest ceiling, because it measures real storage instead of a typed
+ * constant. Consequence he accepted: motion-heavy exports get bigger and render
+ * slower. NOBODY PUTS A REPLACEMENT CEILING IN THIS FILE without him saying so.
+ *
+ * What is NOT deleted, because it was a different bug with the same symptom:
+ * the dequeue await in `encode()` below. That, not the byte count, is what made
+ * finalize 9,164 ms.
  */
-const MAX_GOVERNED_QP = 32
 
 /**
  * How many frames may sit inside the VideoEncoder before the render is made to
@@ -195,13 +211,8 @@ const ENCODE_QUEUE_DEPTH = 4
 
 class ConstantQualityAvcEncoder extends CustomVideoEncoder {
   private encoder: VideoEncoder | null = null
+  /** Set once from the config and never moved again — see the ruling above. */
   private qp = DEFAULT_QP
-  /** What the page asked for. The governor never goes finer than this. */
-  private targetQp = DEFAULT_QP
-  /** The tier's promise, in bytes per second. null = nothing to bound against. */
-  private bytesPerSecCeiling: number | null = null
-  private bytesOut = 0
-  private firstTimestampUs: number | null = null
 
   static supports(codec: VideoCodec, config: VideoEncoderConfig): boolean {
     return codec === 'avc' && qpOf(config) !== null
@@ -209,15 +220,8 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
 
   init(): void {
     this.qp = qpOf(this.config) ?? DEFAULT_QP
-    this.targetQp = this.qp
-    // THE CEILING, KEPT RATHER THAN DISCARDED. `bitrate` cannot be handed to a
-    // quantizer-mode encoder, but it is still the number the tier promised —
-    // and dropping it is what left this path unbounded. See `spend()`.
-    const ceiling = (this.config as VideoEncoderConfig & { bitrate?: number }).bitrate
-    this.bytesPerSecCeiling = ceiling && ceiling > 0 ? ceiling / 8 : null
     const encoder = new VideoEncoder({
       output: (chunk, meta) => {
-        this.spend(chunk.byteLength, chunk.timestamp)
         this.onPacket(EncodedPacket.fromEncodedChunk(chunk), meta)
       },
       error: (err) => {
@@ -296,47 +300,6 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
         encoder.addEventListener('dequeue', () => resolve(), { once: true })
       })
     }
-  }
-
-  /**
-   * THE CEILING THE QUANTIZER PATH LOST, PUT BACK.
-   *
-   * Quantizer mode ignores `bitrate` entirely — this file said so from the day
-   * it was written ("NO CEILING ... a pathological source can in principle cost
-   * more than the tier's old cap") and treated it as a theoretical risk because
-   * every content measured came in under. It is not theoretical. Measured
-   * 2026-08-30 on one 30 s take at the 1080p step: 36.9 MB at QP 20 against
-   * 14.3 MB on the tier's bitrate target — 2.6x — and because FINALIZE IS
-   * PROPORTIONAL TO OUTPUT SIZE, the same export spent 9,164 ms finalizing
-   * against 70 ms. That is Robert's "all export took fucking long on 95%
-   * finilizing shit", and his "file size is fucking huge", from one cause.
-   *
-   * (It had been invisible because `?cq=off` could not reach the render at all:
-   * the export runs in a worker, which has no localStorage and does not see the
-   * page's URL. Fixed in the same change.)
-   *
-   * So the QP now FLOATS between the target and a bounded floor of quality,
-   * driven by what the file has actually cost so far. Under the ceiling it sits
-   * exactly where it was — a still slide still costs almost nothing, which is
-   * the whole point of quantizer mode and is untouched here. Over the ceiling
-   * it gives back quality one step at a time rather than writing an unbounded
-   * file. It never goes finer than the target, so this can only ever make a
-   * file smaller than it is today, never bigger.
-   */
-  private spend(bytes: number, timestampUs: number): void {
-    this.bytesOut += bytes
-    // The first packet establishes the origin — and `null` rather than 0,
-    // because a take legitimately starts at timestamp 0 and a sentinel that
-    // collides with real data is how an off-by-one becomes a wrong ceiling.
-    if (this.firstTimestampUs === null) this.firstTimestampUs = timestampUs
-    if (this.bytesPerSecCeiling === null) return
-    // Measured against the OUTPUT's own clock, so a render that runs slower or
-    // faster than real time governs identically.
-    const elapsedSec = Math.max(0.5, (timestampUs - this.firstTimestampUs) / 1_000_000)
-    const spentPerSec = this.bytesOut / elapsedSec
-    const over = spentPerSec / this.bytesPerSecCeiling
-    if (over > 1.15 && this.qp < MAX_GOVERNED_QP) this.qp = clampQp(this.qp + 1)
-    else if (over < 0.85 && this.qp > this.targetQp) this.qp = clampQp(this.qp - 1)
   }
 
   async flush(): Promise<void> {

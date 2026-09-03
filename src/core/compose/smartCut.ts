@@ -85,6 +85,27 @@ const JOIN_FADE_MS = 3
 /** Timestamps within this of each other are the same instant (half a frame). */
 const EPS_SEC = 1 / 120
 
+/**
+ * Composite time → output time, for one kept span (B11).
+ *
+ * A KEY PACKET MAY SIT JUST BEFORE THE SPAN START AND STILL *BE* IT. The copy
+ * loop accepts a key packet up to EPS_SEC before the cut — that is what EPS
+ * means, and the head path already emits its covering frame at the span start
+ * — but rebasing that packet literally puts the first packet of the FIRST span
+ * at `−1/3000 s` (one tick of a 3000 timescale), the muxer refuses a negative
+ * timestamp, and the whole trim falls silently to a full render: the user waits
+ * minutes for an export that should copy. One cold 120 s run in five.
+ *
+ * So the snap is here, at the source of the arithmetic, and it is deliberately
+ * NOT `Math.max(0, …)`: a compSec further back than EPS is a real hole in the
+ * composite and must still surface as a negative, loudly, rather than be
+ * quietly stacked on top of the previous span's last frame.
+ */
+export function outputTimeForSpan(compSec: number, spanStartSec: number, outCursorSec: number): number {
+  const atStart = compSec < spanStartSec && compSec >= spanStartSec - EPS_SEC
+  return outCursorSec + (atStart ? 0 : compSec - spanStartSec)
+}
+
 export class SmartCutUnavailable extends Error {
   constructor(reason: string) {
     super(`smart cut: ${reason}`)
@@ -452,8 +473,8 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
         outCursorSec += spanEndSec - spanStartSec
         continue
       }
-      /** Composite time → this export's output time. */
-      const outAt = (compSec: number): number => outCursorSec + (compSec - spanStartSec)
+      /** Composite time → this export's output time (B11's snap included). */
+      const outAt = (compSec: number): number => outputTimeForSpan(compSec, spanStartSec, outCursorSec)
 
       // Where copying may begin: the first key packet at or after the cut.
       const keyAtStart = await packetSink.getKeyPacket(readFromSec, { metadataOnly: true })
