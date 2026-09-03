@@ -155,7 +155,7 @@ const cdp = async (url) => {
       m.error ? reject(new Error(m.error.message)) : resolve(m.result)
     } else if (m.method === 'Runtime.consoleAPICalled') {
       const text = m.params.args.map((a) => a.value ?? a.description ?? '').join(' ')
-      if (text.startsWith('[capture')) captureLog.push(text)
+      if (text.startsWith('[capture') || text.startsWith('[compose')) captureLog.push(text)
     }
   })
   const send = (method, params = {}) =>
@@ -609,7 +609,7 @@ async function runVariant(name, urlSuffix) {
     }
 
     v.shim = { calls: await evaluate(`window.__b13shim ?? 0`), appRequest: await evaluate(`window.__b13lastRequest ?? null`) }
-    v.trackLines = captureLog.filter((l) => /track delivered|tab audio delivered|raw tab audio|LOOPBACK|settings MOVED/.test(l))
+    v.trackLines = captureLog.filter((l) => /track delivered|tab audio delivered|raw tab audio|settings MOVED|audio mix/.test(l))
     v.anchorLines = captureLog.filter((l) => /audio anchor/.test(l))
   } finally {
     try {

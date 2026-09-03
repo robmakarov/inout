@@ -44,11 +44,25 @@
 import { evenDown } from '@core/frame'
 
 /**
- * `?floor=1` — OFF, and the flip is Robert's (TASKS: "ships FLAG-GATED OFF").
- * With it off, nothing in this file is reachable and max is byte-identical to
- * the max that shipped: the sampler in the raw worker is not even started.
+ * ON — Robert flipped it 2026-09-03, and the words are the reason it is not a
+ * mode: "it must be fucking same elastic shit we have for everything else now,
+ * it is just turned off for max to test it".
  *
- *   ?floor=1|0    (this load only)
+ * So this is not an emergency mode bolted onto max. It is THE elastic system —
+ * the same detector, the same sampler, the same ladder rules, the same ledger —
+ * finally reaching the one place that had none, because max opens no composite
+ * and the composite was where all of it lived. The flag remains as the runtime
+ * fallback the frozen rule requires, and as the A/B control any measurement of
+ * it needs.
+ *
+ * WHAT IT COSTS A TAKE THAT NEVER NEEDS IT, measured before the flip (the rig's
+ * `calm` lane, 45 s at 2560x1440@60 with it armed): no rung taken, one screen
+ * segment, 60 fps throughout, and the only lines in the ledger are the ones
+ * every take writes. The instrument itself is a 16 ms ticker in the worker that
+ * is already encoding — the same one the compositor has run since E1.
+ *
+ *   ?floor=0      (this load only — max exactly as it shipped: no sampler at
+ *                  all, nothing steps, frames drop where they fall)
  *   localStorage['inout.capture.floor']   (sticky)
  */
 const FLAG_KEY = 'inout.capture.floor'
@@ -71,7 +85,7 @@ function fromStorage(): boolean | null {
 let override: boolean | null = null
 
 export function emergencyFloorEnabled(): boolean {
-  return fromSearch() ?? override ?? fromStorage() ?? false
+  return fromSearch() ?? override ?? fromStorage() ?? true
 }
 
 export function setEmergencyFloor(on: boolean | null): void {
@@ -85,8 +99,17 @@ export function setEmergencyFloor(on: boolean | null): void {
 }
 
 /**
- * MAY THE FLOOR SPEND THE SIZE? `?floorres=1`, OFF EVEN WHEN THE FLOOR IS ON,
- * and this is a MEASUREMENT and not caution.
+ * MAY THE FLOOR SPEND THE SIZE? `?floorres=1`, OFF EVEN NOW THAT THE FLOOR IS
+ * ON, and there are now two reasons rather than one.
+ *
+ * THE RULING (Robert 2026-09-03, flipping the floor on): "it must be fucking
+ * same elastic shit we have for everything else now". Everywhere else the
+ * elastic system moves the RATE and never the size — captureLadder's rule 1,
+ * from his own 2026-08-29 words: "if something needs to be dropped it must be
+ * fps not resolution", "no screen proportion changes". Same system means the
+ * same dial, so the size rung is not part of what was turned on.
+ *
+ * AND THE MEASUREMENT, which said the same thing first.
  *
  * The rate rungs cost nothing but rate: the file keeps one geometry and the
  * encoder keeps its configuration. The resolution rung cannot — a raw encoder

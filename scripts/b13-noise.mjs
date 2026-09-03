@@ -36,11 +36,12 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 
-const opts = { thresh: 8, files: [], top: 12, program: false }
+const opts = { thresh: 8, files: [], top: 12, program: false, notches: false }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--thresh=')) opts.thresh = Number(a.slice(9))
   else if (a.startsWith('--top=')) opts.top = Number(a.slice(6))
   else if (a === '--program') opts.program = true
+  else if (a === '--notches') opts.notches = true
   else opts.files.push(a.replace(/^~/, process.env.HOME))
 }
 if (opts.files.length === 0) {
@@ -368,6 +369,53 @@ if (opts.program) {
     // comparison of SHAPE, not of how loud the export chose to be.
     const line = rows.map((r) => (r[b] - r[5] - (ref[b] - ref[5])).toFixed(1).padStart(24)).join('')
     console.log(`${BANDS[b][0]}-${BANDS[b][1]} Hz`.padEnd(14) + line)
+  }
+  console.log('')
+}
+
+/**
+ * PAD NOTCHES (`--notches`) — the OTHER shape a noise has, and the one every
+ * detector above is blind to.
+ *
+ * When the audio graph loses time, capture splices in a ~1.3 ms
+ * fade/silence/fade so the sample-counted timeline stays honest
+ * (`ChannelDiagnostics.paddedMs`). That is a DIP, not a spike, and a detector
+ * built around "louder than its neighbours" cannot see one. Measured across
+ * this task's own takes, paddedMs ran 0, 0, 91 and 366 ms on the same rig
+ * depending on what else the machine was doing — 366 ms is roughly 280 splices
+ * in twenty seconds, which is what "a lot of small noises" sounds like.
+ */
+if (opts.notches) {
+  console.log('── pad notches: brief dips to near-silence, the shape a splice leaves ──')
+  for (const f of opts.files) {
+    const { L, rate } = decode(f)
+    const B = Math.max(1, Math.round(0.0005 * rate)) // 0.5 ms blocks
+    const nb = Math.floor(L.length / B)
+    const env = new Float64Array(nb)
+    for (let b = 0; b < nb; b++) {
+      let peak = 0
+      for (let i = b * B; i < (b + 1) * B; i++) peak = Math.max(peak, Math.abs(L[i]))
+      env[b] = peak
+    }
+    // A notch is a run of blocks far below the LOCAL level either side of it,
+    // so ordinary quiet passages (which are quiet on both sides) never count.
+    const notches = []
+    for (let b = 4; b < nb - 4; b++) {
+      const around = Math.max(env[b - 4], env[b - 3], env[b + 3], env[b + 4])
+      if (around < 0.01) continue
+      if (env[b] < around * 0.06) {
+        const last = notches[notches.length - 1]
+        if (last && b - last.endBlock <= 2) { last.endBlock = b; last.blocks++ }
+        else notches.push({ atS: (b * B) / rate, endBlock: b, blocks: 1, depth: 20 * Math.log10(Math.max(env[b], 1e-9) / around) })
+      }
+    }
+    const minutes = L.length / rate / 60
+    console.log(
+      `  ${f.split('/').pop().padEnd(34)} ${String(notches.length).padStart(5)} notches · ` +
+        `${(notches.length / minutes).toFixed(0)}/min · median depth ${
+          notches.length ? notches.map((n) => n.depth).sort((a, b) => a - b)[Math.floor(notches.length / 2)].toFixed(0) : '—'
+        } dB · first: ${notches.slice(0, 8).map((n) => n.atS.toFixed(2) + 's').join(' ')}`,
+    )
   }
   console.log('')
 }

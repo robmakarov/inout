@@ -31,7 +31,7 @@ ORDER SET BY ROBERT 2026-09-03 (robert (23)) — "fix bugs, fix shit not working
 |---|---|---|---|---|
 | ~~A1~~ | tab-audio starvation — **DONE 2026-09-02**, gate 2 read on rec_gpsoujs2sydf (124.8 min, prod): capture path green, Robert confirms the silence was real (DECISIONS robert (18)). Instrument half → G6(g)(h); his audio complaints → B13 | heavy | **CLOSED** | — |
 | ~~E2~~ | governor biased UP — **DONE 2026-09-02**. Picture moves at `critical` only and only for the take's OWN work with the unseen work already shed; up on one confirming sample (~500 ms); a probe no reading can veto at 15 s; a byte-bounded burst absorber before the picture; every shed and recovery in the take (`stopStats.elastic`) and graded (`elastic` dimension). Same load, same machine: dropped 55 → 14, time at half rate 18.0 s → 11.1 s | medium | **CLOSED** | — |
-| M1 | the combine — ONE elastic system for ALL SEVEN, behind ONE DOOR that records every decision (S1 folded in 2026-09-02 on Robert's word) | heavy | **BUILT ON `task/m1`, NOT MERGED** — the door is in and enforced, the floor works on a real max60 take (evidence in the block below); gates green | Robert's flip; a session to land it |
+| ~~M1~~ | the combine — ONE elastic system for ALL SEVEN, behind ONE DOOR — **DONE 2026-09-03**, merged and live. Robert flipped it ON the same day (DECISIONS robert (21)): max now has the same elastic system as everything else, rate only, `?floor=0` reverts. Evidence in the block below until someone deletes it | heavy | **CLOSED** | — |
 | A2 | shadow audio — record the sound twice, splice the gaps | light-medium | READY (Robert "try it") | after A1 gate 2 lands or in parallel |
 | J1 | THE RENDER REMEMBERS — chunked, keyed by the edit restricted to each chunk, concatenated by packet copy; length and edits stop mattering. Absorbs resumable renders and the shipping cursor | heavy | READY, and RULED 2026-09-02 (DECISIONS robert (14)) — no length heuristic is an acceptable answer | — |
 | B10 | size probe off the main thread (editor stalls 35-201 ms) | light | READY | — |
@@ -131,7 +131,7 @@ FILES FOR ROBERT'S EAR, in ~/Downloads/inout-b13: `C-music-SHIPPED-resampler.mp4
 STILL OWED: his ear on C/D — if he cannot tell them apart the switch goes back the other way, and nothing here claims the difference for him · the picture half of the lead, which is X14a's video verdict.
 Oracle v2 PASS, fidelity PASS both gates; oracle v1's export-throughput gate is red on this work (0.83x) and red on unmodified HEAD run cold beside it (0.74x) — the known G6 flake.
 
-### M1 the combine — ONE elastic system, ONE DOOR [heavy · READY TO BUILD, ships FLAG-GATED OFF; flip Robert's]
+### M1 the combine — ONE elastic system, ONE DOOR [heavy · DONE and LIVE 2026-09-03 · flipped ON by Robert the same day]
 S1 (the decision log) WAS FOLDED IN HERE 2026-09-02 on Robert's word — "fold S1 into M1 then" — because M1 cannot unify the elastic systems without the thing S1 was going to build.
 THE DOOR, and it is the structural half of this task: every change to quality, rate, resolution, or which channels run passes through ONE function, and that function IS the recorder — the decision is appended (what changed, trigger, measured values, who decided) as the act of making it, so a path CANNOT degrade anything invisibly, because recording it is how you do it. A written rule was rejected as the mechanism (it decays); a test asserts the door is the only way in and a new fallback that bypasses it fails the build. This is what stops the count drifting again: there were never two elastic systems, there were SEVEN, because there was no door (BACKLOG's M1 evidence line).
 THE SEVEN it must own: the frame-rate ladder (captureLadder.ts) · the encoder budget's pre-take reduction (encoderBudget.ts) · the composite watchdog's whole-mix drop (liveCompositeV2.ts:366) · the background-work broker (backgroundWork.ts) · the export QP governor (dying in Q1) · the capture encoders' BITRATE mode, i.e. Chrome's own rate control (rawVideo.worker.ts:238, compositor.worker.ts:416 — taking this one back is idea 6 per DECISIONS robert (15)) · Chrome's own capture adaptation (acquire.ts:467, 614), which cannot be owned but must be DETECTED and recorded.
@@ -210,7 +210,10 @@ RUNNING THE RIG: `node scripts/exp.mjs floor '{"takeMs":45000}' --headed --query
 — the query is NOT optional. `createSyntheticChannels` re-applies `?screenfps=` on every take, so a
 rig-set 60 is silently undone and the lane records a "max60" take at 30 fps under no strain at all.
 Lanes: calm · floor · off · composite-drop. `?floorres=` is what turns the size rung on inside it.
-STILL OWED: Robert's flip (both flags) · entry (a), which is B13's · two instrument findings this work
+THE FLIP HAPPENED, 2026-09-03 (DECISIONS robert (21)): `?floor=` is ON — "it must be fucking same
+elastic shit we have for everything else now, it is just turned off for max to test it" — and the same
+sentence keeps `?floorres=` OFF, because everywhere else the system moves the rate and never the size.
+STILL OWED: entry (a), which is B13's · two instrument findings this work
 turned up, filed in BACKLOG for G6 — the card cannot see a hole between two segments of one kind (it
 graded a take with a 5,047 ms screen gap "all full length"), and after M1 the `rate` dimension reds
 the very takes the floor rescues while `elastic` and `decisions` pass them.

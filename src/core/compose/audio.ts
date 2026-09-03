@@ -192,8 +192,32 @@ export function setBandLimitedResampling(on: boolean | null): void {
  * for a filter to improve and everything for it to risk. That also keeps every
  * take that never resamples byte-identical across the switch — pinned by test.
  */
+const announced = new Set<string>()
+
 export function interpolatorFor(inRate: number, outRate: number): AudioInterpolator {
-  if (inRate === outRate || !bandLimitedResampling()) return sampleAt
+  const equal = inRate === outRate
+  const on = bandLimitedResampling()
+  /**
+   * SAY WHICH PATH THE AUDIO TOOK, once per rate pair per export. Without this
+   * line B13(3) spent a night arguing about an interpolator without knowing
+   * whether it ran: every measured channel is stored as OPUS, opus always
+   * decodes at 48 kHz, and the mix bus is 48 kHz — so for the shipped capture
+   * path the rates are equal and neither interpolator does anything at all.
+   * A resampling decision nobody can read is a decision nobody can check.
+   */
+  const key = `${inRate}->${outRate}:${equal ? 'none' : on ? 'sinc' : 'hermite'}`
+  if (!announced.has(key)) {
+    announced.add(key)
+    console.info(
+      `[compose] audio mix ${inRate} Hz → ${outRate} Hz: ` +
+        (equal
+          ? 'RATES EQUAL, no resampling (the sample is taken as it is)'
+          : on
+            ? 'band-limited (32-tap windowed sinc)'
+            : 'the old 4-point Hermite (?resamp is off)'),
+    )
+  }
+  if (equal || !on) return sampleAt
   return makeSincInterpolator(inRate, outRate)
 }
 

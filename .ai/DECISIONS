@@ -928,3 +928,23 @@ synthetic, so it establishes the CONTENT mechanism and does not by itself rule o
 its byte count — bytes cannot distinguish the two and frames can. No product change follows from this;
 the size lane's lever is content-side (X17's census, SIZE-CODEC), not a bitrate the encoder is declining
 to spend.
+
+2026-09-03 robert (21) — MAX GETS THE SAME ELASTIC SYSTEM, AND IT IS NOT A MODE. Asked whether M1's
+emergency floor should become the default for max, and whether it may spend resolution: "it must be
+fucking same elastic shit we have for everything else now, it is just turned off for max to test it".
+So the framing was wrong and the ruling corrects it: there is no "emergency floor for max" as a
+separate thing to opt into. There is ONE elastic system, and max was simply the mode it never reached —
+max opens no composite, and the detector, the sampler, the ladder and the background brake all lived
+inside the compositor, so a max take had no elasticity of any kind and dropped frames wherever they
+fell. That is the "severe lags, both tab and camera, slideshow, sound is fine" take. `?floor=` is
+therefore ON by default from today, and the flag survives only as the runtime fallback the frozen rule
+requires and as the A/B control any measurement needs.
+IT ALSO SETTLES THE SIZE, without being asked twice: "the same as everything else" means the rate and
+never the size (captureLadder rule 1, from his own 2026-08-29 "if something needs to be dropped it must
+be fps not resolution, no screen proportion changes"). So `?floorres=` stays OFF — which is where the
+measurement had already put it: the size step's seam is 5,047 ms taken under load against 30 ms taken
+idle, because moving the size means closing the segment and draining an encoder that is behind.
+WHAT IS ON, MEASURED BEFORE THE FLIP (rig `exp floor`, 2560x1440@60 + camera, encoder spike): the
+unseen work sheds first, then camera 60→30 at +841 ms, then screen 60→30, and everything returns in
+reverse — screen back at 60 fps 895 ms after the load lifted, camera 3,975 ms. One segment, zero seams,
+audio silent tail 0, every event through M1's door. Armed on a calm take it takes no rung at all.
