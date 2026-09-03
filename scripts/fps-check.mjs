@@ -53,6 +53,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const DEBUG_PORT = 9351
 const PROD_URL = 'https://inout-kappa.vercel.app/'
 
+/** The tab `--real-tab` captures: a title to match on, and content that MOVES
+ *  every frame so the source actually has 60 fps to give. */
+const TAB_TITLE = 'inout-capture-target'
+const MOVING_TAB_URL =
+  'data:text/html,' +
+  encodeURIComponent(
+    `<title>${TAB_TITLE}</title><style>html,body{margin:0;height:100%;background:#111;overflow:hidden}` +
+      `#b{position:absolute;width:18vw;height:18vw;border-radius:50%;background:#4af}</style>` +
+      `<div id=b></div><script>const b=document.getElementById('b');let n=0;` +
+      `function f(t){n++;b.style.transform='translate('+(50+45*Math.sin(t/300))+'vw,'+(40+35*Math.cos(t/370))+'vh)';` +
+      `b.style.background='hsl('+(n*3%360)+',80%,60%)';requestAnimationFrame(f)}requestAnimationFrame(f)<\/script>`,
+  )
+
 const CHROME = {
   darwin: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
   linux: ['google-chrome', 'google-chrome-stable'],
@@ -84,7 +97,7 @@ function parseArgs(argv) {
   // has no GPU here, the raw channel's WebCodecs path times out and falls back
   // to MediaRecorder — a different file answering a different question. Headed
   // is also what makes rAF run at all, which this test depends on absolutely.
-  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '', armAfterMs: 0, profile: null, camera: false }
+  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '', armAfterMs: 0, profile: null, camera: false, real: false, realTab: false }
   for (const a of argv) {
     if (a === '--headed') o.headed = true
     else if (a === '--headless') o.headed = false
@@ -110,6 +123,32 @@ function parseArgs(argv) {
     // in the one way that matters here: it is the case where the live composite
     // is opened, so it is the only lane that can show whether max opens one.
     else if (a === '--camera') o.camera = true
+    // THE REAL SCREEN, NOT A CANVAS THIS RIG PAINTS ITSELF.
+    //
+    // `?synthetic=1` hands the product a canvas the harness repaints on every
+    // rAF tick. At 3024x1964 that is ~5.9 Mpx of 2D drawing per frame, ~713
+    // Mpx/s at 120 Hz, on the same GPU as the encoder under test — so the rig
+    // competes with the thing it is measuring, and the arrival rate it reports
+    // is partly its own. Measured 2026-09-03: 56.8 fps arrived at a 1920x1080
+    // synthetic screen and 43.3 at 3024x1964 with the ENCODER DROPPING ZERO,
+    // i.e. the loss scales with the canvas the harness paints and not with
+    // anything the product does.
+    //
+    // A real getDisplayMedia costs none of that: the compositor already has the
+    // frame. This lane is therefore the only one that can answer "does max hold
+    // 60 on this machine". It needs Chrome's automation source-picker flags and
+    // a TRUSTED click (getDisplayMedia requires user activation, and a
+    // JS .click() does not carry it) — see armRealCapture below.
+    else if (a === '--real') o.real = true
+    // A REAL TAB, WHICH NEEDS NO macOS SCREEN-RECORDING GRANT. Measured
+    // 2026-09-03: `--real` (whole screen) either hangs on the macOS system
+    // picker for the full 30 s, or — with ScreenCaptureKit disabled so Chrome's
+    // own picker comes back and the auto-select switch can answer it — is
+    // refused by the OS in 641 ms ("Permission denied by system"). Tab capture
+    // is a different TCC surface and needs none of it, it is driven by a switch
+    // Chrome still honours, AND it is the case Robert actually reports (a game
+    // tab). Same product path: real getDisplayMedia, no canvas this rig paints.
+    else if (a === '--real-tab') { o.real = true; o.realTab = true }
     else if (a.startsWith('--out=')) o.out = a.slice(6)
     else if (a.startsWith('--bin=')) o.bin = a.slice(6)
     else if (a.startsWith('--lane=')) o.lanes = [Number(a.slice(7))]
@@ -399,7 +438,7 @@ async function runLane(sourceFps) {
     // 16:9 either way, but a sticky flag from another session's testing would
     // otherwise change which lines appear and read as noise.
     url:
-      `${opts.url}?synthetic=1&sourcefps=1&screenfps=${sourceFps}` +
+      `${opts.url}?${opts.real ? '' : 'synthetic=1&'}sourcefps=1&screenfps=${sourceFps}` +
       // `sourceframe=0` pins F13 off so this rig measures ONE thing — but a
       // caller who names it in --query means it, and URLSearchParams.get()
       // returns the FIRST occurrence, so appending could never have overridden
@@ -431,7 +470,39 @@ async function runLane(sourceFps) {
       '--mute-audio',
       '--window-size=1280,900',
     ]
+    if (opts.real) {
+      // Chrome's own automation hooks for the picker. Without them
+      // getDisplayMedia opens a dialog nothing can answer and the take never
+      // arms. The source name is Chrome's label for the whole display; the
+      // second flag covers the builds that spell it differently.
+      // ONE value only — a repeated switch is last-wins in Chrome, so passing
+      // two spellings silently uses the second and neither is diagnosable.
+      if (opts.realTab) {
+        args.push(`--auto-select-tab-capture-source-by-title=${TAB_TITLE}`)
+      } else {
+        args.push(`--auto-select-desktop-capture-source=${process.env.INOUT_CAPTURE_SOURCE ?? 'Entire screen'}`)
+      }
+      args.push('--auto-accept-this-tab-capture')
+      // AND THE REASON THE SWITCH ABOVE IS NOT ENOUGH ON THIS MACHINE. Recent
+      // Chrome on recent macOS hands screen capture to the SYSTEM picker
+      // (ScreenCaptureKit), which is a native window no Chrome switch can
+      // answer — measured 2026-09-03: getDisplayMedia hung the full 30 s and
+      // the forensics line read "focus left and has not returned", which is the
+      // same signature as the wedge (docs/SCREEN_WEDGE.md) and was not one.
+      // Turning those features off puts Chrome's own in-content picker back,
+      // and that one the switch above can answer.
+      if (!opts.realTab) args.push(
+        '--disable-features=' +
+          (process.env.INOUT_CAPTURE_DISABLE ??
+            'ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma,ThumbnailCapturerMac'),
+      )
+    }
     if (!opts.headed) args.unshift('--headless=new')
+    // The tab being captured is opened FIRST so the app's tab is the one in
+    // front and the one CDP drives. Its content is deliberately busy — a still
+    // page delivers almost nothing through captureStream and would read as the
+    // product losing frames.
+    if (opts.realTab) args.push(MOVING_TAB_URL)
     args.push(lane.url)
     browser = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
 
@@ -496,6 +567,13 @@ async function runLane(sourceFps) {
     }
 
     await send('Runtime.enable')
+    // THE APP'S TAB MUST BE THE ONE IN FRONT. `--real-tab` opens a second tab
+    // for the product to capture, and a BACKGROUND tab does not run rAF at all
+    // — measured: the rig's own rAF precondition never resolved and the lane
+    // died on a 30 s evaluate timeout with one line of capture log. Chrome
+    // fronts whichever tab it feels like; this says which.
+    await send('Page.enable').catch(() => undefined)
+    await send('Page.bringToFront').catch(() => undefined)
     await sleep(2500)
     lane.gates.boots = !!(await evaluate(
       `!!document.querySelector('button[aria-label="Start recording"]')`,
@@ -508,7 +586,14 @@ async function runLane(sourceFps) {
     lane.chips = await evalJson(
       `(async () => {
         const CAMERA = ${opts.camera}
-        const want = { Screen: true, Camera: CAMERA, Mic: true, 'Tab Audio': false }
+        // NO MIC ON A REAL LANE. The synthetic mic is instant; the real one is
+        // whatever hardware is paired, and on this machine that is AirPods over
+        // Bluetooth - measured: mic timeout +122099ms, device did not respond in
+        // time, which ate the take whole. This rig measures a RATE; the mic has
+        // nothing to do with it. (No backticks in this comment: it lives INSIDE
+        // a template literal and one would end the string.)
+        const MIC = ${!opts.real}
+        const want = { Screen: true, Camera: CAMERA, Mic: MIC, 'Tab Audio': false }
         const read = () => {
           const out = {}
           for (const b of document.querySelectorAll('.chips button')) {
@@ -561,7 +646,32 @@ async function runLane(sourceFps) {
       `(() => { try { return localStorage.getItem('inout.encoderBudget.v1') ?? 'null' } catch { return 'null' } })()`,
       null,
     )
-    await evaluate(`document.querySelector('button[aria-label="Start recording"]').click()`)
+    // THE RECORD PRESS. A real getDisplayMedia needs TRANSIENT USER ACTIVATION
+    // and a scripted .click() does not carry it, so the real lane presses the
+    // button through CDP Input, which Chrome treats as a genuine user gesture.
+    // The synthetic lane keeps the scripted click it has always used.
+    if (opts.real) {
+      const box = await evalJson(
+        `(() => {
+          const b = document.querySelector('button[aria-label="Start recording"]')
+          if (!b) return JSON.stringify(null)
+          const r = b.getBoundingClientRect()
+          return JSON.stringify({ x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) })
+        })()`,
+        null,
+      )
+      if (!box) throw new Error('no record button to press')
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await send('Input.dispatchMouseEvent', {
+          type, x: box.x, y: box.y, button: 'left', clickCount: 1, buttons: type === 'mousePressed' ? 1 : 0,
+        })
+      }
+      // The picker is answered by Chrome's own flag, but the round trip is not
+      // instant and the take arms behind it.
+      await sleep(2500)
+    } else {
+      await evaluate(`document.querySelector('button[aria-label="Start recording"]').click()`)
+    }
     await sleep(opts.takeMs)
     lane.gates.recorded = !!(await evaluate(
       `(() => { const b=document.querySelector('button[aria-label="Stop recording"]'); if(!b) return false; b.click(); return true })()`,
