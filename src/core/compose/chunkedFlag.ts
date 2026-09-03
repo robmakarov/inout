@@ -42,8 +42,12 @@ export function chunkedRenderEnabled(): boolean {
   return fromSearch() ?? fromStorage() ?? false
 }
 
-export function setChunkedRenderEnabled(on: boolean): void {
+export function setChunkedRenderEnabled(on: boolean | null): void {
   try {
+    if (on === null) {
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
     localStorage.setItem(STORAGE_KEY, on ? '1' : '0')
   } catch {
     /* storage unavailable — the URL parameter still works */

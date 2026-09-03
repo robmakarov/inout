@@ -12,6 +12,7 @@ import {
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
+import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
 /**
@@ -129,6 +130,15 @@ export function TestPanel() {
           redraw()
         }}
       />
+      <Toggle
+        label="The render remembers"
+        hint="On. The export is made five seconds at a time and kept, so an edit only re-does the seconds it changed and a closed tab picks up where it stopped. Off re-renders the whole take every time."
+        on={chunkedRenderEnabled()}
+        set={(v) => {
+          setChunkedRenderEnabled(v)
+          redraw()
+        }}
+      />
       <Choice
         label="Single generation"
         hint="Whether the composite is recorded when a raw channel already holds the picture"
@@ -153,6 +163,7 @@ export function TestPanel() {
           setEncoderBudget(null)
           setResolutionStep(null)
           setSingleGenRung(null)
+          setChunkedRenderEnabled(null)
           redraw()
         }}
       >
