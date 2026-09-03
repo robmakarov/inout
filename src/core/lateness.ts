@@ -56,16 +56,21 @@ export const STALL_FAIL_MS = 30
  * `Performance.getMetrics` (renderer main-thread task time), idle page at
  * 0.69 ms/s:
  *
- *   a bare `setInterval(16)` DOING NOTHING          +3.15 ms/s
- *   a bare worker beat at 16 ms, empty handler      +3.43 ms/s
- *   this sampler at 16 ms                           +5.54 ms/s
- *   this sampler at 128 ms                          +1.37 ms/s
- *   this sampler at 256 ms                          +1.06 ms/s
- *   this sampler at 16 ms WITH attribution          +5.48 ms/s (i.e. free)
+ *   AT 250 ms (3 x 60 s windows, idle page at 0.18 ms/s)
+ *     a bare `setInterval(250)` DOING NOTHING        +0.549 ms/s
+ *     a bare worker beat, empty handler              +0.682 ms/s
+ *     THIS SAMPLER                                   +0.696 ms/s
+ *     this sampler with attribution on               +0.833 ms/s
+ *   AT 16 ms (same method)
+ *     a bare `setInterval(16)` DOING NOTHING         +3.15 ms/s
+ *     a bare worker beat, empty handler              +3.43 ms/s
+ *     THIS SAMPLER                                   +4.75 ms/s
  *
- * The first two lines are the finding: at 62 wake-ups a second the platform
- * charges ~3.2 ms/s before a single line of this file runs. So the period is a
- * budget decision, and the budget is different on the two surfaces:
+ * The controls are the finding: at 250 ms this sampler costs 0.014 ms/s more
+ * than a worker beat that does nothing with its beat, and at 62 wake-ups a
+ * second the platform charges 3.2 ms/s before a line of this file runs. There
+ * is nothing left to optimise in the handler — the price IS the wake-up — so
+ * the period is a budget decision, and the budget differs by surface:
  *
  * CAPTURE gets 250 ms, because G7's gate is "< 1 ms per second of capture" and
  * a take runs for minutes or hours — at 16 ms an hour-long take would spend 20
