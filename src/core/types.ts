@@ -79,6 +79,23 @@ export interface ChannelDiagnostics {
    * Written for every measured audio channel, mic included. Audio only.
    */
   audioTrack?: DeliveredAudioSettings
+  /**
+   * G6(h) — WHICH TAP CARRIED THE PCM, IN THE FILE.
+   *
+   * Two taps can record a measured audio channel and they do not lose the same
+   * things: the worklet tap drops about ten per cent of a take's audio time on
+   * a machine whose cores are saturated (measured, audioTap.ts), the track tap
+   * drops none. Which one ran is decided at arm from platform capability and a
+   * flag, so it varies between two takes on the same build — and until now the
+   * take could not say which it got.
+   *
+   * That is not a nicety. A1's gate 2 asked whether the capture path had held
+   * across a 124.8-minute take, and could not verify its own premise from the
+   * artifact: the answer lived in a console line on a machine since closed.
+   * Written for every measured audio channel, so "the worklet ran here" is a
+   * fact about the recording rather than a recollection about the session.
+   */
+  audioTap?: 'track' | 'worklet'
 }
 
 /**
@@ -477,6 +494,105 @@ export interface TakeStopStats {
   decisions?: DoorDecision[]
   /** Door lines dropped off the front of the ring (bounded at 400). */
   decisionsDropped?: number
+  /**
+   * G7 — HOW LATE THE MAIN THREAD RAN WHILE THIS TAKE RECORDED.
+   *
+   * The one number every "no stall" claim is read against (Phase-1's is "no
+   * editor stall > 30 ms"). Absent on takes made before G7 and on any take that
+   * ran with `?lateness=0`, and the report card says `unmeasured` for both
+   * rather than passing them.
+   */
+  lateness?: LatenessSummary
+}
+
+/**
+ * G7 — SCHEDULED-VS-ACTUAL ON THE MAIN THREAD, SUMMARISED.
+ *
+ * O(1) in the length of the take: a fixed histogram, the exact worst sample and
+ * the worst one-second windows. An hour-long take and a 10 s one persist the
+ * same handful of numbers. Every duration is ms; every `atMs` is measured from
+ * the sampler's own start (the record press for a take, the editor's first
+ * paint for the editor card), so it is directly comparable to `startOffsetMs`
+ * and to the elastic ledger's stamps.
+ */
+export interface LatenessSummary {
+  /**
+   * WHERE THE CLOCK LIVED, and it is the whole design (see core/lateness.ts).
+   * `worker-beat`: a worker posted the schedule and the main thread stamped the
+   * arrival — the only source that survives a hidden tab, which is what a take
+   * runs in. `timer`: a main-thread setTimeout chain, used only when a worker
+   * could not be built; on a hidden document its readings are Chrome's ~1 Hz
+   * clamp and NOT the machine, which is what `clamped` says.
+   */
+  source: 'worker-beat' | 'timer'
+  /** The schedule's period, ms. A stall is measured to within one of these:
+   *  quote it beside every number below. */
+  periodMs: number
+  /** Wall ms from the first sample to the last. */
+  spanMs: number
+  samples: number
+  /** Beats the schedule owed that never arrived (page frozen, worker starved).
+   *  A number here means the numbers below are a floor, not a reading. */
+  missed: number
+  /** Exact worst single sample, and where it landed. */
+  maxMs: number
+  maxAtMs: number
+  /** Bucket-interpolated, from the histogram below — not exact order
+   *  statistics, and never quoted as such. */
+  p50Ms: number
+  p95Ms: number
+  /** Samples later than one frame (`frameMs`), and what share that is. The
+   *  strict "> 1 frame is a defect" reading, kept whatever the band does. */
+  overFrame: number
+  frameMs: number
+  /** Counts per `LATENESS_BUCKETS_MS` edge, last bucket unbounded. */
+  histogram: number[]
+  /** The worst one-second windows, worst first, at most three. */
+  worstWindows: LatenessWindow[]
+  /** Who was on the thread — long-animation-frame attribution when the browser
+   *  has it, longtask when it does not, EMPTY on a hidden document (neither API
+   *  reports there; E1 measured 0 entries in 74 s). Worst first, at most five. */
+  owners: LatenessOwner[]
+  /** Share of the span the document was hidden, 0-1. At 1 the tab was in the
+   *  background the whole time, which is what an ordinary take looks like. */
+  hiddenRatio: number
+  /** True when this reading was taken by a main-thread timer on a hidden
+   *  document, i.e. it is the browser's throttle and must not be quoted as
+   *  machine lateness. */
+  clamped?: boolean
+  /**
+   * The sampler's HANDLER BODY, ms per second, timed on one beat in 64.
+   *
+   * NOT THE COST OF SAMPLING, and the difference is measured: 0.783 ms/s here
+   * against 7.4 ms/s of renderer task time for the same run (CDP
+   * `Performance.getMetrics`). What it misses is the wake-up — delivering a
+   * message to the main thread is a TASK, and the task is most of the price.
+   * Kept because it is the only cost figure a take can carry by itself; the
+   * number that answers "what does this cost" lives in docs/FLAGS.md and is
+   * measured from outside.
+   */
+  selfCostMsPerSec: number
+}
+
+export interface LatenessWindow {
+  /** Window start, ms from the sampler's start. */
+  startMs: number
+  /** Worst sample inside it, and the sum of every sample's lateness — a single
+   *  spike and a second of continuous stutter are not the same defect. */
+  maxMs: number
+  lateMs: number
+  samples: number
+}
+
+export interface LatenessOwner {
+  /** ms from the sampler's start. */
+  atMs: number
+  durationMs: number
+  /** How long it blocked, when the browser reports it (long-animation-frame). */
+  blockingMs?: number
+  /** What the browser named: a script URL + function, an iframe container, or
+   *  the entry type alone when it named nothing. */
+  name: string
 }
 
 export interface ChannelEdit {

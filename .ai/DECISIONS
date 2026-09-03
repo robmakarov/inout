@@ -900,3 +900,99 @@ THE LESSON FOR THE NEXT AGENT WHO WANTS TO BE CLEVER: J2 was competent codec wor
 derivation is correct, the hidden-picture trick is real — and it was still wrong, because it paid for
 speed with the shipped file, with player compatibility, and with edits the user already has. Before
 proposing an engine, name what it takes away. If the answer is anything, it is not a proposal.
+
+session 2026-09-03 — G6(f) THE SCREEN ENCODER IS NOT STARVED: A REQUESTED BITRATE IS A CEILING, NOT A
+FLOOR. The question, from rec_78ogcw052vdn: the 720p camera PiP wrote MORE bytes (900 MB at 2.49 Mbps)
+than the 3024x1964 screen (814 MB at 2.25 Mbps of 8 requested) — is the screen encoder starved, or does
+still content legitimately compress to 28 % of its request? Measured with the o11 bits audit, one
+machine, one 8 Mbps request, two contents (`scripts/gate.sh node scripts/exp.mjs o11 '{"takeMs":10000}'`
+— note the TASKS line said `npm run exp -- bits` and there IS no `bits` experiment; the id is `o11`).
+CAPTURE encoder (MediaRecorder, the raw channel's own path), 8 Mbps requested: screen-like still content
+(an editor page that scrolls one line every 2.5 s) achieved 2.53 Mbps = 31.6 % of the request; the
+motion source (a full-frame gradient that changes everywhere every frame) achieved 4.43 Mbps = 55.4 %.
+The field's 28 % sits inside the still band. RENDER encoder, same 8 Mbps request: motion held
+2.400-2.409 Mbps — 30.0-30.1 % — across five independent GOP renders, screen ran 1.25-2.63 Mbps
+(15.6-32.8 %) as the cadence changed.
+THREE THINGS SETTLE IT. (1) NEITHER content reaches its request. The most-changing picture this rig can
+paint stops at 55 %, so "achieved below requested" is not a starvation signal at all — `videoBitsPerSecond`
+is a target the encoder is free to undershoot, and it undershoots by content. (2) A starved encoder does
+not hold a rate constant to 0.1 % across five separate renders; the motion lane did. (3) PSNR against the
+2 s baseline read 66.1-93.0 dB, far above the ~45 dB at which two files are the same picture — no quality
+was given up to reach those bytes. And the camera outwriting the screen is the same fact from the other
+side: bytes track CHANGE, not pixel count, so a moving 720p face costs more than a still 3024x1964 page.
+The 48-minute field take held 2.25 Mbps to the end, which is itself against starvation — a starved
+encoder degrades as it goes.
+WHAT THIS DOES NOT PROVE, stated so nobody over-reads it: the rig paints 1920x1080 and its camera is
+synthetic, so it establishes the CONTENT mechanism and does not by itself rule out something specific to
+3024x1964. Anyone who still suspects starvation there should read the FRAME accounting of that take, not
+its byte count — bytes cannot distinguish the two and frames can. No product change follows from this;
+the size lane's lever is content-side (X17's census, SIZE-CODEC), not a bitrate the encoder is declining
+to spend.
+
+2026-09-03 robert (21) — MAX GETS THE SAME ELASTIC SYSTEM, AND IT IS NOT A MODE. Asked whether M1's
+emergency floor should become the default for max, and whether it may spend resolution: "it must be
+fucking same elastic shit we have for everything else now, it is just turned off for max to test it".
+So the framing was wrong and the ruling corrects it: there is no "emergency floor for max" as a
+separate thing to opt into. There is ONE elastic system, and max was simply the mode it never reached —
+max opens no composite, and the detector, the sampler, the ladder and the background brake all lived
+inside the compositor, so a max take had no elasticity of any kind and dropped frames wherever they
+fell. That is the "severe lags, both tab and camera, slideshow, sound is fine" take. `?floor=` is
+therefore ON by default from today, and the flag survives only as the runtime fallback the frozen rule
+requires and as the A/B control any measurement needs.
+IT ALSO SETTLES THE SIZE, without being asked twice: "the same as everything else" means the rate and
+never the size (captureLadder rule 1, from his own 2026-08-29 "if something needs to be dropped it must
+be fps not resolution, no screen proportion changes"). So `?floorres=` stays OFF — which is where the
+measurement had already put it: the size step's seam is 5,047 ms taken under load against 30 ms taken
+idle, because moving the size means closing the segment and draining an encoder that is behind.
+WHAT IS ON, MEASURED BEFORE THE FLIP (rig `exp floor`, 2560x1440@60 + camera, encoder spike): the
+unseen work sheds first, then camera 60→30 at +841 ms, then screen 60→30, and everything returns in
+reverse — screen back at 60 fps 895 ms after the load lifted, camera 3,975 ms. One segment, zero seams,
+audio silent tail 0, every event through M1's door. Armed on a calm take it takes no rung at all.
+
+2026-09-03 robert (22) — (21) IS SUPERSEDED, AND THE MISREADING IS THE LESSON. Two corrections in his
+own words, both against an agent (me) that had already shipped on the first one:
+  "MAX ELASTIC OFF UNTIL I SAY SO"
+  "no rule for resolution first fps, only after that is resolution"
+WHAT (21) GOT WRONG. He had said "it must be fucking same elastic shit we have for everything else now,
+it is just turned off for max to test it". That is a statement about WHAT THE THING IS — one elastic
+system, not a mode of its own — and about WHERE IT STANDS: off, under test. It was read as permission
+to move the default, and `?floor=` shipped ON for about an hour before he caught it. A default is
+behaviour a user can see; it moves on a yes said ABOUT THE DEFAULT and on nothing else, and an
+ambiguous sentence is a question to ask, not a mandate to find. Reverted the same hour.
+AND THE ORDER OF SACRIFICE IS NOT "NEVER THE SIZE". (21) also concluded, from his 2026-08-29 "if
+something needs to be dropped it must be fps not resolution", that the size may never move. He says
+that is wrong: the rule is an ORDER — the rate goes FIRST, and after the rate is spent, resolution is
+next. So M1's `?floorres=` rung is legitimate in principle and stays off for the MEASURED reason alone
+(a 5,047 ms seam taken under load against 30 ms taken idle: moving the size means closing the segment
+and draining an encoder that is behind). Fix the seam and the rung is simply the next thing to give up.
+WHAT IS STILL TRUE FROM (21): the elastic system and max's floor are one system, not two — same
+detector, same sampler, same `ladderDecision`, same ledger — and max is the one mode it does not reach
+today, because it opens no composite and the composite is where all of it lives.
+
+session 2026-09-03 — G6(g)+(h) CLOSE THE PACK: A GATE THAT GRADES EFFORT CONVICTS THE INNOCENT. (g) The
+report card's `rescue` dimension was unpassable and the mechanism is the lesson. A revive fires after
+seconds of pure digital zeros on a track that is live and unmuted; from inside the tap, a paused tab and
+a dead tap are the same picture. The dimension graded ATTEMPTS, so a quiet source produced attempts,
+attempts produced red, and every honest long take was convicted — rec_gpsoujs2sydf, 63 attempts across
+15 silent runs, RED, when Robert confirmed every run was a quiet tab. It made A1's gate 2 unreadable for
+a day. THE ONE INSTANT THE TWO DIFFER is just after a rebuild: a tap that was dead while the source
+played sees signal immediately on the fresh clone, a quiet source keeps delivering zeros. So capture
+records `revive-recovered` when sound returns within a second of a rebuild, and the card convicts on
+recovered LOSS. A tap that stays dead is not lost here — `audio-continuity` owns it through
+`silentTailMs`, which is the same fault measured as what it cost. Gates met: the 15-run quiet-tab take
+grades GREEN and says "no audio was lost"; a synthetic dead tap (same late revive, sound back 400 ms
+later) still grades RED and names the channel; the 50-minute take that really lost 27.5 minutes stays
+RED, and its headline now leads with the 27.5 minutes lost instead of with "6 revive bursts".
+(h) `ChannelDiagnostics.audioTap` records which tap carried the PCM. The two lose different things — the
+worklet tap drops ~10 % of a take's audio time on saturated cores, the track tap none — and the choice is
+made at arm from capability and a flag, so it varies between two takes on ONE build. A1's gate 2 could
+not verify its own premise because the answer was a console line on a machine since closed. Gate met off
+the ARTIFACT, not the console (`scripts/g6h-tapcheck.mjs` reads the persisted recording out of
+IndexedDB): default build reports tap=track on both audio channels, ch=2, sr=48000; under
+`?audiotap=worklet` both report tap=worklet. The field tracks the choice rather than being a constant.
+THE PACK'S ONE SENTENCE, across all eight parts: every gate in this repo was written to catch a product
+defect, and four of them were catching the MACHINE and two were catching our own effort. A gate that
+cannot tell its own noise from a finding is worse than no gate, because a session believes it and lands
+a fix for a bug that was never there. What is left unnamed and is written down as unnamed: the 120 s
+cell's ~1/3 CDP death did not reproduce on a quiet machine (3/3 clean), so it is mitigated — 3 retries
+and the logs finally kept — and not solved.

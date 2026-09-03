@@ -69,7 +69,23 @@ export function freePort() {
  * out and falls back to MediaRecorder VP9 — a different file, a different
  * codec, and an answer to a question nobody asked (camera-check.mjs, P9).
  */
-export async function launchChrome({ bin, profile, url, headed = true, scriptsOff = false, extraArgs = [] }) {
+/**
+ * `throttled: true` LEAVES CHROME'S BACKGROUND THROTTLING ON — the three
+ * `--disable-*` flags below are dropped. Every rig here wants them off (a
+ * throttled compositor would measure a take nobody records), with exactly one
+ * exception: G7 has to measure what a HIDDEN tab does to a clock, because that
+ * is what a take actually runs in, and a rig that disables the throttle cannot
+ * see it. Use it only for that question.
+ */
+export async function launchChrome({
+  bin,
+  profile,
+  url,
+  headed = true,
+  scriptsOff = false,
+  extraArgs = [],
+  throttled = false,
+}) {
   const port = await freePort()
   const args = [
     `--remote-debugging-port=${port}`,
@@ -80,11 +96,15 @@ export async function launchChrome({ bin, profile, url, headed = true, scriptsOf
     '--hide-crash-restore-bubble',
     '--disable-features=InfiniteSessionRestore',
     '--autoplay-policy=no-user-gesture-required',
-    '--disable-background-timer-throttling',
-    // A window macOS thinks is covered gets its rendering throttled, and a
-    // throttled compositor would measure a take nobody records.
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
+    ...(throttled
+      ? []
+      : [
+          '--disable-background-timer-throttling',
+          // A window macOS thinks is covered gets its rendering throttled, and a
+          // throttled compositor would measure a take nobody records.
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+        ]),
     '--mute-audio',
     '--window-size=900,700',
     '--window-position=0,0',

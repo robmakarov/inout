@@ -44,11 +44,29 @@
 import { evenDown } from '@core/frame'
 
 /**
- * `?floor=1` — OFF, and the flip is Robert's (TASKS: "ships FLAG-GATED OFF").
- * With it off, nothing in this file is reachable and max is byte-identical to
- * the max that shipped: the sampler in the raw worker is not even started.
+ * OFF, AND IT STAYS OFF UNTIL ROBERT SAYS OTHERWISE — 2026-09-03: "MAX ELASTIC
+ * OFF UNTIL I SAY SO".
  *
- *   ?floor=1|0    (this load only)
+ * IT WAS FLIPPED ON FOR AN HOUR THAT DAY AND THAT WAS MY ERROR, recorded here
+ * because the next agent will be tempted the same way. He said: "it must be
+ * fucking same elastic shit we have for everything else now, it is just turned
+ * off for max to test it" — a statement about WHAT THIS IS (the one elastic
+ * system, not a mode of its own) and about where it stands (off, under test).
+ * I read the first half as an instruction to move the default and shipped it.
+ * A default is behaviour a user can see, and behaviour moves on his yes, said
+ * about the default, and nothing else.
+ *
+ * WHAT IT IS, which the same sentence settles: not an emergency mode bolted
+ * onto max, but THE elastic system — the same detector, sampler, ladder rules
+ * and ledger — reaching the one place that had none, because max opens no
+ * composite and the composite is where all of it lived.
+ *
+ * WHAT IT COSTS A TAKE THAT NEVER NEEDS IT, measured with it armed (the rig's
+ * `calm` lane, 45 s at 2560x1440@60): no rung taken, one screen segment, 60 fps
+ * throughout. With it off the raw worker is not even asked to sample: no
+ * ticker, no counters, max byte-for-byte as it shipped.
+ *
+ *   ?floor=1      (this load only)
  *   localStorage['inout.capture.floor']   (sticky)
  */
 const FLAG_KEY = 'inout.capture.floor'
@@ -85,8 +103,17 @@ export function setEmergencyFloor(on: boolean | null): void {
 }
 
 /**
- * MAY THE FLOOR SPEND THE SIZE? `?floorres=1`, OFF EVEN WHEN THE FLOOR IS ON,
- * and this is a MEASUREMENT and not caution.
+ * MAY THE FLOOR SPEND THE SIZE? `?floorres=1`, OFF EVEN NOW THAT THE FLOOR IS
+ * ON, and there are now two reasons rather than one.
+ *
+ * THE RULING (Robert 2026-09-03, flipping the floor on): "it must be fucking
+ * same elastic shit we have for everything else now". Everywhere else the
+ * elastic system moves the RATE and never the size — captureLadder's rule 1,
+ * from his own 2026-08-29 words: "if something needs to be dropped it must be
+ * fps not resolution", "no screen proportion changes". Same system means the
+ * same dial, so the size rung is not part of what was turned on.
+ *
+ * AND THE MEASUREMENT, which said the same thing first.
  *
  * The rate rungs cost nothing but rate: the file keeps one geometry and the
  * encoder keeps its configuration. The resolution rung cannot — a raw encoder

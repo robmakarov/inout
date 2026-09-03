@@ -16,9 +16,16 @@
  *  1. NO SCORE FOR A MEASUREMENT NOT TAKEN (R1's ruling, generalised). A
  *     dimension with no evidence reads `unmeasured` and says WHY. It never
  *     silently passes, and a card carrying one is `incomplete`, not `green`.
- *  2. IT COSTS THE TAKE NOTHING. Everything here is computed from what is
- *     already persisted, at stop or later on demand. Nothing samples, polls or
- *     allocates while the recorder runs.
+ *  2. IT COSTS THE TAKE (ALMOST) NOTHING, AND THE EXCEPTION IS MEASURED.
+ *     Everything here is computed from what is already persisted, at stop or
+ *     later on demand. ONE dimension samples while the recorder runs —
+ *     `lateness` (G7), because "how late did the main thread run" cannot be
+ *     derived from anything the take already holds — and it is the exception
+ *     that proves the rule: its clock is in a worker, the main thread does one
+ *     subtraction per beat, it keeps a histogram rather than a list, and it
+ *     carries its own measured cost on the card (`selfCostMsPerSec`) so this
+ *     claim is a number and not a promise. Everything else still samples,
+ *     polls and allocates nothing.
  *  3. IT MUST NOT CRY WOLF. The user-facing banner already learned this twice
  *     (app/lib/channels.ts) — a report that reads RED on a take that was fine
  *     is a report nobody looks at, and then a real loss goes unread. Every
@@ -31,9 +38,10 @@
  * without a browser.
  */
 import { auditElastic } from '@core/elasticLog'
+import { STALL_FAIL_MS } from '@core/lateness'
 import { REVIVE_BASE_SEC, REVIVE_CEILING_SEC } from '@core/capture/reviveSchedule'
 import { WARN_SECONDS_LEFT } from '@core/capture/diskGuard'
-import type { ChannelKind, ChannelRecording, Recording } from '@core/types'
+import type { ChannelKind, ChannelRecording, LatenessSummary, Recording } from '@core/types'
 
 /** Every dimension the card grades. Order is the order they are reported in. */
 export type DimensionId =
@@ -48,6 +56,7 @@ export type DimensionId =
   | 'sync'
   | 'storage'
   | 'memory'
+  | 'lateness'
   | 'wedges'
 
 export type DimensionStatus = 'pass' | 'fail' | 'unmeasured'
@@ -422,7 +431,29 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     }
   }
 
-  /* 4. RESCUE — the dead-tap revival is a rescue, and a rescue is a fault. */
+  /* 4. RESCUE — WHAT THE DEAD TAP COST, NOT HOW OFTEN WE TRIED (task G6(g)).
+
+        THIS DIMENSION WAS UNPASSABLE, and it is worth saying exactly how. It
+        graded revive ATTEMPTS: any burst after the warm-up was a fail. But a
+        revive fires after seconds of pure digital zeros on a track that is live
+        and unmuted, and from inside the tap a paused tab and a dead tap look
+        identical — so a quiet source produced attempts, attempts produced red,
+        and every honest long take was convicted. Measured on rec_gpsoujs2sydf:
+        63 attempts across 15 silent runs graded RED when every single run was a
+        quiet tab (Robert confirmed the silence was real). It made A1's gate 2
+        unreadable for a day.
+
+        The evidence that separates the two cases is `revive-recovered`, which
+        capture now records (measuredAudio.ts): sound returning within a second
+        of a tap rebuild is THAT rebuild's doing — the source had been playing
+        all along and the zeros before it are audio the take LOST. Sound that
+        returns later is a source that started playing, and a rebuild into a
+        source that stays quiet cost nothing.
+
+        So: convict on recovered loss. A permanently dead tap is not lost here —
+        `audio-continuity` above already owns it through `silentTailMs`, which
+        is the same fault measured as what it cost rather than as how hard we
+        fought it. */
   {
     const measured = audio.filter(silenceMeasured)
     if (!measured.length) {
@@ -439,17 +470,36 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
       const convicting: string[] = []
       const notes: string[] = []
       for (const c of measured) {
-        const bursts = reviveBursts(c.diagnostics?.events)
-        const late = bursts.filter((b) => b.runStartMs > WARMUP_MS)
+        const events = c.diagnostics?.events ?? []
+        const bursts = reviveBursts(events)
         if (!bursts.length) continue
-        if (late.length) bad.push(c.kind)
         const attempts = bursts.reduce((n, b) => n + b.attempts, 0)
-        const note =
+        // A rebuild that brought the sound back: the tap was dead while the
+        // source played, so the silent run before it is real lost audio.
+        const recovered = events.filter((e) => e.type === 'revive-recovered')
+        const late = recovered.filter((e) => e.atMs > WARMUP_MS)
+        if (late.length) {
+          bad.push(c.kind)
+          // What it COST: each recovery ends a silent run, and the run is the
+          // loss. Bound it by the burst that preceded the recovery.
+          const lost = late.map((e) => {
+            const burst = [...bursts].reverse().find((b) => b.firstMs <= e.atMs)
+            const from = burst ? burst.runStartMs : e.atMs
+            return `${dur(Math.max(0, e.atMs - from))} from ${secs(from)}`
+          })
+          convicting.push(
+            `${LABEL[c.kind]} lost ${lost.join(' and ')} — the tap was dead while the source ` +
+              `was playing, and a rebuild is what brought the sound back`,
+          )
+        }
+        notes.push(
           `${LABEL[c.kind]} ${bursts.length} revive burst${bursts.length === 1 ? '' : 's'} ` +
-          `(${attempts} attempts), ${late.length} after warm-up — ` +
-          `runs began ${bursts.map((b) => secs(b.runStartMs)).join(', ')}`
-        notes.push(note)
-        if (late.length) convicting.push(note)
+            `(${attempts} attempts), ${recovered.length} recovered sound — ` +
+            `runs began ${bursts.map((b) => secs(b.runStartMs)).join(', ')}` +
+            (recovered.length === 0
+              ? '; nothing was recovered, so the source itself was silent and no audio was lost'
+              : ''),
+        )
       }
       dims.push({
         id: 'rescue',
@@ -721,7 +771,28 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     }
   }
 
-  /* 10. WEDGES — anything the machine logged against this take's own window. */
+  /* 10. LATENESS — how late the main thread ran while this take recorded (G7).
+
+        The instrument Phase 1's "no editor stall > 30 ms" is read against. It
+        is the only dimension on this card that is SAMPLED rather than derived,
+        which is why it carries its own cost (`selfCostMsPerSec`) and why the
+        sampler's whole design is about not being a cost: the clock is in a
+        worker, the main thread does one subtraction per beat, and the take
+        keeps a histogram rather than a list.
+
+        WHAT IT MEANS ON A TAKE AND WHAT IT DOES NOT. The recorder's own work
+        is in workers — the encoders, the compositor, the muxers — so main-thread
+        lateness during a take is NOT a frame-loss signal (E1's `worker-lateness`
+        is that, per interval, and it steps the ladder). What lives on the main
+        thread is the tick, the preview, the audio taps and the store, so this
+        is the dimension B12 (audio ending early under a starved main thread) is
+        argued from, and the one that says whether a take was recorded on a
+        machine that was already in trouble. */
+  {
+    dims.push(latenessDimension(recording.stopStats?.lateness, 'this take'))
+  }
+
+  /* 11. WEDGES — anything the machine logged against this take's own window. */
   {
     const journal = evidence.wedgeJournal
     if (!journal) {
@@ -764,6 +835,140 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     durationMs: take,
     verdict,
     line: head + body + tail,
+    dimensions: dims,
+  }
+}
+
+/* ─────────────────── G7: main-thread lateness ─────────────────── */
+
+/**
+ * ONE DIMENSION, TWO SURFACES. The take's card grades the capture window and
+ * the editor's card grades the editor's first 15 seconds, and they must be the
+ * same arithmetic against the same band or the two numbers cannot be compared —
+ * which is the whole point of an instrument B10 is proved against (the stall
+ * has to be the same size before the fix and after it).
+ *
+ * THE BAND IS THE CLAIM. Phase 1 says "no editor stall > 30 ms", so 30 ms is
+ * what this fails on, and it fails on the WORST ONE-SECOND WINDOW rather than
+ * on any single sample. Rule 3 of this file is why: at 60 samples a second an
+ * hour-long take takes 216,000 of them and something will be over any threshold
+ * eventually — a card that reds every take is a card nobody reads. The window
+ * makes the number a stall a person could feel, and the strict "> 1 frame is a
+ * defect" reading is kept in the detail (`overFrame`) so a stricter gate can be
+ * read off a card that passed.
+ */
+export function latenessDimension(
+  s: LatenessSummary | undefined,
+  where: string,
+): ReportDimension {
+  if (!s) {
+    return {
+      id: 'lateness',
+      status: 'unmeasured',
+      detail:
+        `no main-thread lateness sample for ${where} — the sampler was off (\`?lateness=0\`) ` +
+        'or this take predates G7',
+    }
+  }
+  if (s.clamped) {
+    return {
+      id: 'lateness',
+      status: 'unmeasured',
+      // The one reading that must never be graded: it is Chrome's hidden-tab
+      // timer throttle (~1 Hz), not the machine. E1 measured 984 ms of it on an
+      // idle page. Saying `fail` here would convict every backgrounded take.
+      detail:
+        `${where}: the worker clock could not be built and the fallback timer ran on a hidden ` +
+        `document, so its ${s.maxMs} ms worst reading is Chrome's ~1 Hz throttle and not this ` +
+        'machine — not graded',
+    }
+  }
+  const worst = s.worstWindows[0]
+  const owner = s.owners[0]
+  const parts = [
+    worst
+      ? `worst second at ${secs(worst.startMs)}: ${worst.maxMs} ms late, ` +
+        `${worst.lateMs} ms over ${worst.samples} samples`
+      : 'no full window was sampled',
+    `p50 ${s.p50Ms} · p95 ${s.p95Ms} · max ${s.maxMs} ms at ${secs(s.maxAtMs)}`,
+    `${s.overFrame} of ${s.samples} samples over one frame (${s.frameMs} ms)`,
+    // NOT the self-cost: it times the handler body alone and reads ~10x under
+    // the renderer's own task accounting (0.783 vs 7.4 ms/s on one run), so
+    // quoting it on a card would be a claim the card cannot support. What
+    // sampling costs is measured from outside and lives in docs/FLAGS.md.
+    `sampled every ${s.periodMs} ms by ${s.source}, document hidden ${pct(s.hiddenRatio)} of ` +
+      `${dur(s.spanMs)}`,
+  ]
+  // A hole in the schedule means the page was frozen or the worker starved, and
+  // every number above is then a FLOOR. Say it where it cannot be missed.
+  if (s.missed > 0) parts.push(`${s.missed} beats never arrived — these are lower bounds`)
+  if (owner) {
+    // BLOCKING FIRST, because that is what a stall is made of: a long animation
+    // frame can run 487 ms of wall clock and block for none of it, and quoting
+    // its duration beside a 2 ms worst sample reads as a contradiction.
+    parts.push(
+      `worst task: ${owner.name} ` +
+        (owner.blockingMs !== undefined
+          ? `${owner.blockingMs} ms blocking of ${owner.durationMs} ms`
+          : `${owner.durationMs} ms`) +
+        ` at ${secs(owner.atMs)}`,
+    )
+  } else if (s.hiddenRatio > 0.5) {
+    // Not a gap in the instrument: neither long-animation-frame nor longtask
+    // reports on a hidden document (E1: 0 entries in 74 s). Attribution is a
+    // thing the editor has and a take does not.
+    parts.push('no task attribution — the browser reports none on a hidden document')
+  }
+  const failed = worst !== undefined && worst.maxMs > STALL_FAIL_MS
+  return {
+    id: 'lateness',
+    status: failed ? 'fail' : 'pass',
+    ...(failed
+      ? {
+          headline:
+            `the main thread was ${worst.maxMs} ms late at ${secs(worst.startMs)} of ${where}` +
+            (owner ? ` — ${owner.name}` : ''),
+        }
+      : null),
+    detail: list(parts),
+  }
+}
+
+/** What the editor's own card is. Not a `ReportCard`: there is no take being
+ *  graded, and giving it a `recordingId` it does not own would let it be
+ *  mistaken for one in the take log. */
+export interface EditorCard {
+  /** The take that was open, when one was. */
+  recordingId: string | null
+  verdict: Verdict
+  line: string
+  dimensions: ReportDimension[]
+}
+
+/**
+ * THE EDITOR'S CARD (G7). One dimension today — main-thread lateness over the
+ * editor's first 15 seconds, which is the window B10's size probe lands in
+ * (300 frames encoded on the main thread about 11 s after the editor opens).
+ * Deliberately the same builder and the same band as the take's card.
+ */
+export function buildEditorCard(
+  summary: LatenessSummary | null | undefined,
+  recordingId: string | null = null,
+): EditorCard {
+  const dims = [latenessDimension(summary ?? undefined, 'the editor')]
+  const failed = dims.filter((d) => d.status === 'fail')
+  const unmeasured = dims.filter((d) => d.status === 'unmeasured')
+  const verdict: Verdict = failed.length ? 'red' : unmeasured.length ? 'incomplete' : 'green'
+  const span = summary ? ` · first ${dur(summary.spanMs)}` : ''
+  const body = failed.length
+    ? ` — ${failed.map((d) => `${d.id}: ${d.headline ?? d.detail}`).join(' · ')}`
+    : unmeasured.length
+      ? ` — ${unmeasured.map((d) => `${d.id}: ${d.detail}`).join(' · ')}`
+      : ` — ${dims.length} of ${dims.length} dimensions measured and inside band`
+  return {
+    recordingId,
+    verdict,
+    line: `editor${recordingId ? ` · ${recordingId}` : ''}${span} · ${verdict.toUpperCase()}${body}`,
     dimensions: dims,
   }
 }

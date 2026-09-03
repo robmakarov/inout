@@ -37,7 +37,7 @@ current path as fallback); the engine never refuses a record press.
 - **Live: https://inout-kappa.vercel.app — Vercel auto-builds `main` on push. THIS is where agents
   verify.** `preview_start { url: "https://inout-kappa.vercel.app/?synthetic=1" }` and drive it; the
   deployed build is the working copy. Test knobs (`?dead=`, `?die=`, `?killenc=`, `?slowstop=`) are in
-  docs/FLAGS.md; `?slow=` is reported DEAD CODE (G6e) — do not rely on it until G6 resolves it. Verify
+  docs/FLAGS.md; `?slow=` is LIVE (G6e measured it on prod: 183 ms → 6079 ms with `slow=mic:6000`). Verify
   in the app, not from the code — three sessions in a row shipped capture fixes "argued from the
   ordering" and the bug survived all three. https://inout-kappa-two.vercel.app is the same build on a
   second ORIGIN, used only as the screen-wedge discriminator (docs/SCREEN_WEDGE.md).
@@ -69,7 +69,7 @@ Four rules are enforced, not advice (T1) — `npm run drill` proves each in ~2 s
 REFUSED commit (exit 2, loud, nothing touched): HEAD must still be on the branch this session edited
 on · a worktree another live session owns is not yours to commit · unclaimed files are never swept
 while another session is live · a task branch commits locally and is NEVER pushed to `main`.
-**ONE TASK, ONE WORKTREE**: `scripts/worktree.sh <id>` cuts `/tmp/inout-<id>` on `task/<id>` with
+**ONE TASK, ONE WORKTREE**: `scripts/worktree.sh <id>` cuts `~/.inout-worktrees/inout-<id>` on `task/<id>` with
 node_modules, settings and an owner marker. Sessions in one checkout share one HEAD and one index —
 another session's `git checkout` moves you (2026-09-02: H2b landed on `main` that way). Land the work
 FROM THE MAIN CHECKOUT (`git merge --ff-only task/<id>`); never move the `main` ref from a worktree

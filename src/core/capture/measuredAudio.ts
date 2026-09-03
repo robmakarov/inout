@@ -25,6 +25,15 @@ const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
 /** Anchor min-filter window; at 50ppm clock skew the bias stays < 0.2ms. */
 const ANCHOR_WINDOW_S = 3
+/**
+ * G6(g). How soon after a tap rebuild returning sound still counts as THAT
+ * rebuild having recovered it. A fresh tap on a live source sees signal in the
+ * next batch or two (128-frame quanta at 48 kHz is ~2.7 ms); one second is
+ * three orders of magnitude of headroom over that and still far below any
+ * plausible "someone pressed play" reaction, so the two causes do not overlap.
+ */
+export const REVIVE_RECOVERY_FRAMES = (sampleRate: number): number => sampleRate
+
 /** ~1.3ms, the same ramp the worklet uses on its own silence splices. */
 const PAD_FADE = 64
 
@@ -309,6 +318,26 @@ export async function startMeasuredAudioCapture(opts: {
    *  once a minute for as long as the take runs, and console work on the thread
    *  carrying the PCM is exactly what a starved audio path cannot afford. */
   let reviveSkipLogged = false
+  /**
+   * G6(g) — FRAME AT WHICH THE LAST TAP REBUILD HAPPENED, and the whole point
+   * of recording it.
+   *
+   * A revive fires after seconds of pure digital zeros on a track that is live
+   * and unmuted. It CANNOT see whether the source was silent: a paused tab and
+   * a dead tap look identical from here. That ambiguity is what made the report
+   * card's `rescue` dimension unpassable — 63 attempts across 15 silent runs
+   * graded a take RED when every run was a quiet tab.
+   *
+   * There is exactly one moment the two stop looking alike: just after the
+   * rebuild. If the tap was dead while the source played, the FRESH tap sees
+   * signal immediately — the sound was there the whole time, we were not
+   * hearing it, and that silent run is audio the take LOST. If the source was
+   * simply quiet, the rebuild changes nothing and the zeros continue.
+   *
+   * So the capture side notes the recovery where the evidence is, and the card
+   * grades loss instead of attempts.
+   */
+  let lastReviveFrame: number | null = null
   /** PERSISTED with the take (ChannelRecording.diagnostics): the console dies
    *  with the tab, and no field report has ever arrived with one — the file is
    *  the only witness that reliably survives to be read. */
@@ -771,6 +800,20 @@ export async function startMeasuredAudioCapture(opts: {
         if (a > maxAbs) maxAbs = a
       }
       if (maxAbs > SILENCE_FLOOR) {
+        /**
+         * G6(g). Sound is back. If a tap rebuild happened within the recovery
+         * window, the rebuild is what produced it and the silence before it was
+         * LOST audio — the one case the `rescue` dimension should convict on.
+         * Sound returning long after a rebuild is a source that started
+         * playing, which is not our fault and not a loss.
+         */
+        if (
+          lastReviveFrame !== null &&
+          framesWritten - lastReviveFrame <= REVIVE_RECOVERY_FRAMES(sampleRate)
+        ) {
+          noteEvent('revive-recovered')
+        }
+        lastReviveFrame = null
         rev.reset()
         reviveSkipLogged = false
       } else {
@@ -814,6 +857,7 @@ export async function startMeasuredAudioCapture(opts: {
               sourceClone = clone
               dropClone(old)
               revivals++
+              lastReviveFrame = framesWritten
               noteEvent('revive')
               console.warn(
                 `[capture] ${label} audio input dead (pure silence ${(silentFrames / sampleRate).toFixed(0)}s on a live, ` +
@@ -1089,6 +1133,10 @@ export async function startMeasuredAudioCapture(opts: {
           trimmedMs: Math.round(trimmedMs),
           silentTailMs: Math.round(silentTailMs),
           revivals,
+          // G6(h): which tap carried the PCM. Decided at arm from capability
+          // and a flag, so it differs between two takes on one build; the
+          // artifact has to carry it or a gate cannot check its own premise.
+          audioTap: useTrackTap ? ('track' as const) : ('worklet' as const),
           ...(diagEvents.length > 0 ? { events: diagEvents } : {}),
           // B7: the two numbers this channel's offset was BUILT from. Always
           // written, including the zeros — "the platform reported no latency"

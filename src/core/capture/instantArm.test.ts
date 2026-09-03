@@ -15,7 +15,7 @@ import {
 } from './acquire'
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import { QUALITY_TIERS } from '@core/compose/quality'
-import { parseSlowChannels } from './synthetic'
+import { deliverSyntheticProgressively, parseSlowChannels } from './synthetic'
 import { setNativeRes } from './nativeRes'
 import { setQualityStep, type QualityStepId } from '@core/qualityStep'
 
@@ -295,6 +295,90 @@ describe('instant-arm harness knobs', () => {
   })
   it('empty when absent', () => {
     expect(parseSlowChannels('?synthetic=1').size).toBe(0)
+  })
+
+  /**
+   * THE WIRING, WHICH IS THE HALF THAT HAD NO TEST (task G6e, 2026-09-02).
+   *
+   * `slow=` was carried as DEAD CODE — "parseSlowChannels has no caller" — in
+   * .ai/TASKS, BACKLOG.md, docs/FLAGS.md and CLAUDE.md. It is not: the parser
+   * is called by createSyntheticChannelsProgressive, which session.ts uses for
+   * every synthetic arm, and the knob works. Measured on prod the same day:
+   * `?synthetic=1` armed in 183 ms, `?synthetic=1&slow=mic:6000` armed in
+   * 6079 ms with "Waiting for microphone…" on screen from t=30 ms.
+   *
+   * The belief survived three sessions because the three cases above cover the
+   * PARSE and nothing covered the DELIVERY, so the only way to tell a live knob
+   * from a dead one was to open a browser. These two close that: a fake rig,
+   * fake timers, no canvas and no AudioContext.
+   */
+  const fakeChannel = (kind: 'mic' | 'camera') => {
+    const track = { stop: () => undefined } as unknown as MediaStreamTrack
+    return {
+      kind,
+      media: (kind === 'mic' ? 'audio' : 'video') as 'audio' | 'video',
+      stream: { getTracks: () => [track] } as unknown as MediaStream,
+      track,
+    }
+  }
+  const config = { screen: false, camera: false, mic: true, systemAudio: false }
+
+  /** The URL under test, for code that reads `location.search` directly. Node
+   *  defines no `location`, so this is an addition and not an override. */
+  const withSearch = async (search: string, fn: () => Promise<void>): Promise<void> => {
+    const had = 'location' in globalThis
+    const prev = (globalThis as { location?: unknown }).location
+    ;(globalThis as { location?: unknown }).location = { search }
+    try {
+      await fn()
+    } finally {
+      if (had) (globalThis as { location?: unknown }).location = prev
+      else delete (globalThis as { location?: unknown }).location
+    }
+  }
+
+  it('a parsed delay holds the delivery back by exactly that long', async () => {
+    vi.useFakeTimers()
+    try {
+      await withSearch('?synthetic=1&slow=mic:6000', async () => {
+        const delivered: { kind: string }[] = []
+        const rig = deliverSyntheticProgressively(
+          { channels: [fakeChannel('mic')], dispose: () => undefined },
+          config,
+          { onChannel: (c) => delivered.push({ kind: c.kind }), onFailure: () => undefined },
+        )
+        await vi.advanceTimersByTimeAsync(5999)
+        expect(delivered).toEqual([])
+        await vi.advanceTimersByTimeAsync(2)
+        expect(delivered).toEqual([{ kind: 'mic' }])
+        await rig.settled
+        rig.dispose()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a kind the URL does not name is delivered immediately', async () => {
+    vi.useFakeTimers()
+    try {
+      await withSearch('?synthetic=1&slow=mic:6000', async () => {
+        const delivered: string[] = []
+        const rig = deliverSyntheticProgressively(
+          { channels: [fakeChannel('mic'), fakeChannel('camera')], dispose: () => undefined },
+          { ...config, camera: true },
+          { onChannel: (c) => delivered.push(c.kind), onFailure: () => undefined },
+        )
+        await vi.advanceTimersByTimeAsync(0)
+        expect(delivered).toEqual(['camera'])
+        await vi.advanceTimersByTimeAsync(6000)
+        expect(delivered).toEqual(['camera', 'mic'])
+        await rig.settled
+        rig.dispose()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

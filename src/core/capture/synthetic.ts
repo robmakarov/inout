@@ -708,9 +708,41 @@ export function createSyntheticChannelsProgressive(
   config: CaptureConfig,
   handlers: ProgressiveHandlers,
 ): SyntheticProgressiveRig {
-  const rig = createSyntheticChannels(config)
-  const delays =
-    typeof location !== 'undefined' ? parseSlowChannels(location.search) : new Map<ChannelKind, number>()
+  return deliverSyntheticProgressively(createSyntheticChannels(config), config, handlers)
+}
+
+/** The live `slow=` read, in ONE place — the default the seam below uses when a
+ *  caller does not state its own. */
+export function syntheticSlowDelays(): Map<ChannelKind, number> {
+  return typeof location !== 'undefined'
+    ? parseSlowChannels(location.search)
+    : new Map<ChannelKind, number>()
+}
+
+/**
+ * THE DELIVERY HALF, OVER ANY RIG — and the reason it is a separate function
+ * (task G6e, 2026-09-02).
+ *
+ * `slow=` was carried in three docs as DEAD CODE, "parseSlowChannels has no
+ * caller". It has one, it always did, and the knob works: measured on prod the
+ * same day, `?synthetic=1` arms in 183 ms and `?synthetic=1&slow=mic:6000`
+ * arms in 6079 ms with "Waiting for microphone…" on screen from t=30 ms. What
+ * was actually missing is why the belief could survive three sessions: the
+ * PARSER had unit tests and the WIRING had none, so the only way to check that
+ * the knob reached an arm was to run a browser, and nobody did.
+ *
+ * Splitting the delivery off the media creation is what makes the wiring
+ * testable in the node test environment — synthetic media needs canvas and
+ * AudioContext, a delivery schedule needs neither. `delays` DEFAULTS to the
+ * live URL read rather than being passed down from the caller, so there is no
+ * second place the wiring could be dropped without a test noticing.
+ */
+export function deliverSyntheticProgressively(
+  rig: SyntheticRig,
+  config: CaptureConfig,
+  handlers: ProgressiveHandlers,
+  delays: Map<ChannelKind, number> = syntheticSlowDelays(),
+): SyntheticProgressiveRig {
   const primary = primaryKindFor(config)
   let primaryResolve!: () => void
   const primaryReady = new Promise<void>((r) => {

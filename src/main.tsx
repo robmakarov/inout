@@ -55,6 +55,8 @@ createRoot(document.getElementById('root')!).render(
  *   await __inoutReportAll()       every take still on this machine, newest first
  *   __inoutTakeLog()               the verdict line of every take, including
  *                                  ones since deleted (localStorage ring)
+ *   await __inoutEditorReport()    the editor's first 15 s, graded (G7)
+ *   await __inoutLateness(5000)    sample this thread here, for that long (G7)
  *
  * The playbook is docs/TAKE_REPORT.md.
  */
@@ -97,6 +99,40 @@ createRoot(document.getElementById('root')!).render(
    *   __inoutDoor()   every decision this session has made, newest last
    */
   g.__inoutDoor = async () => (await import('@core/door')).readDoorLog()
+  /**
+   * G7 — THE EDITOR'S OWN CARD. The editor samples its first 15 seconds of
+   * main-thread lateness on mount (EditorScreen) and keeps the summary; this
+   * grades it against the same band the take's card uses, so "no editor stall
+   * > 30 ms" is one number a session can read instead of a claim.
+   *
+   *   await __inoutEditorReport()   the last editor open, graded
+   */
+  g.__inoutEditorReport = async () => {
+    const { buildEditorCard } = await import('@core/report')
+    const { lastEditorLateness, lastEditorLatenessTake } = await import('@core/lateness')
+    return buildEditorCard(lastEditorLateness(), lastEditorLatenessTake())
+  }
+  /**
+   * G7 — SAMPLE THIS THREAD FOR N MILLISECONDS, ANYWHERE, AND HAND BACK THE
+   * SUMMARY. The take and the editor sample themselves; this is for the
+   * questions neither of them answers — what a screen costs while it is being
+   * dragged, and above all what the SAMPLER costs, which is measured by running
+   * the same workload with and without one (scripts/g7-lateness.mjs --lanes=cost).
+   *
+   *   await __inoutLateness(5000)
+   */
+  g.__inoutLateness = async (ms?: unknown) => {
+    const run = await (g.__inoutLatenessStart as () => Promise<{ stop: () => unknown }>)()
+    await new Promise((res) => setTimeout(res, typeof ms === 'number' ? ms : 5_000))
+    return run.stop()
+  }
+  /** The same sampler with the window left open — for a page-side script that
+   *  has to start it, do something, and stop it. The cost A/B does exactly
+   *  that, in one expression, so the handle never leaves the page. */
+  g.__inoutLatenessStart = async (opts?: unknown) =>
+    (await import('@core/lateness')).startLateness(
+      (opts ?? {}) as { periodMs?: number; owners?: boolean },
+    )
 }
 
 // Offline start (task P2). PRODUCTION ONLY: a service worker in front of the

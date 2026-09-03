@@ -61,6 +61,19 @@ function sampleAt(chan: Float32Array, pos: number): number {
  * better at 16 kHz, and 351x realtime per channel (171 ms per channel-minute),
  * against an export that is decode-bound at 5-6x. IT IS ON: a defect fix that
  * ships disabled has fixed nothing, and the old maths is what carries the flag.
+ *
+ * AND IT IS INERT ON THE SHIPPED CAPTURE PATH — measured 2026-09-03, after
+ * Robert listened to an A/B of it and said "c and d same to me". He was right
+ * and the reason is one line up the chain: every measured audio channel is
+ * stored as OPUS, opus always decodes at 48 kHz, and the mix bus is 48 kHz. So
+ * `interpolatorFor` is called with equal rates and NEITHER interpolator runs.
+ * The 44.1 kHz the tab delivers is resampled inside the opus encoder at capture
+ * time, not here. The console line below exists so that can never again be
+ * argued about instead of read.
+ *
+ * It stays because the mixer can still be handed a channel at another rate —
+ * the MediaRecorder lane, a non-opus source — and being correct there is free.
+ * It is NOT the answer to B13(3), and nothing should cite it as one.
  */
 const SINC_TAPS = 32
 const SINC_PHASES = 1024
@@ -192,8 +205,32 @@ export function setBandLimitedResampling(on: boolean | null): void {
  * for a filter to improve and everything for it to risk. That also keeps every
  * take that never resamples byte-identical across the switch — pinned by test.
  */
+const announced = new Set<string>()
+
 export function interpolatorFor(inRate: number, outRate: number): AudioInterpolator {
-  if (inRate === outRate || !bandLimitedResampling()) return sampleAt
+  const equal = inRate === outRate
+  const on = bandLimitedResampling()
+  /**
+   * SAY WHICH PATH THE AUDIO TOOK, once per rate pair per export. Without this
+   * line B13(3) spent a night arguing about an interpolator without knowing
+   * whether it ran: every measured channel is stored as OPUS, opus always
+   * decodes at 48 kHz, and the mix bus is 48 kHz — so for the shipped capture
+   * path the rates are equal and neither interpolator does anything at all.
+   * A resampling decision nobody can read is a decision nobody can check.
+   */
+  const key = `${inRate}->${outRate}:${equal ? 'none' : on ? 'sinc' : 'hermite'}`
+  if (!announced.has(key)) {
+    announced.add(key)
+    console.info(
+      `[compose] audio mix ${inRate} Hz → ${outRate} Hz: ` +
+        (equal
+          ? 'RATES EQUAL, no resampling (the sample is taken as it is)'
+          : on
+            ? 'band-limited (32-tap windowed sinc)'
+            : 'the old 4-point Hermite (?resamp is off)'),
+    )
+  }
+  if (equal || !on) return sampleAt
   return makeSincInterpolator(inRate, outRate)
 }
 

@@ -34,12 +34,12 @@ afterEach(() => {
   setFloorResolutionRung(null)
 })
 
-describe('the floor is off until Robert says otherwise', () => {
-  it('is off by default', () => {
+describe('the elastic system reaches max, and only when Robert says so', () => {
+  it('is OFF by default — Robert 2026-09-03, "MAX ELASTIC OFF UNTIL I SAY SO"', () => {
     expect(emergencyFloorEnabled()).toBe(false)
   })
 
-  it('and the resolution rung is off even inside it — a 5,047 ms seam, measured', () => {
+  it('and the SIZE is still not a dial: the rung is off, as everywhere else', () => {
     expect(floorResolutionRungEnabled()).toBe(false)
     // With the rung off the order ends at the rate rungs and says so.
     const spentRates: FloorState = { ...max60, cameraFps: FLOOR_FPS, screenFps: FLOOR_FPS }

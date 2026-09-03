@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ChannelRecording, Recording } from '@core/types'
-import { buildReportCard, reviveBursts, WARMUP_MS } from './reportCard'
+import type { ChannelRecording, LatenessSummary, Recording } from '@core/types'
+import { buildEditorCard, buildReportCard, reviveBursts, WARMUP_MS } from './reportCard'
 
 /**
  * THE TAKE THIS INSTRUMENT EXISTS FOR.
@@ -68,6 +68,33 @@ function fiftyMinuteTake(): Recording {
   }
 }
 
+/**
+ * G7 — WHAT A QUIET MAIN THREAD READS LIKE. Shaped like a real 12 s reading:
+ * 60 Hz of beats, nothing over a frame, the document hidden the whole way
+ * (which is what a take is), and the sampler charging hundredths of a
+ * millisecond per second for it.
+ */
+function quietLateness(): LatenessSummary {
+  return {
+    source: 'worker-beat',
+    periodMs: 16,
+    spanMs: 12_000,
+    samples: 750,
+    missed: 0,
+    maxMs: 9.4,
+    maxAtMs: 3_120,
+    p50Ms: 0.4,
+    p95Ms: 2.1,
+    overFrame: 0,
+    frameMs: 16.7,
+    histogram: [700, 30, 12, 5, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    worstWindows: [{ startMs: 3_000, maxMs: 9.4, lateMs: 41.2, samples: 62 }],
+    owners: [],
+    hiddenRatio: 1,
+    selfCostMsPerSec: 0.04,
+  }
+}
+
 /** A take where nothing went wrong, carrying every witness this build writes. */
 function cleanTake(): Recording {
   const ms = 12_000
@@ -88,6 +115,7 @@ function cleanTake(): Recording {
       heapLimitBytes: 4_000_000_000,
       storageUsageBytes: 1_000_000_000,
       storageQuotaBytes: 40_000_000_000,
+      lateness: quietLateness(),
     },
   }
 }
@@ -130,17 +158,24 @@ describe('the take report card', () => {
     const card = buildReportCard(fiftyMinuteTake(), { wedgeJournal: [] })
     expect(card.verdict).toBe('red')
     expect(card.line).toContain('RED')
-    // The dimension that decides it names the channel and what it lost.
+    // The dimension that decides it names the channel and what it lost. G6(g):
+    // the headline used to lead with '6 revive bursts' — how hard we fought —
+    // and now leads with the 27.5 minutes of sound that went missing.
     expect(card.line).toContain('tab audio')
-    expect(card.line).toContain('6 revive bursts')
+    expect(card.line).toContain('27.5 min of 50.4 min')
+    expect(card.line).not.toContain('revive bursts')
     const audio = card.dimensions.find((d) => d.id === 'audio-continuity')!
     expect(audio.status).toBe('fail')
     expect(audio.kinds).toEqual(['system-audio'])
     expect(audio.detail).toContain('54.5%')
+    // G6(g): the take is convicted by what it LOST — 54.5 % of the channel gone
+    // to digital zeros, above. The rescue dimension still reports its 25
+    // attempts, but attempts no longer convict: nothing in this take's black box
+    // says a rebuild ever brought the sound back, and a tap that stayed dead is
+    // audio-continuity's fault to name, measured as its cost.
     const rescue = card.dimensions.find((d) => d.id === 'rescue')!
-    expect(rescue.status).toBe('fail')
     expect(rescue.detail).toContain('25 attempts')
-    expect(rescue.detail).toContain('5 after warm-up')
+    expect(rescue.status).toBe('pass')
   })
 
   it('grades the clock apart from the input — 5,647 ms of padding is not the fault', () => {
@@ -215,7 +250,7 @@ describe('the take report card', () => {
     expect(card.verdict).toBe('incomplete')
     expect(card.dimensions.find((d) => d.id === 'memory')!.status).toBe('unmeasured')
     expect(card.dimensions.find((d) => d.id === 'rate')!.status).toBe('unmeasured')
-    expect(card.line).toContain('Not measured: rate, storage, memory')
+    expect(card.line).toContain('Not measured: rate, storage, memory, lateness')
   })
 
   it('an unsupplied wedge journal is unmeasured, not clean', () => {
@@ -337,7 +372,7 @@ describe('the take report card', () => {
     expect(card.verdict).toBe('incomplete')
   })
 
-  it('warm-up is what separates an arming tap from A1', () => {
+  it('a late revive is not a fault by itself — recovering sound is (G6(g))', () => {
     const take = cleanTake()
     take.durationMs = 600_000
     for (const c of take.channels) c.durationMs = 600_000
@@ -349,13 +384,176 @@ describe('the take report card', () => {
     expect(buildReportCard(early, { wedgeJournal: [] }).dimensions.find((d) => d.id === 'rescue')!.status).toBe(
       'pass',
     )
+    // A rebuild late in a take, into a source that stays quiet: the tab was
+    // paused, nothing was lost, and this used to be an automatic red.
     const late = { ...take, channels: [...take.channels] }
     late.channels[1] = {
       ...take.channels[1],
       diagnostics: { anchor, events: [{ atMs: WARMUP_MS + 30_000, type: 'revive' }] },
     }
     expect(buildReportCard(late, { wedgeJournal: [] }).dimensions.find((d) => d.id === 'rescue')!.status).toBe(
-      'fail',
+      'pass',
     )
+    // The same rebuild, with the sound coming back on the other side of it: the
+    // source was playing all along and the tap was not hearing it.
+    const dead = { ...take, channels: [...take.channels] }
+    dead.channels[1] = {
+      ...take.channels[1],
+      diagnostics: {
+        anchor,
+        events: [
+          { atMs: WARMUP_MS + 30_000, type: 'revive' },
+          { atMs: WARMUP_MS + 30_400, type: 'revive-recovered' },
+        ],
+      },
+    }
+    const deadDim = buildReportCard(dead, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'rescue',
+    )!
+    expect(deadDim.status).toBe('fail')
+    expect(deadDim.kinds).toEqual(['mic'])
+    expect(deadDim.headline).toContain('the tap was dead while the source was playing')
+  })
+
+  /**
+   * THE GATE FOR G6(g), and it is the take that made A1's gate 2 unreadable for
+   * a day: rec_gpsoujs2sydf, 124.8 minutes, 63 revive attempts across 15 silent
+   * runs, every one of them a quiet tab (Robert confirmed the silence was real).
+   * The old dimension graded attempts and so it graded this RED. Nothing was
+   * lost, so nothing may convict.
+   */
+  it('the 15-run quiet-tab take grades GREEN on rescue (G6(g) gate)', () => {
+    const ms = 7_488_000 // 124.8 minutes
+    const events: { atMs: number; type: string }[] = []
+    // 15 silent runs, spread across the take, ~4 attempts each = 63, and not one
+    // of them recovers anything: the tab simply had nothing playing.
+    let n = 0
+    for (let run = 0; run < 15; run++) {
+      const start = 120_000 + run * 460_000
+      for (let a = 0; a < (run < 3 ? 5 : 4) && n < 63; a++, n++) {
+        events.push({ atMs: start + a * 6_000 * 2 ** a, type: 'revive' })
+      }
+    }
+    expect(events.length).toBe(63)
+    const take: Recording = {
+      id: 'rec_gpsoujs2sydf',
+      createdAt: 1_756_700_000_000,
+      durationMs: ms,
+      channels: [
+        ch({ kind: 'screen', media: 'video', fps: 30, width: 2560, height: 1440, durationMs: ms }),
+        ch({
+          kind: 'system-audio',
+          media: 'audio',
+          durationMs: ms,
+          // A quiet tab is silent at the end too, and that is honest: the tail
+          // band is audio-continuity's, and it is under it here.
+          diagnostics: { anchor, silentTailMs: 4_000, revivals: 63, events },
+        }),
+      ],
+    }
+    const rescue = buildReportCard(take, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'rescue',
+    )!
+    expect(rescue.status).toBe('pass')
+    expect(rescue.detail).toContain('63 attempts')
+    expect(rescue.detail).toContain('no audio was lost')
+  })
+})
+
+/**
+ * G7 — THE DIMENSION B10 IS PROVED AGAINST.
+ *
+ * The numbers in the RED case are B10's own, measured by
+ * scripts/editor-drag-cost.mjs before this instrument existed: drag stalls of
+ * 35-201 ms, 0.4-0.7 s into a drag, all of them inside the window where the
+ * export panel encodes 300 frames on the main thread.
+ */
+describe('G7: main-thread lateness', () => {
+  const stalled = (over: Partial<LatenessSummary> = {}): LatenessSummary => ({
+    ...quietLateness(),
+    spanMs: 15_000,
+    samples: 890,
+    maxMs: 201.4,
+    maxAtMs: 11_420,
+    p95Ms: 4.8,
+    overFrame: 12,
+    hiddenRatio: 0,
+    worstWindows: [
+      { startMs: 11_000, maxMs: 201.4, lateMs: 402.6, samples: 48 },
+      { startMs: 12_000, maxMs: 35.2, lateMs: 61.4, samples: 60 },
+    ],
+    owners: [
+      { atMs: 11_210, durationMs: 201.9, blockingMs: 198.4, name: 'sizeProbe.js encodeFrame()' },
+    ],
+    ...over,
+  })
+
+  it('grades the take’s card, in ms, with the worst window’s start', () => {
+    const take = cleanTake()
+    take.stopStats!.lateness = stalled({ hiddenRatio: 1, owners: [] })
+    const dim = buildReportCard(take, { wedgeJournal: [] }).dimensions.find(
+      (d) => d.id === 'lateness',
+    )!
+    expect(dim.status).toBe('fail')
+    expect(dim.detail).toContain('worst second at 11.0s')
+    expect(dim.detail).toContain('201.4 ms')
+    // The strict reading survives on a card whatever the band does.
+    expect(dim.detail).toContain('12 of 890 samples over one frame')
+    // A hidden document explains its own missing attribution rather than
+    // leaving a gap that reads like a broken instrument.
+    expect(dim.detail).toContain('no task attribution')
+  })
+
+  it('B10 as a number on the editor’s card, with the task that owns it', () => {
+    const card = buildEditorCard(stalled(), 'rec_clean')
+    expect(card.verdict).toBe('red')
+    expect(card.line).toContain('201.4 ms late at 11.0s')
+    expect(card.line).toContain('sizeProbe.js encodeFrame()')
+    // Blocking time first: what a stall is made of, not how long the frame was.
+    expect(card.dimensions[0].detail).toContain(
+      'worst task: sizeProbe.js encodeFrame() 198.4 ms blocking of 201.9 ms at 11.2s',
+    )
+  })
+
+  it('a quiet editor is GREEN and says what it sampled', () => {
+    const card = buildEditorCard({ ...quietLateness(), hiddenRatio: 0 })
+    expect(card.verdict).toBe('green')
+    expect(card.dimensions[0].detail).toContain('sampled every 16 ms by worker-beat')
+  })
+
+  it('30 ms is the band, and it is the Phase-1 claim', () => {
+    const under = buildEditorCard(
+      stalled({ worstWindows: [{ startMs: 1_000, maxMs: 30, lateMs: 44, samples: 60 }] }),
+    )
+    const over = buildEditorCard(
+      stalled({ worstWindows: [{ startMs: 1_000, maxMs: 30.1, lateMs: 44, samples: 60 }] }),
+    )
+    expect(under.verdict).toBe('green')
+    expect(over.verdict).toBe('red')
+  })
+
+  it('a clamped fallback reading is UNMEASURED, never a failure', () => {
+    // The trap this whole instrument is shaped around: a main-thread timer on a
+    // hidden document reads Chrome's ~1 Hz throttle. Grading it would convict
+    // every backgrounded take ever recorded.
+    const card = buildEditorCard(
+      stalled({ source: 'timer', clamped: true, maxMs: 984, hiddenRatio: 1 }),
+    )
+    expect(card.dimensions[0].status).toBe('unmeasured')
+    expect(card.verdict).toBe('incomplete')
+    expect(card.dimensions[0].detail).toContain('not graded')
+  })
+
+  it('missed beats turn every number into a floor, and say so', () => {
+    const card = buildEditorCard(stalled({ missed: 37 }))
+    expect(card.dimensions[0].detail).toContain('37 beats never arrived')
+  })
+
+  it('no reading at all is unmeasured — a take before G7 never passes it', () => {
+    const take = cleanTake()
+    delete take.stopStats!.lateness
+    const card = buildReportCard(take, { wedgeJournal: [] })
+    expect(card.dimensions.find((d) => d.id === 'lateness')!.status).toBe('unmeasured')
+    expect(card.verdict).toBe('incomplete')
   })
 })

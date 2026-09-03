@@ -13,6 +13,7 @@ import {
   passDoor,
   takeDoorLog,
 } from '@core/door'
+import { CAPTURE_PERIOD_MS, startLateness, type LatenessRun } from '@core/lateness'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { captureQualityMode, preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
@@ -60,6 +61,7 @@ import type {
   CameraPose,
   CompositeRecording,
   DisplaySurfaceKind,
+  LatenessSummary,
   MediaKind,
   Recording,
 } from '@core/types'
@@ -482,6 +484,12 @@ class Session implements CaptureSession {
   /** S1 — the last storage sample the disk guard took while this take ran.
    *  Kept rather than discarded; nothing extra is asked of the machine. */
   private lastStorage: { usageBytes: number; quotaBytes: number } | null = null
+  /** G7 — the main-thread lateness sampler, alive from the press to the stop.
+   *  Null when `?lateness=0` turned it off, and the card then says
+   *  `unmeasured` rather than passing the dimension. */
+  private lateness: LatenessRun | null = null
+  /** What it saw, read at the stop and folded into `stopStats`. */
+  private latenessSummary: LatenessSummary | null = null
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
   private sizeDifferingSinceMs: number | null = null
@@ -1444,6 +1452,29 @@ class Session implements CaptureSession {
     // arm, so a death at +20 s lands inside the take instead of during arming.
     if (isSyntheticMode()) this.cancelDeaths = armSyntheticDeaths(this.channels)
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS)
+    /**
+     * G7 — HOW LATE THIS MAIN THREAD RUNS WHILE THE TAKE RECORDS.
+     *
+     * Started AFTER the press has been served (every acquisition call above is
+     * already kicked and the state is already `recording`), so the instrument
+     * can never be between Robert's finger and the first frame. The clock is a
+     * worker: this document is hidden for essentially the whole take and a
+     * hidden page's timers are clamped to ~1 Hz, so a main-thread timer would
+     * report the throttle as a stall (core/lateness.ts has the measurements).
+     * Sampled every CAPTURE_PERIOD_MS (250) rather than every frame, and that
+     * number is a measured budget rather than a taste: a wake-up costs ~50 us
+     * of main thread whoever asks for it (a do-nothing `setInterval(16)` costs
+     * 3.15 ms/s on this machine), so 62 of them a second would spend 20 s of an
+     * hour-long take's main thread — the same thread B12 says loses audio when
+     * it is starved. The editor, whose window is 15 s, samples every frame.
+     *
+     * Task attribution is OFF here: this document is hidden, where neither
+     * long-animation-frame nor longtask reports anything (E1), so the observer
+     * could only cost — and on a native-res take with the page visible it cost
+     * enough to name ITSELF as the take's worst task. `?lateness=0` turns the
+     * whole thing off; what it costs is measured in docs/FLAGS.md.
+     */
+    this.lateness = startLateness({ owners: false, periodMs: CAPTURE_PERIOD_MS })
     this.startComposite()
     this.acquireWakeLock()
     this.writeManifest()
@@ -2497,6 +2528,16 @@ class Session implements CaptureSession {
     if (this.tickTimer !== null) {
       clearInterval(this.tickTimer)
       this.tickTimer = null
+    }
+    // G7 — THE LATENESS WINDOW IS THE TAKE, and it closes here rather than at
+    // the end of the stop drain: everything after this point is muxing, saving
+    // and the report card itself, which is not what "how late did the main
+    // thread run while recording" is asking about. Reading it here also means a
+    // CANCELLED take takes its worker with it — this is the only teardown both
+    // paths share.
+    if (this.lateness) {
+      this.latenessSummary = this.lateness.stop()
+      this.lateness = null
     }
     // H4 harness: a take that stops before a scheduled death takes its timers
     // with it, so nothing kills a track belonging to the next take.
@@ -3675,6 +3716,9 @@ class Session implements CaptureSession {
         // whether it was applied, refused or failed.
         ...(door.decisions.length ? { decisions: door.decisions } : null),
         ...(door.droppedDecisions ? { decisionsDropped: door.droppedDecisions } : null),
+        // G7 — MAIN-THREAD LATENESS, already measured and already stopped
+        // (clearTick, at the top of the stop). Nothing is sampled here.
+        ...(this.latenessSummary ? { lateness: this.latenessSummary } : null),
       }
       recording.stopStats = stats
     } catch {
