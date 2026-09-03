@@ -968,3 +968,31 @@ and draining an encoder that is behind). Fix the seam and the rung is simply the
 WHAT IS STILL TRUE FROM (21): the elastic system and max's floor are one system, not two — same
 detector, same sampler, same `ladderDecision`, same ledger — and max is the one mode it does not reach
 today, because it opens no composite and the composite is where all of it lives.
+
+session 2026-09-03 — G6(g)+(h) CLOSE THE PACK: A GATE THAT GRADES EFFORT CONVICTS THE INNOCENT. (g) The
+report card's `rescue` dimension was unpassable and the mechanism is the lesson. A revive fires after
+seconds of pure digital zeros on a track that is live and unmuted; from inside the tap, a paused tab and
+a dead tap are the same picture. The dimension graded ATTEMPTS, so a quiet source produced attempts,
+attempts produced red, and every honest long take was convicted — rec_gpsoujs2sydf, 63 attempts across
+15 silent runs, RED, when Robert confirmed every run was a quiet tab. It made A1's gate 2 unreadable for
+a day. THE ONE INSTANT THE TWO DIFFER is just after a rebuild: a tap that was dead while the source
+played sees signal immediately on the fresh clone, a quiet source keeps delivering zeros. So capture
+records `revive-recovered` when sound returns within a second of a rebuild, and the card convicts on
+recovered LOSS. A tap that stays dead is not lost here — `audio-continuity` owns it through
+`silentTailMs`, which is the same fault measured as what it cost. Gates met: the 15-run quiet-tab take
+grades GREEN and says "no audio was lost"; a synthetic dead tap (same late revive, sound back 400 ms
+later) still grades RED and names the channel; the 50-minute take that really lost 27.5 minutes stays
+RED, and its headline now leads with the 27.5 minutes lost instead of with "6 revive bursts".
+(h) `ChannelDiagnostics.audioTap` records which tap carried the PCM. The two lose different things — the
+worklet tap drops ~10 % of a take's audio time on saturated cores, the track tap none — and the choice is
+made at arm from capability and a flag, so it varies between two takes on ONE build. A1's gate 2 could
+not verify its own premise because the answer was a console line on a machine since closed. Gate met off
+the ARTIFACT, not the console (`scripts/g6h-tapcheck.mjs` reads the persisted recording out of
+IndexedDB): default build reports tap=track on both audio channels, ch=2, sr=48000; under
+`?audiotap=worklet` both report tap=worklet. The field tracks the choice rather than being a constant.
+THE PACK'S ONE SENTENCE, across all eight parts: every gate in this repo was written to catch a product
+defect, and four of them were catching the MACHINE and two were catching our own effort. A gate that
+cannot tell its own noise from a finding is worse than no gate, because a session believes it and lands
+a fix for a bug that was never there. What is left unnamed and is written down as unnamed: the 120 s
+cell's ~1/3 CDP death did not reproduce on a quiet machine (3/3 clean), so it is mitigated — 3 retries
+and the logs finally kept — and not solved.
