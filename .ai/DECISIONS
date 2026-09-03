@@ -948,3 +948,23 @@ WHAT IS ON, MEASURED BEFORE THE FLIP (rig `exp floor`, 2560x1440@60 + camera, en
 unseen work sheds first, then camera 60→30 at +841 ms, then screen 60→30, and everything returns in
 reverse — screen back at 60 fps 895 ms after the load lifted, camera 3,975 ms. One segment, zero seams,
 audio silent tail 0, every event through M1's door. Armed on a calm take it takes no rung at all.
+
+2026-09-03 robert (22) — (21) IS SUPERSEDED, AND THE MISREADING IS THE LESSON. Two corrections in his
+own words, both against an agent (me) that had already shipped on the first one:
+  "MAX ELASTIC OFF UNTIL I SAY SO"
+  "no rule for resolution first fps, only after that is resolution"
+WHAT (21) GOT WRONG. He had said "it must be fucking same elastic shit we have for everything else now,
+it is just turned off for max to test it". That is a statement about WHAT THE THING IS — one elastic
+system, not a mode of its own — and about WHERE IT STANDS: off, under test. It was read as permission
+to move the default, and `?floor=` shipped ON for about an hour before he caught it. A default is
+behaviour a user can see; it moves on a yes said ABOUT THE DEFAULT and on nothing else, and an
+ambiguous sentence is a question to ask, not a mandate to find. Reverted the same hour.
+AND THE ORDER OF SACRIFICE IS NOT "NEVER THE SIZE". (21) also concluded, from his 2026-08-29 "if
+something needs to be dropped it must be fps not resolution", that the size may never move. He says
+that is wrong: the rule is an ORDER — the rate goes FIRST, and after the rate is spent, resolution is
+next. So M1's `?floorres=` rung is legitimate in principle and stays off for the MEASURED reason alone
+(a 5,047 ms seam taken under load against 30 ms taken idle: moving the size means closing the segment
+and draining an encoder that is behind). Fix the seam and the rung is simply the next thing to give up.
+WHAT IS STILL TRUE FROM (21): the elastic system and max's floor are one system, not two — same
+detector, same sampler, same `ladderDecision`, same ledger — and max is the one mode it does not reach
+today, because it opens no composite and the composite is where all of it lives.

@@ -34,9 +34,9 @@ afterEach(() => {
   setFloorResolutionRung(null)
 })
 
-describe('the elastic system reaches max, and stops at the rate', () => {
-  it('is ON by default — Robert 2026-09-03, "same elastic shit we have for everything else"', () => {
-    expect(emergencyFloorEnabled()).toBe(true)
+describe('the elastic system reaches max, and only when Robert says so', () => {
+  it('is OFF by default — Robert 2026-09-03, "MAX ELASTIC OFF UNTIL I SAY SO"', () => {
+    expect(emergencyFloorEnabled()).toBe(false)
   })
 
   it('and the SIZE is still not a dial: the rung is off, as everywhere else', () => {

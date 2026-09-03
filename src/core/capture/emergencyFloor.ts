@@ -44,25 +44,29 @@
 import { evenDown } from '@core/frame'
 
 /**
- * ON — Robert flipped it 2026-09-03, and the words are the reason it is not a
- * mode: "it must be fucking same elastic shit we have for everything else now,
- * it is just turned off for max to test it".
+ * OFF, AND IT STAYS OFF UNTIL ROBERT SAYS OTHERWISE — 2026-09-03: "MAX ELASTIC
+ * OFF UNTIL I SAY SO".
  *
- * So this is not an emergency mode bolted onto max. It is THE elastic system —
- * the same detector, the same sampler, the same ladder rules, the same ledger —
- * finally reaching the one place that had none, because max opens no composite
- * and the composite was where all of it lived. The flag remains as the runtime
- * fallback the frozen rule requires, and as the A/B control any measurement of
- * it needs.
+ * IT WAS FLIPPED ON FOR AN HOUR THAT DAY AND THAT WAS MY ERROR, recorded here
+ * because the next agent will be tempted the same way. He said: "it must be
+ * fucking same elastic shit we have for everything else now, it is just turned
+ * off for max to test it" — a statement about WHAT THIS IS (the one elastic
+ * system, not a mode of its own) and about where it stands (off, under test).
+ * I read the first half as an instruction to move the default and shipped it.
+ * A default is behaviour a user can see, and behaviour moves on his yes, said
+ * about the default, and nothing else.
  *
- * WHAT IT COSTS A TAKE THAT NEVER NEEDS IT, measured before the flip (the rig's
- * `calm` lane, 45 s at 2560x1440@60 with it armed): no rung taken, one screen
- * segment, 60 fps throughout, and the only lines in the ledger are the ones
- * every take writes. The instrument itself is a 16 ms ticker in the worker that
- * is already encoding — the same one the compositor has run since E1.
+ * WHAT IT IS, which the same sentence settles: not an emergency mode bolted
+ * onto max, but THE elastic system — the same detector, sampler, ladder rules
+ * and ledger — reaching the one place that had none, because max opens no
+ * composite and the composite is where all of it lived.
  *
- *   ?floor=0      (this load only — max exactly as it shipped: no sampler at
- *                  all, nothing steps, frames drop where they fall)
+ * WHAT IT COSTS A TAKE THAT NEVER NEEDS IT, measured with it armed (the rig's
+ * `calm` lane, 45 s at 2560x1440@60): no rung taken, one screen segment, 60 fps
+ * throughout. With it off the raw worker is not even asked to sample: no
+ * ticker, no counters, max byte-for-byte as it shipped.
+ *
+ *   ?floor=1      (this load only)
  *   localStorage['inout.capture.floor']   (sticky)
  */
 const FLAG_KEY = 'inout.capture.floor'
@@ -85,7 +89,7 @@ function fromStorage(): boolean | null {
 let override: boolean | null = null
 
 export function emergencyFloorEnabled(): boolean {
-  return fromSearch() ?? override ?? fromStorage() ?? true
+  return fromSearch() ?? override ?? fromStorage() ?? false
 }
 
 export function setEmergencyFloor(on: boolean | null): void {
