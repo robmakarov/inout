@@ -144,8 +144,7 @@ export class LatenessTally {
   private maxAtMs = 0
   private firstAtMs: number | null = null
   private lastAtMs = 0
-  private lastSeq = 0
-  private missed = 0
+
   /** The window being filled, and the three worst finished ones. */
   private winStart = 0
   private winMax = 0
@@ -163,20 +162,13 @@ export class LatenessTally {
   }
 
   /** `atMs` is from the sampler's start; `lateMs` is arrival − due. */
-  push(atMs: number, lateMs: number, seq?: number): void {
+  push(atMs: number, lateMs: number): void {
     const late = lateMs > 0 ? lateMs : 0
     if (this.firstAtMs === null) {
       this.firstAtMs = atMs
       this.winStart = Math.floor(atMs / WINDOW_MS) * WINDOW_MS
     }
     this.lastAtMs = atMs
-    if (seq !== undefined) {
-      // The worker's sequence is the schedule's own count, so a beat that never
-      // reached the main thread is a hole in it. This is the only way a frozen
-      // page is distinguishable from a quiet one.
-      if (this.lastSeq && seq > this.lastSeq + 1) this.missed += seq - this.lastSeq - 1
-      this.lastSeq = seq
-    }
     this.samples++
     if (late > FRAME_MS) this.overFrame++
     if (late > this.maxMs) {
@@ -260,7 +252,11 @@ export class LatenessTally {
       periodMs: this.periodMs,
       spanMs: Math.round(spanMs),
       samples: this.samples,
-      missed: this.missed,
+      // A HOLE IN THE SCHEDULE, off the span alone: the schedule owed one beat
+      // per period plus the first, and what did not arrive was never serviced.
+      // The worker used to number its beats for this and the field cost more
+      // than the answer is worth (see the worker's `Beat`).
+      missed: Math.max(0, Math.round(spanMs / this.periodMs) + 1 - this.samples),
       maxMs: round(this.maxMs),
       maxAtMs: Math.round(this.maxAtMs),
       p50Ms: this.quantile(0.5),
@@ -403,14 +399,14 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
     observer = null
   }
 
-  const onBeat = (due: number, workerLateMs: number, seq: number): void => {
+  const onBeat = (due: number): void => {
     const timed = beats++ % COST_EVERY === 0
     const now = performance.now()
-    // WHY THE WORKER'S OWN LATENESS IS SUBTRACTED: a starved worker serves a
-    // beat late, and charging that to the main thread would read a busy machine
-    // as an unresponsive page. What is left is the main thread's own queueing.
-    const late = origin + now - due - workerLateMs
-    tally.push(now - t0, late, seq)
+    // `due` already carries the worker's own serving lateness (see the worker):
+    // a starved worker must never be charged to the main thread, or a busy
+    // machine reads as an unresponsive page. What is left is this thread's own
+    // queueing delay, which is what a person calls a stall.
+    tally.push(now - t0, origin + now - due)
     if (timed) tally.noteCost(performance.now() - now)
   }
 
@@ -442,9 +438,7 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
 
   try {
     worker = new Worker(new URL('./latenessBeat.worker.ts', import.meta.url), { type: 'module' })
-    worker.onmessage = (ev: MessageEvent<{ due: number; workerLateMs: number; seq: number }>) => {
-      onBeat(ev.data.due, ev.data.workerLateMs, ev.data.seq)
-    }
+    worker.onmessage = (ev: MessageEvent<number>) => onBeat(ev.data)
     worker.onerror = () => {
       // A dead clock is not a dead instrument: fall back, and SAY which one
       // took the reading, because on a hidden document they do not mean the
@@ -467,7 +461,7 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
       seq++
       const due = started + seq * periodMs
       const now = performance.now()
-      tally.push(now - t0, now - due, seq)
+      tally.push(now - t0, now - due)
       let next = started + (seq + 1) * periodMs
       if (next <= now) {
         seq = Math.ceil((now - started) / periodMs)

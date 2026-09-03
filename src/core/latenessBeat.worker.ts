@@ -27,14 +27,22 @@ export interface BeatStart {
 export interface BeatStop {
   type: 'stop'
 }
-/** One beat: when it was DUE, absolute (timeOrigin + schedule), and how late
- *  the worker's own timer was serving it — subtracted by the main thread, so a
- *  starved worker is never charged to the main thread. */
-export interface Beat {
-  due: number
-  workerLateMs: number
-  seq: number
-}
+/**
+ * ONE BEAT IS ONE NUMBER, and that is a measured decision rather than
+ * minimalism: the beat used to be `{due, workerLateMs, seq}`, and posting that
+ * object cost 0.42 ms/s more than posting a bare number at the same rate (1.025
+ * against a 0.604 floor, 250 ms period, 3 x 60 s windows, CDP TaskDuration).
+ * Structured-cloning three fields 4-60 times a second is most of what an
+ * instrument this small can spend.
+ *
+ * The number is the DUE TIME, absolute (`timeOrigin` + schedule), ALREADY
+ * PUSHED FORWARD by however late the worker's own timer was serving it — so a
+ * starved worker is never charged to the main thread, and the main thread's
+ * lateness is `now − beat` with nothing else to compute. The sequence number
+ * went with it: the main thread reads a hole in the schedule off its own span
+ * (`round(span / period) + 1` beats were owed), which needs no field at all.
+ */
+export type Beat = number
 
 const ORIGIN = performance.timeOrigin
 
@@ -47,7 +55,8 @@ function tick(): void {
   const now = performance.now()
   seq++
   const due = start + seq * period
-  const beat: Beat = { due: ORIGIN + due, workerLateMs: Math.max(0, now - due), seq }
+  // Due, in absolute time, plus the worker's own serving lateness — see Beat.
+  const beat: Beat = ORIGIN + due + Math.max(0, now - due)
   ;(self as unknown as Worker).postMessage(beat)
   // ABSOLUTE SCHEDULE, NOT A REPEATING DELAY: after a stall the schedule is
   // where it always was, so the next beat is due immediately and the lateness

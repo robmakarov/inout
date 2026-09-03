@@ -10,10 +10,8 @@ import { FRAME_MS, LatenessTally, LATENESS_BUCKETS_MS, WINDOW_MS } from './laten
  */
 describe('G7 lateness tally', () => {
   /** A quiet second at 60 Hz, starting at `from`. */
-  const quiet = (t: LatenessTally, from: number, lateMs = 0.4, seqFrom = 1): number => {
-    let seq = seqFrom
-    for (let i = 0; i < 62; i++) t.push(from + i * 16, lateMs, seq++)
-    return seq
+  const quiet = (t: LatenessTally, from: number, lateMs = 0.4): void => {
+    for (let i = 0; i < 62; i++) t.push(from + i * 16, lateMs)
   }
 
   it('is empty until something is pushed, and never invents a window', () => {
@@ -26,12 +24,12 @@ describe('G7 lateness tally', () => {
 
   it('names the worst SECOND, not the worst sample’s second only', () => {
     const t = new LatenessTally(16)
-    let seq = quiet(t, 0)
+    quiet(t, 0)
     // A B10-shaped stall at 11.0 s: one long block, then the catch-up.
-    seq = quiet(t, 1_000, 0.4, seq)
-    t.push(11_000, 201.4, seq++)
-    t.push(11_020, 35.2, seq++)
-    quiet(t, 12_000, 0.5, seq)
+    quiet(t, 1_000)
+    t.push(11_000, 201.4)
+    t.push(11_020, 35.2)
+    quiet(t, 12_000, 0.5)
     const s = t.summary('worker-beat', false)
     expect(s.maxMs).toBe(201.4)
     expect(s.maxAtMs).toBe(11_000)
@@ -48,9 +46,9 @@ describe('G7 lateness tally', () => {
 
   it('counts what a frame is, and where the samples fell', () => {
     const t = new LatenessTally(16)
-    t.push(0, 1, 1)
-    t.push(16, FRAME_MS + 0.1, 2)
-    t.push(32, 40, 3)
+    t.push(0, 1)
+    t.push(16, FRAME_MS + 0.1)
+    t.push(32, 40)
     const s = t.summary('worker-beat', false)
     expect(s.overFrame).toBe(2)
     expect(s.samples).toBe(3)
@@ -61,9 +59,9 @@ describe('G7 lateness tally', () => {
 
   it('reads a hole in the schedule as missed beats, not as silence', () => {
     const t = new LatenessTally(16)
-    t.push(0, 0.2, 10)
+    t.push(0, 0.2)
     // The page was frozen: the worker kept counting, the main thread did not.
-    t.push(4_000, 3_800, 260)
+    t.push(4_000, 3_800)
     const s = t.summary('worker-beat', false)
     expect(s.missed).toBe(249)
     expect(s.maxMs).toBe(3_800)
@@ -71,8 +69,8 @@ describe('G7 lateness tally', () => {
 
   it('a stall longer than a window leaves the windows it covered empty', () => {
     const t = new LatenessTally(16)
-    t.push(0, 0.3, 1)
-    t.push(3_500, 3_400, 2)
+    t.push(0, 0.3)
+    t.push(3_500, 3_400)
     const s = t.summary('worker-beat', false)
     // Windows 1 and 2 were never sampled, so they are not reported as clean.
     expect(s.worstWindows.map((w) => w.startMs).sort((a, b) => a - b)).toEqual([0, 3_000])
@@ -81,8 +79,8 @@ describe('G7 lateness tally', () => {
 
   it('percentiles are bucket-interpolated and bounded by the buckets', () => {
     const t = new LatenessTally(16)
-    for (let i = 0; i < 95; i++) t.push(i * 16, 0.5, i + 1)
-    for (let i = 0; i < 5; i++) t.push(1_520 + i * 16, 60, 96 + i)
+    for (let i = 0; i < 95; i++) t.push(i * 16, 0.5)
+    for (let i = 0; i < 5; i++) t.push(1_520 + i * 16, 60)
     const s = t.summary('worker-beat', false)
     expect(s.p50Ms).toBeLessThanOrEqual(1)
     expect(s.p95Ms).toBeGreaterThan(0)
@@ -95,8 +93,8 @@ describe('G7 lateness tally', () => {
     // A beat that arrives before it was due (clock skew between the threads)
     // must not pay for a later one.
     const t = new LatenessTally(16)
-    t.push(0, -5, 1)
-    t.push(16, 20, 2)
+    t.push(0, -5)
+    t.push(16, 20)
     const s = t.summary('worker-beat', false)
     expect(s.maxMs).toBe(20)
     expect(s.worstWindows[0].lateMs).toBe(20)
@@ -121,7 +119,7 @@ describe('G7 lateness tally', () => {
 
   it('charges its own cost per second of span, scaled from the sampled beats', () => {
     const t = new LatenessTally(16)
-    for (let i = 0; i < 1_000; i++) t.push(i * 16, 0.2, i + 1)
+    for (let i = 0; i < 1_000; i++) t.push(i * 16, 0.2)
     // Two timed beats at 0.01 ms each over ~16 s of span.
     t.noteCost(0.01)
     t.noteCost(0.01)
