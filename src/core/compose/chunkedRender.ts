@@ -513,3 +513,43 @@ export function describePlan(input: {
 }): ChunkPlan {
   return planChunks({ ...input, flags: currentRenderFlags() })
 }
+
+/** One piece of the output as something that can be shipped on its own. */
+export interface ShippableChunk {
+  index: number
+  startSec: number
+  endSec: number
+  /** OPFS key. Present on disk only when `ready`. */
+  key: string
+  ready: boolean
+  bytes: number
+}
+
+/**
+ * THE SHIPPING CURSOR, which is the same cursor as the render's and the
+ * resume's — that is the point of naming a file by its content.
+ *
+ * An uploader for multi-device or an instant link wants exactly this: the
+ * output in order, each piece finished and immutable, each one nameable before
+ * it exists so a transfer can be planned against a render that is still
+ * running. It needs no new bookkeeping because there is none to add — a piece
+ * is ready when its file is there, and its file is there only when it is whole.
+ *
+ * Nothing ships anything yet. This is the seam, exported so the uploader that
+ * comes later cannot invent a second answer to "which parts are done".
+ */
+export async function shippableChunks(input: {
+  recording: Recording
+  edit: EditState
+  settings?: ExportSettings
+}): Promise<ShippableChunk[]> {
+  const plan = describePlan(input)
+  const onDisk = await listChunkKeys()
+  const out: ShippableChunk[] = []
+  for (const c of plan.chunks) {
+    const key = chunkKeyFor(await hashDescriptor(c.descriptor))
+    const bytes = onDisk.get(key) ?? 0
+    out.push({ index: c.index, startSec: c.startSec, endSec: c.endSec, key, ready: bytes > 0, bytes })
+  }
+  return out
+}
