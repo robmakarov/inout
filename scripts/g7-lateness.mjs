@@ -364,22 +364,32 @@ async function laneCostTake(chrome, out) {
     costScriptMsPerSec: r3(median(onScript) - median(offScript)),
     samplesSeen: out.costTakeSummary?.samples ?? null,
   }
+  // RESOLUTION, STATED WITH THE NUMBER. A take's own main thread runs at
+  // 460-565 ms/s busy and swings ±100 ms/s between 8 s windows, so a 1 ms/s
+  // effect is not in this lane's reach — one run of it read −103 ms/s, i.e. the
+  // sampled window was "cheaper" than the unsampled one. Quote the spread so
+  // nobody reads the delta as a measurement when it is not one.
+  const spread = Math.max(...off, ...on) - Math.min(...off, ...on)
+  out.costTake.spreadMsPerSec = r3(spread)
+  out.costTake.resolvable = Math.abs(cost) > spread / 2
   out.costTakeVerdict =
     `DURING CAPTURE at ${COST_PERIODS[0]} ms: main thread busy ${r3(median(off))} → ${r3(median(on))} ms/s ` +
-    `(+${r3(cost)}), script ${r3(median(offScript))} → ${r3(median(onScript))} ms/s; ` +
-    `${COST_REPS} × ${COST_SEC} s windows inside one take`
+    `(${cost >= 0 ? '+' : ''}${r3(cost)}), script ${r3(median(offScript))} → ${r3(median(onScript))} ms/s; ` +
+    `${COST_REPS} × ${COST_SEC} s windows inside one take; window-to-window spread ${r3(spread)} ms/s — ` +
+    `${Math.abs(cost) > spread / 2 ? 'resolvable' : 'NOT RESOLVABLE at this load, read the idle-page lane instead'}`
   console.error(`g7: ${out.costTakeVerdict}`)
 }
 
 async function laneTake(chrome, out) {
   const started = await chrome.evaluate(
     `(() => { const b = document.querySelector('button.recbtn'); if (!b) return 'no record button'; b.click(); return 'ok' })()`,
+    120_000,
   )
   if (started !== 'ok') throw new Error(`could not start a take: ${started}`)
   await sleep(TAKE_SEC * 1000)
   await chrome.evaluate(`(() => { document.querySelector('button.recbtn')?.click(); return 'ok' })()`)
   for (let i = 0; i < 90; i++) {
-    const done = await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)
+    const done = await chrome.evaluate(`!!document.querySelector('.tl__ruler')`, 120_000)
     if (done) break
     await sleep(500)
   }
@@ -426,7 +436,7 @@ async function laneDrag(chrome, out) {
   // INSIDE that window — which is the point: B10 is the size probe and a drag
   // on the same thread at the same time.
   for (let i = 0; i < 60; i++) {
-    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)) break
+    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`, 120_000)) break
     await sleep(250)
   }
   out.drag = await chrome.evaluate(DRAG(DRAG_SEC * 1000), 120_000)
@@ -509,7 +519,7 @@ const DRAGCMP = (ms) => `
 
 async function laneDragCmp(chrome, out) {
   for (let i = 0; i < 60; i++) {
-    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)) break
+    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`, 120_000)) break
     await sleep(250)
   }
   // Wait out the size probe or not — B10's gate is the run WITHOUT the wait,
