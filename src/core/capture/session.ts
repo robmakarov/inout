@@ -1461,10 +1461,13 @@ class Session implements CaptureSession {
      * worker: this document is hidden for essentially the whole take and a
      * hidden page's timers are clamped to ~1 Hz, so a main-thread timer would
      * report the throttle as a stall (core/lateness.ts has the measurements).
-     * Costs the take a few hundredths of a millisecond per second and carries
-     * its own measurement of that; `?lateness=0` turns it off.
+     * Task attribution is OFF here: this document is hidden, where neither
+     * long-animation-frame nor longtask reports anything (E1), so the observer
+     * could only cost — and on a native-res take with the page visible it cost
+     * enough to name ITSELF as the take's worst task. `?lateness=0` turns the
+     * whole thing off; what it costs is measured in docs/FLAGS.md.
      */
-    this.lateness = startLateness()
+    this.lateness = startLateness({ owners: false })
     this.startComposite()
     this.acquireWakeLock()
     this.writeManifest()

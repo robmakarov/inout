@@ -129,7 +129,10 @@ createRoot(document.getElementById('root')!).render(
   /** The same sampler with the window left open — for a page-side script that
    *  has to start it, do something, and stop it. The cost A/B does exactly
    *  that, in one expression, so the handle never leaves the page. */
-  g.__inoutLatenessStart = async () => (await import('@core/lateness')).startLateness()
+  g.__inoutLatenessStart = async (opts?: unknown) =>
+    (await import('@core/lateness')).startLateness(
+      (opts ?? {}) as { periodMs?: number; owners?: boolean },
+    )
 }
 
 // Offline start (task P2). PRODUCTION ONLY: a service worker in front of the

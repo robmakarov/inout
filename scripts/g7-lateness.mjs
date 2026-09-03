@@ -57,8 +57,16 @@ const TAKE_SEC = Number(arg('take', '20'))
 const CLAMP_SEC = Number(arg('clamp', '20'))
 const COST_REPS = Number(arg('reps', '3'))
 const COST_SEC = Number(arg('costsec', '8'))
+const COST_PERIODS = arg('periods', '16,32,64').split(',').map(Number)
 const DRAG_SEC = Number(arg('drag', '13'))
+/** B10's gate is the drag WITHOUT the wait — `--waitprobe` puts the wait back
+ *  (the control editor-drag-cost.mjs takes today). */
+const WAIT_PROBE = args.includes('--waitprobe')
 const EXTERNAL = arg('url', '')
+/** Measure on the PRODUCTION bundle. The dev server serves ~500 unbundled ES
+ *  modules and an HMR client; a cost number read there is not the cost a take
+ *  pays. `npm run build` then `vite preview`. */
+const BUILD = args.includes('--build')
 const QUERY = arg('query', 'synthetic=1')
 
 const median = (xs) => {
@@ -164,11 +172,11 @@ const CLAMP = (ms, period) => `
  * TaskDuration divided by the window IS the cost per second of wall clock. No
  * workload, no throughput arithmetic, nothing to be swamped by.
  */
-const IDLE = (ms, sampling) => `
+const IDLE = (ms, opts) => `
 (async () => {
-  ${sampling ? 'const run = await window.__inoutLatenessStart()' : ''}
+  ${opts ? `const run = await window.__inoutLatenessStart(${JSON.stringify(opts)})` : ''}
   await new Promise((r) => setTimeout(r, ${ms}))
-  ${sampling ? 'const summary = run.stop()' : 'const summary = null'}
+  ${opts ? 'const summary = run.stop()' : 'const summary = null'}
   return { summary }
 })()
 `
@@ -209,41 +217,47 @@ async function laneCost(chrome, out) {
     return { task: get('TaskDuration'), script: get('ScriptDuration'), layout: get('LayoutDuration') }
   }
   const windowMs = COST_SEC * 1000
-  const on = []
-  const off = []
+  // THE SWEEP, because "what does it cost" has two knobs and the answer has to
+  // say which one is spending: the beat rate (a task per beat) and the
+  // long-animation-frame observer (which reports nothing on a hidden document
+  // and so is pure cost during a take).
+  const configs = [
+    { label: 'off', opts: null },
+    ...COST_PERIODS.map((periodMs) => ({ label: `${periodMs}ms`, opts: { periodMs, owners: false } })),
+    { label: `${COST_PERIODS[0]}ms+owners`, opts: { periodMs: COST_PERIODS[0], owners: true } },
+  ]
+  const busy = new Map(configs.map((c) => [c.label, []]))
   for (let i = 0; i < COST_REPS; i++) {
-    // Alternating, always off first, so a machine that warms or throttles over
-    // the run cannot masquerade as the cost of sampling.
-    for (const sampling of [false, true]) {
+    for (const c of configs) {
       const before = await metrics()
-      const r = await chrome.evaluate(IDLE(windowMs, sampling), windowMs + 60_000)
+      const r = await chrome.evaluate(IDLE(windowMs, c.opts), windowMs + 60_000)
       const after = await metrics()
-      const busyMsPerSec = ((after.task - before.task) / (windowMs / 1000)) * 1000
-      ;(sampling ? on : off).push(busyMsPerSec)
-      if (sampling && r?.summary) out.costSummary = r.summary
+      busy.get(c.label).push(((after.task - before.task) / (windowMs / 1000)) * 1000)
+      if (c.opts && r?.summary) out.costSummary = r.summary
     }
   }
-  const mOn = median(on)
-  const mOff = median(off)
-  const perSec = mOn - mOff
+  const idle = median(busy.get('off'))
+  const rows = configs
+    .filter((c) => c.opts)
+    .map((c) => ({
+      config: c.label,
+      busyMsPerSec: r3(median(busy.get(c.label))),
+      costMsPerSec: r3(median(busy.get(c.label)) - idle),
+      samples: busy.get(c.label).map(r3),
+    }))
   out.cost = {
     method: 'CDP Performance.getMetrics TaskDuration, idle page, equal windows',
+    build: BUILD ? 'production bundle (vite preview)' : 'dev server',
     windowMs,
     reps: COST_REPS,
-    offBusyMsPerSec: off.map(r3),
-    onBusyMsPerSec: on.map(r3),
-    medianOffMsPerSec: r3(mOff),
-    medianOnMsPerSec: r3(mOn),
-    costMsPerSec: r3(perSec),
+    idleBusyMsPerSec: r3(idle),
+    rows,
     selfReportedMsPerSec: out.costSummary?.selfCostMsPerSec ?? null,
-    samplesSeen: out.costSummary?.samples ?? null,
-    periodMs: out.costSummary?.periodMs ?? null,
   }
   out.costVerdict =
-    `sampling costs ${r3(perSec)} ms of main thread per second ` +
-    `(idle page busy ${r3(mOff)} → ${r3(mOn)} ms/s, median of ${COST_REPS} × ${COST_SEC} s); ` +
-    `the sampler's own reading: ${out.costSummary?.selfCostMsPerSec ?? '?'} ms/s over ` +
-    `${out.costSummary?.samples ?? '?'} samples at ${out.costSummary?.periodMs ?? '?'} ms`
+    `idle page ${r3(idle)} ms/s busy; ` +
+    rows.map((r) => `${r.config} +${r.costMsPerSec} ms/s`).join(' · ') +
+    ` (${BUILD ? 'built bundle' : 'dev server'}, ${COST_REPS} × ${COST_SEC} s)`
   console.error(`g7: ${out.costVerdict}`)
 }
 
@@ -310,6 +324,105 @@ async function laneDrag(chrome, out) {
   out.dragVerdict = out.editorVerdict
 }
 
+/**
+ * THE TWO INSTRUMENTS, ONE DRAG — and this lane exists because they disagreed.
+ *
+ * editor-drag-cost.mjs measured 35-201 ms stalls with a MAIN-THREAD
+ * `setInterval(16)` ticker (`now - last - period`); the product's sampler, on
+ * the same shape of take and the same drag, read a worst second of 16.2 ms. One
+ * of those is wrong and no amount of reasoning settles which, so both run in the
+ * SAME page over the SAME drag and the answer is the pair.
+ *
+ * The two are not measuring quite the same thing, which is the hypothesis under
+ * test: an interval ticker measures the gap between ITS OWN callbacks (a task
+ * that is itself queued behind the drag handlers), and the worker beat measures
+ * how long the main thread took to accept an arrival it did not schedule.
+ */
+const DRAGCMP = (ms) => `
+(async () => {
+  const el = document.querySelector('.tl__ruler')
+  if (!el) return { error: 'no timeline ruler — is the editor open?' }
+  const r = el.getBoundingClientRect()
+  const y = r.top + r.height / 2
+  const x0 = r.left + 8
+  const x1 = r.right - 8
+
+  // (1) the product's own instrument, driven for exactly this window
+  const run = await window.__inoutLatenessStart({ periodMs: 16 })
+
+  // (2) editor-drag-cost.mjs's ticker, verbatim in shape
+  const period = 16
+  const late = []
+  const spikes = []
+  const t00 = performance.now()
+  let last = performance.now()
+  const timer = setInterval(() => {
+    const now = performance.now()
+    const l = Math.max(0, now - last - period)
+    late.push(l)
+    if (l > 30) spikes.push({ atMs: Math.round(now - t00), lateMs: Math.round(l) })
+    last = now
+  }, period)
+
+  const pd = (type, x) =>
+    el.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, pointerId: 1, isPrimary: true }))
+  pd('pointerdown', x0)
+  const t0 = performance.now()
+  let moves = 0
+  while (performance.now() - t0 < ${ms}) {
+    const phase = ((performance.now() - t0) % 4000) / 4000
+    pd('pointermove', x0 + (x1 - x0) * (phase < 0.5 ? phase * 2 : 2 - phase * 2))
+    moves++
+    await new Promise((res) => setTimeout(res, 16))
+  }
+  pd('pointerup', x1)
+  clearInterval(timer)
+  const summary = run.stop()
+
+  late.sort((a, b) => a - b)
+  const at = (q) => (late.length ? Math.round(late[Math.min(late.length - 1, Math.floor(q * late.length))] * 10) / 10 : null)
+  return {
+    moves,
+    ticker: {
+      ticks: late.length,
+      hz: Math.round((late.length / (${ms} / 1000)) * 10) / 10,
+      p50LateMs: at(0.5),
+      p95LateMs: at(0.95),
+      maxLateMs: late.length ? Math.round(late[late.length - 1] * 10) / 10 : null,
+      totalLateMs: Math.round(late.reduce((a, b) => a + b, 0)),
+      spikes,
+    },
+    sampler: summary,
+  }
+})()
+`
+
+async function laneDragCmp(chrome, out) {
+  for (let i = 0; i < 60; i++) {
+    if (await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)) break
+    await sleep(250)
+  }
+  // Wait out the size probe or not — B10's gate is the run WITHOUT the wait,
+  // which is the window its stalls were measured in.
+  if (WAIT_PROBE) {
+    for (let i = 0; i < 120; i++) {
+      if (chrome.consoleLines.some((l) => l.includes('size probe'))) break
+      await sleep(500)
+    }
+    await sleep(1000)
+  }
+  const r = await chrome.evaluate(DRAGCMP(DRAG_SEC * 1000), 180_000)
+  out.dragcmp = r
+  const t = r?.ticker
+  const sm = r?.sampler
+  out.dragcmpVerdict =
+    `same drag, two instruments — interval ticker: p50 ${t?.p50LateMs} / p95 ${t?.p95LateMs} / max ` +
+    `${t?.maxLateMs} ms over ${t?.ticks} ticks (${t?.spikes?.length ?? 0} spikes > 30 ms); ` +
+    `worker beat: p50 ${sm?.p50Ms} / p95 ${sm?.p95Ms} / max ${sm?.maxMs} ms over ${sm?.samples} samples, ` +
+    `worst second ${sm?.worstWindows?.[0]?.maxMs} ms at ${(sm?.worstWindows?.[0]?.startMs ?? 0) / 1000}s`
+  console.error(`g7: ${out.dragcmpVerdict}`)
+}
+
 async function laneEditor(chrome, out) {
   // The editor's own sampler started on its mount and stops itself at 15 s.
   // Poll rather than sleep: the auto-stop is a timer like any other.
@@ -365,12 +478,22 @@ async function main() {
     // Vite binds `localhost`, which on this machine is ::1 ALONE — a 127.0.0.1
     // URL is refused and reads as "the server never came up".
     base = `http://localhost:${port}`
-    vite = spawn('npm', ['run', 'dev', '--', '--port', String(port), '--strictPort'], {
-      cwd: ROOT,
-      stdio: 'pipe',
-    })
-    await waitForHttp(`${base}/index.html`, Date.now() + 90_000)
-    console.error(`g7: dev server on ${base} (this worktree)`)
+    if (BUILD) {
+      console.error('g7: building the production bundle (npm run build) …')
+      await new Promise((res, rej) => {
+        const b = spawn('npm', ['run', 'build'], { cwd: ROOT, stdio: 'inherit' })
+        b.on('exit', (code) => (code === 0 ? res() : rej(new Error(`build failed (${code})`))))
+      })
+    }
+    vite = spawn(
+      'npm',
+      BUILD
+        ? ['run', 'preview', '--', '--port', String(port), '--strictPort']
+        : ['run', 'dev', '--', '--port', String(port), '--strictPort'],
+      { cwd: ROOT, stdio: 'pipe' },
+    )
+    await waitForHttp(`${base}/index.html`, Date.now() + 120_000)
+    console.error(`g7: ${BUILD ? 'preview (built bundle)' : 'dev server'} on ${base}`)
   }
   out.url = `${base}/?${QUERY}`
 
@@ -394,7 +517,7 @@ async function main() {
       await quitChrome(chrome).catch(() => undefined)
       chrome = null
     }
-    if (LANES.some((l) => ['cost', 'take', 'editor', 'drag'].includes(l))) {
+    if (LANES.some((l) => ['cost', 'take', 'editor', 'drag', 'dragcmp'].includes(l))) {
       chrome = await openChrome(false)
       await sleep(2500)
       const visible = await chrome.evaluate('document.visibilityState')
@@ -406,6 +529,7 @@ async function main() {
       if (LANES.includes('take')) await laneTake(chrome, out)
       // `drag` runs the editor lane itself — asking for both would grade the
       // second 15 s window, which nothing sampled.
+      if (LANES.includes('dragcmp')) await laneDragCmp(chrome, out)
       if (LANES.includes('drag')) await laneDrag(chrome, out)
       else if (LANES.includes('editor')) await laneEditor(chrome, out)
     }

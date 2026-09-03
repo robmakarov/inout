@@ -851,8 +851,12 @@ export function latenessDimension(
       : 'no full window was sampled',
     `p50 ${s.p50Ms} · p95 ${s.p95Ms} · max ${s.maxMs} ms at ${secs(s.maxAtMs)}`,
     `${s.overFrame} of ${s.samples} samples over one frame (${s.frameMs} ms)`,
+    // NOT the self-cost: it times the handler body alone and reads ~10x under
+    // the renderer's own task accounting (0.783 vs 7.4 ms/s on one run), so
+    // quoting it on a card would be a claim the card cannot support. What
+    // sampling costs is measured from outside and lives in docs/FLAGS.md.
     `sampled every ${s.periodMs} ms by ${s.source}, document hidden ${pct(s.hiddenRatio)} of ` +
-      `${dur(s.spanMs)}, costing ${s.selfCostMsPerSec} ms/s`,
+      `${dur(s.spanMs)}`,
   ]
   // A hole in the schedule means the page was frozen or the worker starved, and
   // every number above is then a FLOOR. Say it where it cannot be missed.

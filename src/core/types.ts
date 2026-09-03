@@ -543,10 +543,17 @@ export interface LatenessSummary {
    *  document, i.e. it is the browser's throttle and must not be quoted as
    *  machine lateness. */
   clamped?: boolean
-  /** The sampler's own main-thread cost, ms per second of sampling, measured by
-   *  the sampler on one beat in 64 (so the measurement is 1/64 of the cost it
-   *  reports). The rig's A/B is the authority; this is the number a take
-   *  carries so no card has to trust the rig. */
+  /**
+   * The sampler's HANDLER BODY, ms per second, timed on one beat in 64.
+   *
+   * NOT THE COST OF SAMPLING, and the difference is measured: 0.783 ms/s here
+   * against 7.4 ms/s of renderer task time for the same run (CDP
+   * `Performance.getMetrics`). What it misses is the wake-up — delivering a
+   * message to the main thread is a TASK, and the task is most of the price.
+   * Kept because it is the only cost figure a take can carry by itself; the
+   * number that answers "what does this cost" lives in docs/FLAGS.md and is
+   * measured from outside.
+   */
   selfCostMsPerSec: number
 }
 

@@ -295,6 +295,19 @@ interface StartOptions {
   /** Called with the summary when the run ends, however it ends. */
   onDone?: (s: LatenessSummary) => void
   periodMs?: number
+  /**
+   * Watch long-animation-frame / longtask for ATTRIBUTION. Default true.
+   *
+   * OFF DURING A TAKE, and that is a measurement rather than a preference: the
+   * document is hidden for essentially the whole take and neither API reports
+   * on a hidden document (E1: 0 entries in 74 s), so the observer can only cost
+   * there. It cost more than that — on a native-resolution take with the page
+   * visible, the card's own "worst task" came back as
+   * `lateness.ts via PerformanceObserverCallback`, i.e. the instrument was
+   * naming ITSELF as the take's worst offender. An instrument that makes the
+   * stall it reports is worth nothing.
+   */
+  owners?: boolean
 }
 
 /**
@@ -338,16 +351,20 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
      and not the measurement. */
   let observer: PerformanceObserver | null = null
   try {
+    if (opts.owners === false) throw new Error('attribution off')
     observer = new PerformanceObserver((list) => {
       for (const e of list.getEntries()) tally.noteOwner(describeOwner(e, t0))
     })
     try {
       observer.observe({
         type: 'long-animation-frame',
-        // Below the Phase-1 claim, so the entry that explains a 35 ms stall
-        // exists. The browser clamps this to its own floor (16 ms) if it is
-        // lower than that.
-        durationThreshold: STALL_FAIL_MS - 5,
+        // 50 ms — the spec's own default and the definition of a long task.
+        // The first cut asked for 25 (below the Phase-1 claim, so that the
+        // entry explaining a 35 ms stall would exist) and that observer fired
+        // often enough to appear in its own readings. Attribution is a hint
+        // about a stall the SAMPLES already measured; it is not the measurement,
+        // and it may not cost the measurement anything.
+        durationThreshold: 50,
       } as PerformanceObserverInit)
     } catch {
       observer.observe({ entryTypes: ['longtask'] })
