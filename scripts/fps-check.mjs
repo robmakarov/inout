@@ -84,7 +84,7 @@ function parseArgs(argv) {
   // has no GPU here, the raw channel's WebCodecs path times out and falls back
   // to MediaRecorder — a different file answering a different question. Headed
   // is also what makes rAF run at all, which this test depends on absolutely.
-  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '', armAfterMs: 0, profile: null }
+  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '', armAfterMs: 0, profile: null, camera: false }
   for (const a of argv) {
     if (a === '--headed') o.headed = true
     else if (a === '--headless') o.headed = false
@@ -105,6 +105,11 @@ function parseArgs(argv) {
     // "pressed cold, on a profile that has used the app before" is a different
     // product from "pressed cold, ever" and only a kept profile can show it.
     else if (a.startsWith('--profile=')) o.profile = a.slice(10)
+    // ARM THE CAMERA TOO. Screen-only is this rig's default because the screen
+    // is the channel `?screenfps=` steers — but max+CAMERA is a different take
+    // in the one way that matters here: it is the case where the live composite
+    // is opened, so it is the only lane that can show whether max opens one.
+    else if (a === '--camera') o.camera = true
     else if (a.startsWith('--out=')) o.out = a.slice(6)
     else if (a.startsWith('--bin=')) o.bin = a.slice(6)
     else if (a.startsWith('--lane=')) o.lanes = [Number(a.slice(7))]
@@ -494,7 +499,8 @@ async function runLane(sourceFps) {
     // so the same run proves the copy fence lets 60/60 through.
     lane.chips = await evalJson(
       `(async () => {
-        const want = { Screen: true, Camera: false, Mic: true, 'Tab Audio': false }
+        const CAMERA = ${opts.camera}
+        const want = { Screen: true, Camera: CAMERA, Mic: true, 'Tab Audio': false }
         const read = () => {
           const out = {}
           for (const b of document.querySelectorAll('.chips button')) {
@@ -518,7 +524,7 @@ async function runLane(sourceFps) {
       null,
     )
     lane.gates.screenOnlyConfig =
-      !!lane.chips && lane.chips.Screen === true && lane.chips.Camera === false
+      !!lane.chips && lane.chips.Screen === true && lane.chips.Camera === opts.camera
 
     // THE INSTRUMENT'S OWN PRECONDITION. rAF is what paints the synthetic
     // screen; a window that is not compositing runs it at 0 and the take that

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { setQualityStep } from '@core/qualityStep'
 import {
   captureQualityMode,
   preemptiveRefusalAllowed,
@@ -40,12 +41,14 @@ describe('the mode', () => {
     expect(preemptiveRefusalAllowed()).toBe(true)
   })
 
-  it('MAX HAS NO LADDER — Robert: "max must have perfect picture all the time"', () => {
-    // I argued for keeping it (dropped frames are a slideshow where a lower
-    // rate is smooth) and was overruled. The right consequence is not policy
-    // but load: max is made to work by opening FEWER ENCODERS — no composite at
-    // native resolution — rather than by throttling the take. A mode that
-    // survives because it was throttled was never max.
+  it('THE PICTURE STEP IS OFF IN MAX TODAY — a switch position, not a property of max', () => {
+    // Robert, 2026-09-03, correcting this exact comment for the second time:
+    // "elastic must work for max, it is just now turned off so we polish max
+    // without it" · "until i say so". Elastic is ONE system and max is inside
+    // it. While it is off, max is meanwhile made to work by opening FEWER
+    // ENCODERS — no composite at native resolution — rather than by throttling
+    // the take. The test below pins that it is REACHABLE, which is the half
+    // that stops this becoming a deleted branch.
     setCaptureQualityMode('max')
     expect(rateLadderAllowed()).toBe(false)
     setCaptureQualityMode('auto')
@@ -69,5 +72,55 @@ describe('the mode', () => {
       /* memory-only environment — the default is what is being asserted */
     }
     expect(captureQualityMode()).toBe('auto')
+  })
+})
+
+/**
+ * THE SLIDER IS THE CHOICE — Robert, 2026-09-03: "fucking max slider must be
+ * max", said after B14 found that it was not.
+ *
+ * `frame.sourceResEnabled()` and `rate.sourceRateEnabled()` have defaulted from
+ * the quality step since UI1. This one did not, and nothing outside the test
+ * panel ever set it — so dragging the slider to Max bought the max RESOLUTION
+ * and the max RATE and none of the max BEHAVIOUR.
+ */
+describe('the slider decides the mode', () => {
+  afterEach(() => {
+    setQualityStep(null)
+    setCaptureQualityMode(null)
+  })
+
+  it('the max STEP is the max MODE', () => {
+    setQualityStep('max')
+    expect(captureQualityMode()).toBe('max')
+    // …which is the whole point: a take at max is not refused before it starts.
+    expect(preemptiveRefusalAllowed()).toBe(false)
+  })
+
+  it('every step below max is exactly the product it was', () => {
+    for (const step of ['540p', '720p', '1080p', '1440p'] as const) {
+      setQualityStep(step)
+      expect(captureQualityMode()).toBe('auto')
+      expect(preemptiveRefusalAllowed()).toBe(true)
+      expect(rateLadderAllowed()).toBe(true)
+    }
+  })
+
+  it('and the flag still overrides the slider, in both directions', () => {
+    setQualityStep('max')
+    setCaptureQualityMode('auto')
+    expect(captureQualityMode()).toBe('auto')
+    setQualityStep('1080p')
+    setCaptureQualityMode('max')
+    expect(captureQualityMode()).toBe('max')
+  })
+
+  it('MAX ELASTIC IS STILL OFF, AND STILL REACHABLE — his switch, not this wiring', () => {
+    // Wiring the slider must not turn anything ON. "until i say so."
+    setQualityStep('max')
+    expect(rateLadderAllowed()).toBe(false)
+    setMaxLadder(true)
+    expect(rateLadderAllowed()).toBe(true)
+    setMaxLadder(null)
   })
 })

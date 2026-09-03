@@ -21,16 +21,27 @@
  *         able to sustain. This is the mode behind "i need 3024x1964/60fps …
  *         we need to make it work".
  *
- * NOTHING STEPS DOWN IN MAX, including the rate ladder (Robert: "max must not
- * have ladder"). So max has to not NEED stepping down, which is a load problem
- * and is answered by opening fewer encoders rather than by throttling the take:
- * at native resolution the composite is not recorded at all, because it is a
- * downscaled second copy of a picture the take already has, made by a second
- * hardware encoder. See session.startComposite.
+ * NOTHING STEPS DOWN IN MAX TODAY, and that is a SWITCH POSITION, not a
+ * property of max. Robert, 2026-09-03: "elastic must work for max, it is just
+ * now turned off so we polish max without it" — and "until i say so". Elastic
+ * is one system; max is inside it; the picture step is off there while max is
+ * being polished, and only he moves it back. See `rateLadderAllowed` below,
+ * which carries the correction in full because it has been misread twice.
+ *
+ * While it is off, max is meanwhile made to not NEED stepping down — a load
+ * problem answered by opening fewer encoders rather than by throttling the
+ * take: at native resolution the composite is not recorded at all, because it
+ * is a downscaled second copy of a picture the take already has, made by a
+ * second hardware encoder. See session.startComposite.
+ *
+ * WHICH MODE A TAKE IS IN IS THE SLIDER'S ANSWER (2026-09-03: "fucking max
+ * slider must be max"). The flags below are the override, not the source.
  *
  *   ?quality=max|auto     (this load only)
  *   localStorage['inout.capture.quality']   (sticky)
  */
+
+import { loadQualityStep } from '@core/qualityStep'
 
 export type CaptureQualityMode = 'auto' | 'max'
 
@@ -58,13 +69,30 @@ function fromStorage(): CaptureQualityMode | null {
 let override: CaptureQualityMode | null = null
 
 /**
- * DEFAULT IS `auto`, and it has to be: max is the mode where the app stops
- * protecting the machine, and that is a choice a user makes rather than one
- * they are given. A take recorded in auto is exactly the take this product
- * recorded yesterday.
+ * THE SLIDER IS THE CHOICE. Robert, 2026-09-03: "fucking max slider must be
+ * max" — said after B14 found that it was not.
+ *
+ * The default below used to be a flat `'auto'`, and the quality slider wrote
+ * only `inout.quality.step`. Nothing outside the test panel ever called
+ * `setCaptureQualityMode`, so a user who dragged the slider to Max got the max
+ * RESOLUTION and the max RATE — `frame.sourceResEnabled()` and
+ * `rate.sourceRateEnabled()` have defaulted from the step since UI1 — and none
+ * of the max BEHAVIOUR. The take was still refusable before it started, which
+ * is the arm-time refusal B14 is a whole task about, and the picture step was
+ * still armed against the one mode Robert had switched it off for.
+ *
+ * That was an oversight and not a design: two of the three max defaults were
+ * already wired to the step and this one was missed. It is the same sentence
+ * the other two are built on — Robert, 2026-08-30: "max - maximum resolution,
+ * 60 fps, all maximum" — and DECISIONS 2026-09-01 (2) says it as a ruling: "the
+ * chosen quality is the recorded quality".
+ *
+ * `?quality=auto` still refuses it for one load, and the panel switch is
+ * sticky, so the mode is still a thing that can be inspected and reverted on
+ * its own. What changed is only what it answers when nobody has said.
  */
 export function captureQualityMode(): CaptureQualityMode {
-  return fromSearch() ?? override ?? fromStorage() ?? 'auto'
+  return fromSearch() ?? override ?? fromStorage() ?? (loadQualityStep() === 'max' ? 'max' : 'auto')
 }
 
 /**
@@ -77,21 +105,36 @@ export function preemptiveRefusalAllowed(): boolean {
 }
 
 /**
- * MAY THE RATE LADDER STEP WHILE THE TAKE RUNS? NOT IN MAX — Robert's ruling,
- * 2026-08-30: "max must not have ladder".
+ * MAY THE RATE LADDER STEP WHILE THE TAKE RUNS? NOT IN MAX TODAY — and read the
+ * next paragraph before writing a line about why, because two sessions in a row
+ * have got it wrong in the same direction and Robert has corrected it twice.
  *
- * I argued the other way and was overruled, and the argument is kept here
- * because the cost is real and someone will meet it: with nothing allowed to
- * give, the encoders drop whatever they cannot take, and DROPPED FRAMES ARE
- * UNEVEN. That is a slideshow where a lower rate would have been smooth — his
- * own third take, "exported video image has severe lags, both tab and camera,
- * slideshow, sound is fine".
+ * ELASTIC IS ONE SYSTEM AND IT COVERS MAX. It is TURNED OFF for max right now,
+ * so that max can be polished without it, AND IT STAYS OFF UNTIL HE SAYS SO —
+ * 2026-09-03, in his words: "elastic must work for max, it is just now turned
+ * off so we polish max without it", "MAX ELASTIC OFF UNTIL I SAY SO", "until i
+ * say so". That is a statement about a SWITCH and about WHO MOVES IT. It is not
+ * a statement that max is a mode elastic does not reach, and it is not licence
+ * to build max as a thing that has no elastic: DECISIONS 2026-09-03 robert (22)
+ * already threw that reading out once, and 2026-09-01 (2) says where it ends up
+ * — when max and elastic are both perfect they COMBINE, elastic becoming max's
+ * emergency floor.
  *
- * His answer is the better one and it is the harder one: if the ladder must not
- * rescue max, then max has to not need rescuing. That is a load problem, not a
- * policy problem, and it is fixed by opening fewer encoders — which is what
- * skipping the composite at native resolution does (session.startComposite).
- * A mode that survives because it was throttled was never max.
+ * So this is a switch and never a deleted branch. `?maxladder=1` turns the
+ * picture step back on inside max without leaving max, and M1's floor
+ * (`?floor=1`, emergencyFloor.ts) is the same system built for max and likewise
+ * waiting on his word.
+ *
+ * THE COST OF IT BEING OFF IS REAL AND IS KEPT HERE so nobody rediscovers it as
+ * a surprise: with nothing allowed to give, the encoders drop whatever they
+ * cannot take, and DROPPED FRAMES ARE UNEVEN. That is a slideshow where a lower
+ * rate would have been smooth — his own third take, "exported video image has
+ * severe lags, both tab and camera, slideshow, sound is fine". Which is why max
+ * is meanwhile made to not NEED rescuing, by opening fewer encoders rather than
+ * by throttling: at native resolution the composite is not recorded at all
+ * (session.startComposite). A mode that survives because it was throttled was
+ * never max — but a mode that is never allowed to give anything back is one
+ * spike from a slideshow, and that is what the switch above is for.
  */
 export function rateLadderAllowed(): boolean {
   if (captureQualityMode() !== 'max') return true

@@ -1041,3 +1041,35 @@ AND A PROCESS FAILURE WORTH THE LINE: this session's headed max60 rig FROZE ROBE
 to restart it. CLAUDE.md already says heavy runs are announced and never run while he is at the machine;
 it was not announced. Announce first, every time — an 8 GB M3 encoding 3024x1964@60 in a headed Chrome
 is not a background task.
+
+2026-09-03 robert (24) — THE MAX SLIDER MUST BE MAX, AND ELASTIC IS ONE SYSTEM THAT COVERS MAX.
+Two rulings in one pass, the second a correction of THIS agent for the second time in two sessions:
+  "fucking max dliser must be max"
+  "once fucking again elastic must work for max, it is just now turned off so we polish max without it"
+  "until i say so"
+(1) THE SLIDER. B14's verification turned up that the `max` STEP never reached `max` MODE.
+`captureQualityMode()` read its own key `inout.capture.quality` and defaulted to a flat `'auto'`; the
+slider (CaptureScreen.tsx) wrote only `inout.quality.step`; nothing outside the test panel ever called
+`setCaptureQualityMode`. The other two max defaults — `frame.sourceResEnabled()` and
+`rate.sourceRateEnabled()` — have keyed off the step since UI1, so this was an oversight and not a
+design, and it cost exactly what it looks like it should. FIXED: the mode now defaults from the step,
+flags still override in both directions.
+WHAT IT WAS COSTING, MEASURED BEFORE AND AFTER ON ONE BUILD (max + camera, 3024x1964, `?quality=auto`
+as the control because that IS the old behaviour): 3 encoders wanting 490 Mpx/s, the composite dropping
+84 of 307 frames, AND THE RATE LADDER STEPPING 60 → 30 fps MID-TAKE at "pressure critical
+(encode-latency: 365.5 ms in the encoder against 100 ms of pipeline)", card RED on rate. After: 2
+encoders at 366 Mpx/s, no composite, nothing stepped, card GREEN 13/13, rate pass, screen
+3024x1964@60. So max+camera was starting at 60 and being pulled to 30 partway through by the one thing
+he had switched off, and STATE's "max opens no composite" was true only of screen-only takes.
+(2) THE CORRECTION, and it is the same misreading DECISIONS robert (22) already threw out. I wrote,
+in code comments and in STATE and twice to his face, that max is a mode elastic does not reach and that
+"max has to not NEED rescuing". That is not what he has ever said. ELASTIC IS ONE SYSTEM, MAX IS INSIDE
+IT, AND IT IS TURNED OFF THERE SO MAX CAN BE POLISHED WITHOUT IT — a switch position and a statement
+about who moves it, not a property of max. The distinction is not pedantic: the wrong reading builds max
+as a thing with no elastic path, and (22) plus 2026-09-01 (2) both say where this ends — when max and
+elastic are each perfect they COMBINE, elastic becoming max's emergency floor. The correction is now in
+`rateLadderAllowed`'s own comment, in its test, in the file header and in STATE, because three
+paraphrases of it had already drifted back to the wrong one.
+GATES: 1,182 unit tests + typecheck green · oracle PASS on v2 AND v1 · the before/after above · every
+step below max byte-identical (pinned by test: mode auto, refusal allowed, ladder allowed).
+NOTHING WAS TURNED ON. `?maxladder=` and `?floor=` are untouched and still off, waiting on his word.
