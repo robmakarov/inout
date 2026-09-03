@@ -40,6 +40,33 @@
  * HEAVY: announce it, and do not run it while the machine is in use. Exit code
  * is 0 only when every band above held.
  *
+ * TWO THINGS BIT A NIGHT'S RUN, 2026-09-04, BOTH UNFIXED — read before using it.
+ *
+ * (1) IT STALLS AT MAX RESOLUTION, before its first sample. `--minutes=1
+ *     --screen=3024x1964 --screenfps=60` against prod printed the header line
+ *     and nothing else for 11 and 20 minutes on two attempts, with its Chrome
+ *     UP and a clean profile both times. Every wait in the body is bounded (60 s
+ *     for the record button, then a throw; 5 min for the card) and a throw would
+ *     still print the report, so it is stuck somewhere that has no timeout —
+ *     the baseline `chromeRss`/`PAGE_SAMPLE` pair and `quitChrome` are the
+ *     candidates, in that order.
+ *
+ *     IT IS RESOLUTION-SPECIFIC, and that is measured, not assumed: the SAME
+ *     command at the default `--screen=1920x1080` ran clean the same night —
+ *     first sample at 1 min, rss 1386 MB over 9 processes, recording=true,
+ *     report written, exit 0. So the rig, prod, the record press and the card
+ *     are all fine; something about a 3024x1964 synthetic source is not. Start
+ *     there, not in this file's plumbing. Until it is fixed the Phase-1
+ *     "two >=60-min max60 takes" criterion cannot be read from this rig.
+ *
+ * (2) A KILLED RUN LEAVES A CHROME THAT BLOCKS THE NEXT ONE. The browser is
+ *     spawned detached, so killing the node process (or the gate wrapper)
+ *     orphans it: one sat at 0 % CPU for 68 minutes, and the NEXT invocation
+ *     then never got a browser at all — it hung with no error, which is what
+ *     made (1) look worse than it is. Kill by profile, not by script name:
+ *     the profile is `inout-h3-<pid>` under the temp dir, and nothing else
+ *     matches it. This applies to every headed rig here, not just this one.
+ *
  * QA only: changes no product code, and the product cannot tell it from a user.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
