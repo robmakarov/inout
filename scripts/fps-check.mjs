@@ -557,6 +557,47 @@ async function runLane(sourceFps) {
       await sleep(500)
     }
     lane.gates.reachedEditor = !!(await evaluate(`!!document.querySelector('.editor')`))
+
+    // B14 — THE TAKE'S OWN VERDICT, and the arm-time rate decision it carries.
+    // The console line says what capture INTENDED; the card says how the take
+    // was graded, and `decisions` is where M1's door writes what moved and who
+    // moved it. Reading both here is what turns "60 was asked for" into "60 was
+    // recorded and nothing quietly took it back".
+    lane.card = await evalJson(
+      `(async () => {
+        try {
+          if (typeof __inoutReport !== 'function') return JSON.stringify(null)
+          const card = await __inoutReport()
+          if (!card) return JSON.stringify(null)
+          const dims = {}
+          for (const d of card.dimensions ?? []) dims[d.id] = d.status
+          const rateDetail = (card.dimensions ?? []).find((d) => d.id === 'rate')?.detail ?? null
+          // The door's ledger, straight off the stored take — the arm-time rate
+          // decision lives here whether it took anything or refused to.
+          const db = await new Promise((res, rej) => {
+            const r = indexedDB.open('inout')
+            r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+          })
+          const all = await new Promise((res, rej) => {
+            const r = db.transaction('recordings').objectStore('recordings').getAll()
+            r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+          })
+          const rec = all.sort((a, b) => b.createdAt - a.createdAt)[0]
+          const rate = (rec?.stopStats?.decisions ?? []).filter((d) => d.dial === 'rate')
+          return JSON.stringify({
+            verdict: card.verdict, line: card.line, dimensions: dims, rateDetail,
+            rateDecisions: rate.map((d) => ({
+              action: d.action, outcome: d.outcome, what: d.what,
+              branch: d.measured?.rateBranch ?? null,
+              want: d.measured?.wantMpxPerS ?? null,
+              can: d.measured?.canMpxPerS ?? null,
+              at: d.measured?.canMeasuredAt ?? null,
+            })),
+          })
+        } catch (e) { return JSON.stringify({ error: String(e) }) }
+      })()`,
+      null,
+    )
     await sleep(1500)
 
     // ---- export at the default step, so the finished file lands in OPFS ----
