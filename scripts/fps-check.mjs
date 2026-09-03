@@ -399,7 +399,15 @@ async function runLane(sourceFps) {
     // 16:9 either way, but a sticky flag from another session's testing would
     // otherwise change which lines appear and read as noise.
     url:
-      `${opts.url}?synthetic=1&sourcefps=1&sourceframe=0&screenfps=${sourceFps}` +
+      `${opts.url}?synthetic=1&sourcefps=1&screenfps=${sourceFps}` +
+      // `sourceframe=0` pins F13 off so this rig measures ONE thing — but a
+      // caller who names it in --query means it, and URLSearchParams.get()
+      // returns the FIRST occurrence, so appending could never have overridden
+      // it. That silently made every max lane a take whose frame does NOT
+      // follow it, i.e. one whose export has to RE-RENDER to crop 3024x1964
+      // down to 16:9 — read once as "screen-only max does not export instant",
+      // which is a Phase-1 gate and was the instrument's own doing.
+      (/(^|&)sourceframe=/.test(opts.query) ? '' : '&sourceframe=0') +
       (opts.query ? `&${opts.query}` : ''),
     captureLog: [],
     consoleErrors: [],
