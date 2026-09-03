@@ -15,7 +15,16 @@ import {
 } from '@core/door'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
-import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import { captureQualityMode, preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import {
+  FLOOR_FPS,
+  emergencyFloorEnabled,
+  floorLongEdge,
+  type FloorRung,
+  type FloorState,
+} from './emergencyFloor'
+import { FloorController } from './floorController'
+import type { PressureSignals } from '@core/pressure'
 import { AUDIO_BITS, videoBitsFor } from './captureBitrate'
 import { diskVerdict } from './diskGuard'
 import {
@@ -488,6 +497,20 @@ class Session implements CaptureSession {
   private lastDiskCheckMs = 0
   /** M1 — the platform-adaptation witness's own clock (see watchPlatformAdaptation). */
   private lastAdaptCheckMs = 0
+  /**
+   * M1 — THE EMERGENCY FLOOR. Null on every take that is not max with `?floor=1`,
+   * which is every take until Robert flips it.
+   */
+  private floor: FloorController | null = null
+  /** What the floor has actually spent, on the take's own terms. */
+  private floorScreenFps = 0
+  private floorCameraFps: number | null = null
+  private floorScreenLongEdge: number | null = null
+  private floorRequestedLongEdge: number | null = null
+  private floorCameraRequestedFps: number | null = null
+  /** One rung at a time: an application in flight is not a reason to start a
+   *  second (the ladder's settle rule assumes the step landed). */
+  private floorApplying = false
   /** B5 — the origin's storage usage at this take's FIRST sample, and when it
    *  was taken. The growth since is what this take has actually consumed. */
   private diskBaseline: { usageBytes: number; atMs: number } | null = null
@@ -1064,6 +1087,10 @@ class Session implements CaptureSession {
     rung: LadderRung,
     reason: string,
     step: LadderStepMeta,
+    /** M1 — WHO ASKED. The ladder is one caller; the emergency floor is the
+     *  other, and a take that reads `[floor]` against a step is a take that can
+     *  be told apart from one the composite's ladder moved. */
+    decidedBy: 'ladder' | 'floor' = 'ladder',
   ): Promise<void> {
     const ch = this.channels.find((c) => c.kind === 'screen' && !c.ended)
     if (!ch) return
@@ -1084,7 +1111,7 @@ class Session implements CaptureSession {
       const after = await passDoor(
         {
           dial: 'rate',
-          decidedBy: 'ladder',
+          decidedBy,
           layer: 'picture',
           action: step.direction === 'down' ? 'shed' : 'restore',
           what: `${step.previousFps} → ${rung.fps} fps`,
@@ -1134,6 +1161,162 @@ class Session implements CaptureSession {
       }
     } catch (err) {
       console.warn('[capture] could not change the capture rate', err)
+    }
+  }
+
+  // ---- M1: THE EMERGENCY FLOOR ---------------------------------------------
+  /**
+   * IS THE FLOOR ARMED? Max, and the flag, and nothing else. Off, every line
+   * below is unreachable and max is the max that shipped — the raw worker is
+   * not even asked to sample, so there is no ticker and no counters.
+   */
+  private floorArmed(): boolean {
+    return captureQualityMode() === 'max' && emergencyFloorEnabled()
+  }
+
+  /** What the floor has to work with, read fresh: a channel can end mid-take. */
+  private floorState(): FloorState {
+    const camera = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+    return {
+      cameraFps: camera ? this.floorCameraFps : null,
+      cameraRequestedFps: camera ? this.floorCameraRequestedFps : null,
+      screenFps: this.floorScreenFps || this.requestedRate,
+      screenRequestedFps: this.requestedRate,
+      screenLongEdge: this.floorScreenLongEdge,
+      screenRequestedLongEdge: this.floorRequestedLongEdge,
+    }
+  }
+
+  /**
+   * ONE READING FROM THE SCREEN'S ENCODER. Four a second, from the worker that
+   * is doing the encoding — the thread whose contention is the thing that
+   * starves a max take (core/pressure.ts's probe: the page's own main thread is
+   * clamped to 1 Hz while a take runs, and cannot see any of this).
+   */
+  private onFloorPressure(signals: PressureSignals): void {
+    if (this.stateInternal !== 'recording') return
+    const now = performance.now()
+    if (!this.floor) {
+      const screen = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+      const camera = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+      this.floorScreenFps = screen?.fps ?? this.requestedRate
+      this.floorScreenLongEdge = screen ? Math.max(screen.width ?? 0, screen.height ?? 0) : null
+      this.floorRequestedLongEdge = this.floorScreenLongEdge
+      this.floorCameraFps = camera?.fps ?? null
+      this.floorCameraRequestedFps = this.floorCameraFps
+      this.floor = new FloorController({ startedAtMs: this.epoch, requestedFps: this.requestedRate })
+    }
+    const tick = this.floor.tick(now, signals, this.floorState())
+    if (!tick.action || this.floorApplying) return
+    this.floorApplying = true
+    void this.applyFloorRung(tick.action.rung, tick.action.direction, tick.action.reason, tick.action.step)
+      .then(() => {
+        this.floor?.noteApplied(performance.now(), tick.action!.direction)
+      })
+      .finally(() => {
+        this.floorApplying = false
+      })
+  }
+
+  /**
+   * SPEND (or GIVE BACK) ONE RUNG, through the door like everything else.
+   *
+   * AUDIO IS NOT REACHABLE FROM HERE. There is no branch for it, in either
+   * direction, and emergencyFloor.ts's order has no name for it — the ruling is
+   * that audio is never sacrificed, and the way to keep a ruling is to make the
+   * code that would break it not exist.
+   */
+  private async applyFloorRung(
+    rung: FloorRung,
+    direction: 'down' | 'up',
+    reason: string,
+    step: LadderStepMeta,
+  ): Promise<void> {
+    if (rung === 'screen-fps') {
+      const target = direction === 'down' ? FLOOR_FPS : this.requestedRate
+      await this.stepDisplayDown({ label: `${target} fps`, fps: target }, reason, step, 'floor')
+      this.floorScreenFps = target
+      return
+    }
+    if (rung === 'camera-fps') {
+      const ch = this.channels.find((c) => c.kind === 'camera' && c.media === 'video' && !c.ended)
+      if (!ch) return
+      const target = direction === 'down' ? FLOOR_FPS : (this.floorCameraRequestedFps ?? this.requestedRate)
+      const before = ch.track.getSettings()
+      try {
+        await passDoor(
+          {
+            dial: 'rate',
+            decidedBy: 'floor',
+            layer: 'picture',
+            action: direction === 'down' ? 'shed' : 'restore',
+            what: `camera ${step.previousFps} → ${target} fps`,
+            why: reason,
+            ...(step.block ? { block: step.block } : null),
+            ...(step.level ? { level: step.level } : null),
+            measured: measuredFromSettings(before),
+          },
+          async (ticket) => {
+            await withTimeout(
+              constrainThroughDoor(ticket, ch.track, { frameRate: { max: target } }),
+              THROTTLE_BUDGET_MS,
+              `camera to ${target} fps`,
+            )
+            const after = ch.track.getSettings()
+            ticket.note({ fpsAfter: after.frameRate ?? null })
+            ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
+          },
+        )
+        this.floorCameraFps = target
+      } catch (err) {
+        console.warn('[capture] the floor could not move the camera rate', err)
+      }
+      return
+    }
+    // RESOLUTION, LAST, and it is the only rung that costs a seam: the raw
+    // encoder is configured once and cannot follow a frame-size change, so the
+    // segment has to close and reopen (O16 — 30 ms step, 69 ms seam). That is
+    // why it sits below both rate rungs and why it is spent once.
+    const ch = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+    if (!ch) return
+    const current = Math.max(ch.width ?? 0, ch.height ?? 0)
+    const target = direction === 'down' ? floorLongEdge(current) : this.floorRequestedLongEdge
+    if (!target) return
+    const before = ch.track.getSettings()
+    try {
+      await passDoor(
+        {
+          dial: 'resolution',
+          decidedBy: 'floor',
+          layer: 'picture',
+          action: direction === 'down' ? 'shed' : 'restore',
+          what: `screen long edge ${current} → ${target}`,
+          why: `${reason} — the rate rungs are spent, so the size moves (LAST)`,
+          ...(step.block ? { block: step.block } : null),
+          ...(step.level ? { level: step.level } : null),
+          measured: measuredFromSettings(before),
+        },
+        async (ticket) => {
+          await withTimeout(
+            constrainThroughDoor(ticket, ch.track, {
+              width: { max: target },
+              height: { max: target },
+            }),
+            THROTTLE_BUDGET_MS,
+            `screen to a ${target} long edge`,
+          )
+          const after = ch.track.getSettings()
+          ticket.note({ widthAfter: after.width ?? null, heightAfter: after.height ?? null })
+          ch.seen = { width: after.width, height: after.height, frameRate: after.frameRate }
+        },
+      )
+      // The file cannot change size mid-segment, so close this one and open the
+      // next at the size the source is now delivering — the move O16 built.
+      await this.stepScreenSegment(`the emergency floor stepped the size: ${reason}`)
+      const now = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+      this.floorScreenLongEdge = now ? Math.max(now.width ?? 0, now.height ?? 0) : target
+    } catch (err) {
+      console.warn('[capture] the floor could not move the screen size', err)
     }
   }
 
@@ -1859,6 +2042,17 @@ class Session implements CaptureSession {
           console.error(`[capture] ${ch.kind} ${cause}: ${err.message}`)
           void this.containSegment(ch, cause)
         },
+        // M1 — THE EMERGENCY FLOOR'S INSTRUMENT, on the screen channel only and
+        // only when the floor is armed (max, `?floor=1`, OFF by default). The
+        // screen is the encoder that decides whether a max take survives; the
+        // camera is an inset. With the floor off this is `undefined` and the
+        // worker never starts a ticker.
+        ...(this.floorArmed() && ch.kind === 'screen'
+          ? {
+              pressure: true,
+              onPressure: (signals: PressureSignals) => this.onFloorPressure(signals),
+            }
+          : null),
       })
       ch.measured = handle
       ch.mimeType = handle.mimeType

@@ -28,6 +28,7 @@
  */
 import { rawVideoCodec } from './rawCodec'
 import { passDoor } from '@core/door'
+import type { PressureSignals } from '@core/pressure'
 import type { RawVideoMsg, RawVideoReply, RawVideoStats } from './rawVideo.worker'
 
 export const MEASURED_VIDEO_MIME = 'video/mp4'
@@ -131,6 +132,16 @@ export async function startMeasuredVideoCapture(opts: {
    * picture instead of audio only. Absent = the shipped cadence.
    */
   earlyFragmentSec?: number
+  /**
+   * M1 — ASK THIS WORKER TO SAMPLE PRESSURE, and take the readings here.
+   *
+   * The emergency floor reads the detector at MAX, where no composite exists to
+   * sample it. Both are absent on every take that is not running the floor, and
+   * the worker then does nothing at all: no ticker, no counters, byte-identical
+   * to the worker that shipped.
+   */
+  pressure?: boolean
+  onPressure?: (signals: PressureSignals) => void
 }): Promise<MeasuredVideoHandle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('measured video: MediaStreamTrackProcessor unavailable')
@@ -152,6 +163,13 @@ export async function startMeasuredVideoCapture(opts: {
   worker.onmessage = (ev: MessageEvent<RawVideoReply>) => {
     const reply = ev.data
     if ('event' in reply) {
+      // M1 — the emergency floor's reading, when this channel was asked to
+      // sample (max only, `?floor=1`). It arrives on the same channel as the
+      // fatal because there is nothing else this worker ever says unprompted.
+      if (reply.event === 'pressure') {
+        opts.onPressure?.(reply.signals)
+        return
+      }
       if (!fatalReported) {
         fatalReported = true
         opts.onFatal?.(new Error(reply.error), 'encoder-error')
@@ -185,6 +203,7 @@ export async function startMeasuredVideoCapture(opts: {
     killEncoderInMs: opts.killEncoderInMs,
     killWorkerInMs: opts.killWorkerInMs,
     earlyFragmentSec: opts.earlyFragmentSec,
+    ...(opts.pressure ? { pressure: true } : null),
   })
   const startReply = await withDeadline(started, START_TIMEOUT_MS, 'raw video start').catch(
     (err: Error) => {
