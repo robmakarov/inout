@@ -205,14 +205,42 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     return () => window.removeEventListener('keydown', onKey)
   }, [toggle, seekBy])
 
-  // Persist the edit so a refresh gives the work back (F4). Debounced: a drag
-  // produces one commit, but a trim handle produces a stream of them, and the
-  // durable writer is busy enough during a take.
+  /**
+   * Persist the edit so a refresh gives the work back (F4). Debounced: a drag
+   * produces one commit, but a trim handle produces a stream of them, and the
+   * durable writer is busy enough during a take.
+   *
+   * B10 — AND IT WAITS FOR AN IDLE MOMENT, because the debounce alone put it in
+   * the worst one. G7's attribution named this callback twice: 297.9 ms of
+   * animation frame with 178.1 ms of BLOCKING, 316 ms into a drag, on the run
+   * whose worst second was 619.5 ms. The write itself is small — `EditState` is
+   * trims, segments and keyframes — so the cost is the IndexedDB transaction
+   * committing against whatever else is writing (the at-stop render streams
+   * chunk files while the editor is open). Nothing about that is worth a frame
+   * the person is dragging through.
+   *
+   * The same writes, with the same data, scheduled when the thread is free. The
+   * 2 s timeout is the promise that "free" cannot mean "never" — a busy editor
+   * still persists, just behind the interaction instead of through it. Both
+   * handles are cancelled on unmount, exactly as the bare timer was.
+   */
   useEffect(() => {
+    let idle: number | null = null
     const t = setTimeout(() => {
-      void editsRepo.save(edit).catch((err) => console.warn('failed to persist edit', err))
+      const write = (): void => {
+        void editsRepo.save(edit).catch((err) => console.warn('failed to persist edit', err))
+      }
+      const ric = (globalThis as { requestIdleCallback?: typeof requestIdleCallback })
+        .requestIdleCallback
+      if (ric) idle = ric(write, { timeout: 2000 })
+      else write()
     }, 400)
-    return () => clearTimeout(t)
+    return () => {
+      clearTimeout(t)
+      const cic = (globalThis as { cancelIdleCallback?: typeof cancelIdleCallback })
+        .cancelIdleCallback
+      if (idle !== null && cic) cic(idle)
+    }
   }, [edit])
 
   /**

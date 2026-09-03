@@ -33,7 +33,7 @@
  * .ai holds current truth, never a log.
  */
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync, createWriteStream } from 'node:fs'
+import { mkdirSync, writeFileSync, createWriteStream, statfsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { busyFraction, loadPerCore, sleep } from './lib/machine.mjs'
@@ -55,7 +55,38 @@ const CALM_SAMPLES = 20
 const SAMPLE_MS = 15_000
 const MAX_WAIT_MS = 6 * 60 * 60 * 1000
 
-const STEPS = [
+/**
+ * `--smoke` PROVES THE MACHINERY, not the product: one real rig through the
+ * real gate, no quiet wait, no soak. It exists because the first version of
+ * this file was armed on Robert's machine having proved only that it launches
+ * and waits — every spawn, lock, log-capture and verdict-extraction path in it
+ * was untested when it went live. Run it after ANY edit here.
+ */
+const SMOKE = process.argv.includes('--smoke')
+
+const STEPS = SMOKE
+  ? [
+      {
+        id: 'smoke-oracle',
+        what: 'one oracle run — proves gate, spawn, logging and the report',
+        timeoutMs: 10 * 60 * 1000,
+        args: ['scripts/oracle.mjs'],
+      },
+      {
+        id: 'smoke-timeout',
+        what: 'a step that outlives its budget — proves the tree really dies',
+        timeoutMs: 5000,
+        args: ['-e', 'setInterval(() => {}, 1000); console.log("smoke: sleeping forever")'],
+      },
+      {
+        id: 'smoke-disk',
+        what: 'a step that wants more disk than exists — proves the guard',
+        timeoutMs: 60_000,
+        args: ['-e', 'console.log("never runs")'],
+        needsDiskGb: 100_000,
+      },
+    ]
+  : [
   ...[1, 2, 3].map((i) => ({
     id: `b10-${i}`,
     what: `B10 editor stall, run ${i} of 3 (quiet machine)`,
@@ -86,14 +117,44 @@ const STEPS = [
       '--screenfps=60',
       `--out=${join(RAW, `max60-soak-${i}.json`)}`,
     ],
+    needsDiskGb: SOAK_NEEDS_GB,
   })),
-  {
-    id: 'oracle-load',
-    what: 'oracle:load — the heavy two-phase stop-path gate',
-    timeoutMs: 60 * 60 * 1000,
-    args: ['scripts/oracle-load.mjs'],
-  },
-]
+      {
+        id: 'oracle-load',
+        what: 'oracle:load — the heavy two-phase stop-path gate',
+        timeoutMs: 60 * 60 * 1000,
+        args: ['scripts/oracle-load.mjs'],
+      },
+    ]
+
+/**
+ * DISK, BEFORE THE SOAKS AND NOT AFTER.
+ *
+ * THE THRESHOLD IS BOUNDED, NOT INVENTED — the first version of this file said
+ * 30 GB out of nowhere and would have skipped the soaks on a machine with
+ * 27.3 GB free. What actually happens: the product's own disk guard
+ * (capture/diskGuard.ts) is RATE-based against the browser's OPFS quota and
+ * stops a take ~20 s before the next flush would fail, so a soak cannot fill
+ * the disk. Robert's real 124.8-minute take averaged 2.41 Mbps ≈ 18 MB/min,
+ * so an hour is ~1.1 GB at the shipped rung; even five times that is ~6 GB,
+ * and each soak's Chrome profile is temporary and goes with it. 12 GB is that
+ * worst case plus room for him.
+ *
+ * The point of the check is no longer "protect the disk" — the guard does that
+ * — it is that a soak which trips the guard measures the GUARD instead of the
+ * engine, and that is not the number this run exists for. Free space is
+ * recorded either side of every step so the next session reads a measured
+ * footprint instead of this estimate.
+ */
+const SOAK_NEEDS_GB = 12
+function freeGb() {
+  try {
+    const st = statfsSync('/')
+    return (st.bavail * st.bsize) / 1e9
+  } catch {
+    return Infinity
+  }
+}
 
 const results = []
 const t0 = Date.now()
@@ -130,11 +191,17 @@ function runStep(step) {
     const log = join(RAW, `${step.id}.log`)
     const out = createWriteStream(log)
     const started = Date.now()
+    const freeBefore = freeGb()
     // THROUGH THE GATE, always: it is the one lock that stops two timing rigs
     // measuring each other, and another session may be awake.
+    // ITS OWN PROCESS GROUP, so a timeout can take the WHOLE tree. Killing the
+    // bash wrapper alone leaves the rig and its Chrome running: the next step
+    // would then start beside a rig that is still measuring, which is the one
+    // thing this runner exists to prevent.
     const child = spawn('bash', ['scripts/gate.sh', 'node', ...step.args], {
       cwd: REPO,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     })
     const tail = []
     const keep = (buf) => {
@@ -148,9 +215,22 @@ function runStep(step) {
     }
     child.stdout.on('data', keep)
     child.stderr.on('data', keep)
+    const killTree = (sig) => {
+      try {
+        process.kill(-child.pid, sig)
+      } catch {
+        try {
+          child.kill(sig)
+        } catch {
+          /* already gone */
+        }
+      }
+    }
     const killer = setTimeout(() => {
       say(`${step.id} passed its ${Math.round(step.timeoutMs / 60000)} min budget — killing it`)
-      child.kill('SIGKILL')
+      // TERM first: gate.sh traps it and RELEASES THE LOCK on its way out.
+      killTree('SIGTERM')
+      setTimeout(() => killTree('SIGKILL'), 10_000).unref()
     }, step.timeoutMs)
     child.on('close', (code) => {
       clearTimeout(killer)
@@ -161,6 +241,7 @@ function runStep(step) {
         code,
         minutes: Math.round((Date.now() - started) / 60000),
         log,
+        diskGb: `${freeBefore.toFixed(1)} → ${freeGb().toFixed(1)} GB free`,
         // The verdict lines these rigs print about themselves; the whole
         // output is in the log and does not belong in a summary.
         verdict: tail
@@ -181,28 +262,49 @@ function writeReport(state) {
   ]
   for (const r of results) {
     lines.push(`## ${r.id} — ${r.what}`)
-    lines.push(`exit ${r.code} · ${r.minutes} min · ${r.log}`)
+    lines.push(`exit ${r.code} · ${r.minutes} min${r.diskGb ? ` · ${r.diskGb}` : ''} · ${r.log}`)
     for (const v of r.verdict) lines.push(`  ${v}`)
     lines.push('')
   }
   if (results.length === 0) lines.push('Nothing ran yet.')
-  writeFileSync(join(REPO, '.ai/OVERNIGHT'), lines.join('\n'))
+  // A smoke run must never overwrite the real night's summary.
+  writeFileSync(SMOKE ? join(RAW, 'OVERNIGHT-smoke') : join(REPO, '.ai/OVERNIGHT'), lines.join('\n'))
 }
 
-writeReport('waiting for the machine to go quiet')
-say(
+writeReport(SMOKE ? 'smoke test' : 'waiting for the machine to go quiet')
+if (!SMOKE)
+  say(
   `waiting for ${(CALM_SAMPLES * SAMPLE_MS) / 60000} min of calm below ${BAND * 100}% busy ` +
     `(now ${(await busyFraction(2000) * 100).toFixed(0)}%, load/core ${loadPerCore().toFixed(2)})`,
 )
 
-if (!(await waitForNight())) {
+if (!SMOKE && !(await waitForNight())) {
   say('the machine never settled — nothing ran, and that is the honest outcome')
   writeReport('REFUSED: the machine never went quiet, so nothing was measured')
   process.exit(0)
 }
 
-say('machine is quiet — starting')
+say(SMOKE ? 'SMOKE: proving the runner itself, no soaks, no waiting' : 'machine is quiet — starting')
 for (const step of STEPS) {
+  if (step.needsDiskGb) {
+    const free = freeGb()
+    if (free < step.needsDiskGb) {
+      say(`${step.id} SKIPPED — ${free.toFixed(1)} GB free, it wants ${step.needsDiskGb}`)
+      results.push({
+        id: step.id,
+        what: step.what,
+        code: null,
+        minutes: 0,
+        log: '(not run)',
+        verdict: [
+          `SKIPPED: ${free.toFixed(1)} GB free on / against ${step.needsDiskGb} GB needed. ` +
+            'A soak that fills the disk measures the disk guard, not the engine.',
+        ],
+      })
+      writeReport('running')
+      continue
+    }
+  }
   say(`${step.id}: ${step.what}`)
   results.push(await runStep(step))
   writeReport('running')
