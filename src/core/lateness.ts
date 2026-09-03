@@ -48,9 +48,39 @@ export const FRAME_MS = 1000 / 60
 /** Phase-1's claim, in one constant, read by the report card. */
 export const STALL_FAIL_MS = 30
 
-/** The schedule. One frame: fine enough that a 35 ms stall is measured to
- *  within 16 ms of the truth, coarse enough to fit the budget (60 beats/s). */
-export const DEFAULT_PERIOD_MS = 16
+/**
+ * THE SCHEDULE, AND WHY IT IS NOT ONE NUMBER.
+ *
+ * Every sample costs a WAKE-UP, and a wake-up has a platform price this
+ * instrument cannot argue with. Measured on the built bundle with CDP's
+ * `Performance.getMetrics` (renderer main-thread task time), idle page at
+ * 0.69 ms/s:
+ *
+ *   a bare `setInterval(16)` DOING NOTHING          +3.15 ms/s
+ *   a bare worker beat at 16 ms, empty handler      +3.43 ms/s
+ *   this sampler at 16 ms                           +5.54 ms/s
+ *   this sampler at 128 ms                          +1.37 ms/s
+ *   this sampler at 256 ms                          +1.06 ms/s
+ *   this sampler at 16 ms WITH attribution          +5.48 ms/s (i.e. free)
+ *
+ * The first two lines are the finding: at 62 wake-ups a second the platform
+ * charges ~3.2 ms/s before a single line of this file runs. So the period is a
+ * budget decision, and the budget is different on the two surfaces:
+ *
+ * CAPTURE gets 250 ms, because G7's gate is "< 1 ms per second of capture" and
+ * a take runs for minutes or hours — at 16 ms an hour-long take would spend 20
+ * seconds of its main thread on being watched, and that thread is the one B12
+ * says loses audio when it is starved. What a take needs this for is the
+ * B12-class stall, which is hundreds of milliseconds.
+ *
+ * THE EDITOR gets one frame, because that is where the claim is ("no editor
+ * stall > 30 ms"), because the window is 15 seconds and not an hour (83 ms of
+ * main thread, once, per editor open), and because it is what reproduced B10:
+ * 229.3 ms, agreeing to 1 ms with the ticker in editor-drag-cost.mjs.
+ */
+export const CAPTURE_PERIOD_MS = 250
+export const EDITOR_PERIOD_MS = 16
+export const DEFAULT_PERIOD_MS = EDITOR_PERIOD_MS
 
 /** The window a "worst window" is. One second, because that is the unit a stall
  *  is described in ("it hung for a second") and it makes the worst window's
@@ -94,9 +124,9 @@ export function latenessEnabled(): boolean {
   return search('lateness') !== '0'
 }
 
-export function latenessPeriodMs(): number {
+export function latenessPeriodMs(fallback: number = DEFAULT_PERIOD_MS): number {
   const raw = Number(search('latebeat'))
-  return Number.isFinite(raw) && raw >= 4 && raw <= 1000 ? raw : DEFAULT_PERIOD_MS
+  return Number.isFinite(raw) && raw >= 4 && raw <= 1000 ? raw : fallback
 }
 
 /* ───────────────────── the accumulator (pure) ───────────────────── */
@@ -319,7 +349,7 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
   if (!latenessEnabled() || typeof performance === 'undefined') {
     return { stop: () => null }
   }
-  const periodMs = opts.periodMs ?? latenessPeriodMs()
+  const periodMs = latenessPeriodMs(opts.periodMs ?? DEFAULT_PERIOD_MS)
   const tally = new LatenessTally(periodMs)
   const t0 = performance.now()
   const origin = performance.timeOrigin
@@ -530,6 +560,7 @@ export function startEditorLateness(recordingId?: string): () => void {
   editorRecordingId = recordingId ?? null
   const run = startLateness({
     autoStopMs: EDITOR_WINDOW_MS,
+    periodMs: EDITOR_PERIOD_MS,
     onDone: (s) => {
       editorSummary = s
     },
