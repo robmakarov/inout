@@ -59,8 +59,8 @@ function sampleAt(chan: Float32Array, pos: number): number {
  * The replacement below is a windowed sinc — an actual reconstruction filter —
  * measured on the same sweep at -82 to -105 dB across the whole band, 81 dB
  * better at 16 kHz, and 351x realtime per channel (171 ms per channel-minute),
- * against an export that is decode-bound at 5-6x. It ships OFF: this is audio a
- * user can hear, so the default moves on Robert's word and not on a number.
+ * against an export that is decode-bound at 5-6x. IT IS ON: a defect fix that
+ * ships disabled has fixed nothing, and the old maths is what carries the flag.
  */
 const SINC_TAPS = 32
 const SINC_PHASES = 1024
@@ -138,21 +138,62 @@ export function makeSincInterpolator(inRate: number, outRate: number): AudioInte
   }
 }
 
-/** `?resamp=sinc` turns the band-limited path on. Default: the shipped Hermite. */
-function wantsSinc(): boolean {
-  if (typeof location === 'undefined') return false
-  return new URLSearchParams(location.search).get('resamp') === 'sinc'
+/**
+ * ON BY DEFAULT SINCE 2026-09-03, and it shipped OFF for about an hour before
+ * Robert said the obvious thing: "you did fix and turned it off so you fucking
+ * did nothing?". He is right. The frozen rule is that behaviour a USER CHOSE
+ * does not move without his word — it is not a licence to land a defect fix
+ * disabled. A resampler that leaves a companion 11 dB down at 16 kHz is a bug,
+ * and the old maths is what needs the flag, not the correct maths.
+ *
+ * Off (`?resamp=hermite`, or the test panel) puts the old interpolator back so
+ * the two can be compared by ear on the same take. That is the runtime fallback
+ * the frozen rule actually asks for.
+ */
+const STORAGE_KEY = 'inout.export.resamp'
+
+function fromSearch(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('resamp')
+  return v === 'sinc' || v === '1' ? true : v === 'hermite' || v === '0' ? false : null
+}
+
+function fromStorage(): boolean | null {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    return v === '1' ? true : v === '0' ? false : null
+  } catch {
+    return null
+  }
+}
+
+/** True when the export reconstructs properly instead of curve-fitting. */
+export function bandLimitedResampling(): boolean {
+  return fromSearch() ?? fromStorage() ?? true
+}
+
+/** `null` clears the sticky choice — the shape every other flag's setter has. */
+export function setBandLimitedResampling(on: boolean | null): void {
+  try {
+    if (on === null) {
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
+    localStorage.setItem(STORAGE_KEY, on ? '1' : '0')
+  } catch {
+    /* storage unavailable — the URL parameter still works */
+  }
 }
 
 /**
  * The interpolator for one source rate. EQUAL RATES ALWAYS TAKE THE HERMITE
- * PATH, whatever the flag says: at integer positions Hermite returns the sample
- * itself, so a 48 kHz channel is already bit-exact and there is nothing for a
- * filter to improve and everything for it to risk. That also keeps every take
- * that never resamples byte-identical across the flag — pinned by test.
+ * PATH, whatever the setting says: at integer positions Hermite returns the
+ * sample itself, so a 48 kHz channel is already bit-exact and there is nothing
+ * for a filter to improve and everything for it to risk. That also keeps every
+ * take that never resamples byte-identical across the switch — pinned by test.
  */
 export function interpolatorFor(inRate: number, outRate: number): AudioInterpolator {
-  if (inRate === outRate || !wantsSinc()) return sampleAt
+  if (inRate === outRate || !bandLimitedResampling()) return sampleAt
   return makeSincInterpolator(inRate, outRate)
 }
 

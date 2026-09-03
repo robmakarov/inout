@@ -370,9 +370,11 @@ describe('B13 band-limited resampling', () => {
 
   it('is a large improvement exactly where the defect is, and no worse anywhere', () => {
     const sinc = makeSincInterpolator(44100, 48000)
-    const shipped = interpolatorFor(44100, 48000) // no flag → Hermite
-    expect(errDb(sinc, 16000)).toBeLessThan(errDb(shipped, 16000) - 50)
-    expect(errDb(sinc, 8000)).toBeLessThan(errDb(shipped, 8000) - 30)
+    // Equal rates always return the OLD interpolator, so this is the honest
+    // handle on it without reaching past the module's exports.
+    const hermite = interpolatorFor(48000, 48000)
+    expect(errDb(sinc, 16000)).toBeLessThan(errDb(hermite, 16000) - 50)
+    expect(errDb(sinc, 8000)).toBeLessThan(errDb(hermite, 8000) - 20)
   })
 
   it('leaves a 48 kHz channel bit-identical — the path the flag must never touch', () => {
@@ -385,7 +387,15 @@ describe('B13 band-limited resampling', () => {
     for (let i = 4; i < 200; i++) expect(same(src, i)).toBe(src[i])
   })
 
-  it('defaults to the shipped path — no flag, no change', () => {
-    expect(interpolatorFor(44100, 48000)).toBe(interpolatorFor(22050, 48000))
+  /**
+   * THE DEFAULT IS THE FIX. It shipped off for about an hour and Robert said
+   * the obvious thing — a defect fix that is disabled has fixed nothing. The
+   * old interpolator is what carries the switch now, so it can be put back for
+   * an A/B; this pins which way round that is.
+   */
+  it('resamples properly BY DEFAULT — the old maths is what needs the switch', () => {
+    const hermite = interpolatorFor(48000, 48000)
+    expect(interpolatorFor(44100, 48000)).not.toBe(hermite)
+    expect(errDb(interpolatorFor(44100, 48000), 16000)).toBeLessThan(-70)
   })
 })

@@ -131,15 +131,6 @@ export interface ChannelAnchor {
    */
   reportedInputLatencyMs?: number
   /**
-   * B13. Whether `reportedInputLatencyMs` was actually SUBTRACTED from the raw
-   * anchor. It always was until B13; `?looplat=0` stops it on loopback sources
-   * (tab / system audio), which have no microphone and no physical input
-   * latency to remove. False with a non-zero latency above means the platform
-   * reported one and this take deliberately kept it — the reading that makes a
-   * pair of takes comparable without reading the URL they were made under.
-   */
-  inputLatencyApplied?: boolean
-  /**
    * VIDEO. How long after this channel started pulling frames the FIRST one
    * arrived. A canvas answers in ~0 ms; a real getDisplayMedia surface does
    * not — the composite's own first frame took 233 ms in one measured run. The

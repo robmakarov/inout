@@ -30,37 +30,6 @@ const PAD_FADE = 64
 
 export const MEASURED_AUDIO_MIME = 'audio/webm;codecs=opus'
 
-/**
- * B13 — A LOOPBACK HAS NO MICROPHONE, SO IT HAS NO INPUT LATENCY TO REMOVE.
- *
- * The anchor subtracts the platform-reported input latency because a real
- * capture device buffers sound before the page ever sees it: the anchor dates
- * sample 0 from arrival, so it is late by exactly that, and the export places
- * the audio that much late. That reasoning is sound for a microphone.
- *
- * TAB AUDIO IS NOT A MICROPHONE. It is an internal loopback off the tab's own
- * render mix — no analogue path, no device buffer, nothing physical to be late
- * by. Chrome reports 10 ms for every audio track it hands out (B7 measured the
- * same 10 ms on every device it saw), and measuredAudio has been subtracting it
- * blind, which places tab audio 10 ms EARLY. On Robert's 124.8-minute take that
- * was 10 of the 46.4 ms lead he could hear; a lead is roughly three times
- * harsher than a lag at the same size, which is why he heard this one.
- *
- * MEASURE BEFORE MOVING. The default here is the SHIPPED behaviour — subtract
- * on every source, mic and loopback alike — because a behaviour Robert can hear
- * moves on Robert's yes and not on an argument. `?looplat=0` records the same
- * take the other way so the pair can be compared.
- *
- *   ?looplat=0   loopback channels keep the platform latency (do not subtract)
- *   ?looplat=1   subtract everywhere (the default; the shipped path)
- */
-export function subtractsInputLatency(loopback: boolean): boolean {
-  if (!loopback) return true
-  if (typeof location === 'undefined') return true
-  const v = new URLSearchParams(location.search).get('looplat')
-  return !(v === '0' || v === 'off')
-}
-
 /** B13. `getSettings()` in the shape the take stores — null means unreported. */
 function readAudioTrackSettings(
   track: MediaStreamTrack,
@@ -287,13 +256,6 @@ export async function startMeasuredAudioCapture(opts: {
   writer: import('@core/store').PositionedDurableWriter
   /** Channel name for evidence lines ('mic' / 'system-audio'); logs only. */
   label?: string
-  /**
-   * B13. True for an internal loopback (tab / system audio) — a source with no
-   * microphone and no device buffer. Read ONLY by `subtractsInputLatency`, and
-   * only when `?looplat=0` is set; the shipped default treats every source the
-   * same, exactly as before this field existed.
-   */
-  loopback?: boolean
   /** Optional pre-warmed context from prewarmMeasuredAudio (arm phase). */
   audioCtx?: AudioContext
   /** Fired ONCE if capture dies mid-take (storage write / encoder failure).
@@ -469,21 +431,21 @@ export async function startMeasuredAudioCapture(opts: {
   // MediaTrackSettings; Chrome reports it for audio input tracks.
   const reportedLatencySec = (track.getSettings() as MediaTrackSettings & { latency?: number })
     .latency
+  /**
+   * B13(1), MEASURED AND CLOSED 2026-09-02: this subtraction is SHORT, not long.
+   * The platform reports a constant — 10.0 ms at 48 kHz, 2.9 ms at 44.1 kHz,
+   * never varying — while the real capture-to-arrival delay measured 20.6 ms on
+   * tab audio and 11.7-41.7 ms on a mic across runs (X14a). So the sound is
+   * placed 10.8-17.7 ms LATE, and a flag that removed the subtraction entirely
+   * (there was one for an hour) made it worse and was deleted. The real repair
+   * is X14's: anchor on `AudioData.timestamp`, which is on the page clock and
+   * tracks a delay this constant cannot.
+   */
   const reportedLatencyMs =
     typeof reportedLatencySec === 'number' && reportedLatencySec > 0
       ? Math.min(200, reportedLatencySec * 1000)
       : 0
-  // B13. What the platform SAID stays in `reportedLatencyMs` either way; this
-  // is what the anchor actually removes. Loopback sources keep it under
-  // `?looplat=0` — see subtractsInputLatency's note.
-  const applyInputLatency = subtractsInputLatency(opts.loopback === true)
-  const inputLatencyMs = applyInputLatency ? reportedLatencyMs : 0
-  if (!applyInputLatency && reportedLatencyMs > 0) {
-    console.info(
-      `[capture] ${label} is a LOOPBACK — keeping the ${reportedLatencyMs.toFixed(1)}ms input ` +
-        `latency the platform reported instead of subtracting it (?looplat=0). B13 measurement run.`,
-    )
-  }
+  const inputLatencyMs = reportedLatencyMs
   // B13 / G6(h). What the platform DELIVERED, read now and again at stop, so a
   // take can be adjudicated after the console that logged it is gone.
   const deliveredSettings = readAudioTrackSettings(track)
@@ -1138,7 +1100,6 @@ export async function startMeasuredAudioCapture(opts: {
             // companion flag below says whether it was applied, so one field
             // can no longer mean two different takes.
             reportedInputLatencyMs: Math.round(reportedLatencyMs * 10) / 10,
-            inputLatencyApplied: applyInputLatency,
           },
           // B13. Written for every measured audio channel, zeros and nulls
           // included: "the platform reported nothing" is the finding on a

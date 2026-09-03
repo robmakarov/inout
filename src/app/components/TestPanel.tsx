@@ -12,6 +12,7 @@ import {
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
+import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
 import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
 /**
@@ -106,6 +107,21 @@ export function TestPanel() {
         on={sourceFrameEnabled()}
         set={(v) => {
           setSourceFrame(v)
+          redraw()
+        }}
+      />
+      {/* B13(3). Robert heard this before it was measured: "some small noises in
+          tab audio". It is the export's old resampling maths, which only got the
+          top octaves roughly right — its error is 11 dB down at 16 kHz. The fix
+          is ON; this switch exists to put the OLD maths back so the two can be
+          compared on the same take, which is the only reason the old one is
+          still in the tree. */}
+      <Toggle
+        label="Clean audio resampling"
+        hint="On. Turn it OFF to hear the old maths: record a tab playing music, export, listen to cymbals and “s” sounds. Only does anything when the tab records at 44.1 kHz — at 48 kHz both settings give the same file."
+        on={bandLimitedResampling()}
+        set={(v) => {
+          setBandLimitedResampling(v)
           redraw()
         }}
       />

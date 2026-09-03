@@ -544,12 +544,17 @@ async function runVariant(name, urlSuffix) {
       `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
     )
     await sleep(1200)
+    // B13(3): the export is now the band-limited path by default, so how long
+    // it takes is a gate, not a curiosity. Timed from the press.
+    const exportStart = Date.now()
     await evaluate(`(() => { const b=document.querySelector('.quality .btn--primary'); if(!b) return false; b.click(); return true })()`)
     let meta = null
     for (let i = 0; i < 240 && !meta; i++) {
       await sleep(500)
       meta = await evaluate(`document.querySelector('.xp__meta')?.textContent ?? null`)
     }
+    v.exportMs = Date.now() - exportStart
+    v.exportRealtimeX = Math.round((opts.takeMs / v.exportMs) * 100) / 100
     v.exportMeta = meta
     v.gates.exported = !!meta
     await sleep(1500)
@@ -656,6 +661,7 @@ try {
     const tab = v.take?.channels?.find((c) => c.kind === 'system-audio')
     console.log(`  tab-audio delivered settings: ${JSON.stringify(tab?.audioTrack ?? null)}`)
     console.log(`  anchors: ${JSON.stringify(v.lead ?? null)}`)
+    console.log(`  export: ${v.exportMs} ms for a ${opts.takeMs} ms take = ${v.exportRealtimeX}x realtime`)
     if (v.file) console.log(`  file for Robert: ${v.file}`)
     for (const l of v.trackLines ?? []) console.log(`  · ${l}`)
     for (const l of v.anchorLines ?? []) console.log(`  · ${l}`)
