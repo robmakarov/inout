@@ -480,9 +480,23 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
       `${controlFile.keyPackets} vs ${coldFile.keyPackets} (${sameKeys ? 'same' : 'differ'}); ` +
       `timestamps ${sameStarts ? 'identical' : 'differ'}; size ${MB(controlFile.bytes)} vs ` +
       `${MB(coldFile.bytes)} MB (${sizeDelta === null ? 'n/a' : `${sizeDelta > 0 ? '+' : ''}${sizeDelta}%`})`
+    /**
+     * NOT A SPEED COMPARISON, AND IT SAYS SO — 2026-09-03. Both lanes run in
+     * ONE page, and the first one pays every one-time cost there is: module
+     * init, the OPFS handles, mediabunny's setup, the source file's decoder.
+     * Measured, that handed the chunked lane a 25 % "win" it had not earned —
+     * the same A/B through `exp nativerender --query=chunked=`, which runs one
+     * export per Chrome process so each arm pays its own warm-up, came back
+     * 1.08x the OTHER way (9,501 vs 10,232 ms, n=3 a side).
+     *
+     * The number is kept because the LANES are what this rig is for (what was
+     * re-rendered, what was reused, what the file demuxes to), and deleting it
+     * would only mean the next session measures it again and believes it.
+     */
     verdict.speed =
-      `unbroken ${control!.wallMs} ms vs chunked-cold ${cold.wallMs} ms ` +
-      `(${(cold.wallMs / Math.max(1, control!.wallMs)).toFixed(2)}x)`
+      `NOT A VALID COMPARISON — unbroken ${control!.wallMs} ms vs chunked-cold ${cold.wallMs} ms ` +
+      `(${(cold.wallMs / Math.max(1, control!.wallMs)).toFixed(2)}x), but the first lane in a page ` +
+      `pays every one-time cost. For speed use: exp nativerender --query=chunked=1 vs =0`
   }
   verdict.reexport =
     `a second export of the same edit rendered ${warm.chunks?.rendered ?? '?'} chunks ` +
