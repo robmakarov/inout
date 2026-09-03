@@ -116,7 +116,22 @@ export class FloorController {
       this.level = reading.level
       this.ownLevel = reading.ownLevel
       this.block = reading.leader?.block ?? null
-      this.why = reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : null
+      /**
+       * THE REASON HAS TO NAME WHAT ACTUALLY FIRED. `leader` is the worst
+       * SIGNAL, and pressure.ts has a second way to reach `critical`: the loss
+       * floor, where a frame was already dropped this interval. Measured on the
+       * M1 rig 2026-09-03, a screen rate step reported "worker-lateness:
+       * 0.47 ms mean tick against a 16.7 ms frame" — a healthy-looking number —
+       * when what had actually forced the level was 4 dropped frames. A ledger
+       * line that names the wrong cause is worse than a quiet one.
+       */
+      const dropped = signals.dropped ?? 0
+      this.why =
+        dropped > 0 && (reading.leader?.strain ?? 0) < 1
+          ? `${dropped} frame(s) already dropped this interval`
+          : reading.leader
+            ? `${reading.leader.signal}: ${reading.leader.detail}`
+            : null
       if (reading.level === 'serious' || reading.level === 'critical') {
         this.seriousSince ??= nowMs
         this.clearSince = null

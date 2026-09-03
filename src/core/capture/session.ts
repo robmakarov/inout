@@ -1421,6 +1421,23 @@ class Session implements CaptureSession {
     openDoor(this.epoch)
 
     for (const ch of this.channels) this.activateChannel(ch, startT0)
+    /**
+     * THE TAKE'S REQUESTED RATE IS SET HERE, NOT INSIDE startComposite — M1, and
+     * it is a defect that fix uncovers rather than a refactor.
+     *
+     * `this.requestedRate` was assigned in ONE place: the middle of
+     * `startComposite`, past its own early return. Max never reaches that line
+     * (max opens no composite by design), so every max take reported
+     * `stopStats.requestedFps = 30` however fast it was actually recorded, and
+     * the report card's `rate` dimension said "asked for 30 fps" on a 60 fps
+     * take. Measured 2026-09-03 on the M1 floor rig: a 2560x1440 max take with
+     * the ladder's own ceiling at 60 read `asked for 30 fps`.
+     *
+     * It is also load-bearing now: the emergency floor's ceiling — the rate it
+     * may climb BACK to — is this number, and a floor that believes the take
+     * asked for 30 will never give a 60 fps take its rate back.
+     */
+    this.requestedRate = this.compositeRate()
     console.info(
       `[capture:arming] all start calls kicked +${(performance.now() - startT0).toFixed(0)}ms`,
     )
