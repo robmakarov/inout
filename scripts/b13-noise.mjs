@@ -386,35 +386,44 @@ if (opts.program) {
  * in twenty seconds, which is what "a lot of small noises" sounds like.
  */
 if (opts.notches) {
-  console.log('── pad notches: brief dips to near-silence, the shape a splice leaves ──')
+  /**
+   * VALIDATED AGAINST A CONTROL, because the first cut of this was not and it
+   * was measuring the music. Run on the reference material itself — which has
+   * zero splices by construction — the loose version below reported 178 per
+   * minute, MORE than the real takes. A detector that fires on a hi-hat decay
+   * cannot count splices.
+   *
+   * The splice has a shape nothing musical has: capture fades to TRUE ZERO,
+   * holds, and fades back, inside about 1.3 ms. So the test is a run of
+   * essentially-zero samples, 0.2-3 ms long, with real level on both sides —
+   * not "quieter than its neighbours", which is what music does all day.
+   */
+  console.log('── pad splices: runs of true silence with audio either side ──')
   for (const f of opts.files) {
     const { L, rate } = decode(f)
-    const B = Math.max(1, Math.round(0.0005 * rate)) // 0.5 ms blocks
-    const nb = Math.floor(L.length / B)
-    const env = new Float64Array(nb)
-    for (let b = 0; b < nb; b++) {
-      let peak = 0
-      for (let i = b * B; i < (b + 1) * B; i++) peak = Math.max(peak, Math.abs(L[i]))
-      env[b] = peak
-    }
-    // A notch is a run of blocks far below the LOCAL level either side of it,
-    // so ordinary quiet passages (which are quiet on both sides) never count.
-    const notches = []
-    for (let b = 4; b < nb - 4; b++) {
-      const around = Math.max(env[b - 4], env[b - 3], env[b + 3], env[b + 4])
-      if (around < 0.01) continue
-      if (env[b] < around * 0.06) {
-        const last = notches[notches.length - 1]
-        if (last && b - last.endBlock <= 2) { last.endBlock = b; last.blocks++ }
-        else notches.push({ atS: (b * B) / rate, endBlock: b, blocks: 1, depth: 20 * Math.log10(Math.max(env[b], 1e-9) / around) })
+    const SILENT = 3e-4          // -70 dBFS: a splice writes zeros, music does not
+    const MIN = Math.round(0.0002 * rate)
+    const MAX = Math.round(0.003 * rate)
+    const GUARD = Math.round(0.004 * rate)
+    const LOUD = 0.02            // real level either side, or it is just a quiet bar
+    const splices = []
+    let run = 0
+    for (let i = 1; i < L.length; i++) {
+      if (Math.abs(L[i]) < SILENT) { run++; continue }
+      if (run >= MIN && run <= MAX) {
+        const from = i - run
+        let before = 0, after = 0
+        for (let k = Math.max(0, from - GUARD); k < from; k++) before = Math.max(before, Math.abs(L[k]))
+        for (let k = i; k < Math.min(L.length, i + GUARD); k++) after = Math.max(after, Math.abs(L[k]))
+        if (before > LOUD && after > LOUD) splices.push({ atS: from / rate, ms: (run / rate) * 1000 })
       }
+      run = 0
     }
     const minutes = L.length / rate / 60
     console.log(
-      `  ${f.split('/').pop().padEnd(34)} ${String(notches.length).padStart(5)} notches · ` +
-        `${(notches.length / minutes).toFixed(0)}/min · median depth ${
-          notches.length ? notches.map((n) => n.depth).sort((a, b) => a - b)[Math.floor(notches.length / 2)].toFixed(0) : '—'
-        } dB · first: ${notches.slice(0, 8).map((n) => n.atS.toFixed(2) + 's').join(' ')}`,
+      `  ${f.split('/').pop().padEnd(34)} ${String(splices.length).padStart(5)} splices · ` +
+        `${(splices.length / minutes).toFixed(0)}/min · total ${splices.reduce((a, s) => a + s.ms, 0).toFixed(0)} ms · ` +
+        `first: ${splices.slice(0, 6).map((n) => n.atS.toFixed(2) + 's').join(' ') || '—'}`,
     )
   }
   console.log('')

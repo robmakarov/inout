@@ -61,6 +61,19 @@ function sampleAt(chan: Float32Array, pos: number): number {
  * better at 16 kHz, and 351x realtime per channel (171 ms per channel-minute),
  * against an export that is decode-bound at 5-6x. IT IS ON: a defect fix that
  * ships disabled has fixed nothing, and the old maths is what carries the flag.
+ *
+ * AND IT IS INERT ON THE SHIPPED CAPTURE PATH — measured 2026-09-03, after
+ * Robert listened to an A/B of it and said "c and d same to me". He was right
+ * and the reason is one line up the chain: every measured audio channel is
+ * stored as OPUS, opus always decodes at 48 kHz, and the mix bus is 48 kHz. So
+ * `interpolatorFor` is called with equal rates and NEITHER interpolator runs.
+ * The 44.1 kHz the tab delivers is resampled inside the opus encoder at capture
+ * time, not here. The console line below exists so that can never again be
+ * argued about instead of read.
+ *
+ * It stays because the mixer can still be handed a channel at another rate —
+ * the MediaRecorder lane, a non-opus source — and being correct there is free.
+ * It is NOT the answer to B13(3), and nothing should cite it as one.
  */
 const SINC_TAPS = 32
 const SINC_PHASES = 1024
