@@ -1,0 +1,359 @@
+#!/usr/bin/env node
+/**
+ * G7's RIG: does the lateness instrument read the machine, and what does it cost?
+ *
+ * Four questions, in this order because each is only worth asking if the one
+ * before it answered:
+ *
+ *   clamp   THE DESIGN. A take runs with the tab HIDDEN. Chrome clamps a hidden
+ *           page's timers to ~1 Hz, so a main-thread ticker reads the throttle
+ *           as a stall — E1 measured 984 ms of it at idle. The instrument
+ *           therefore puts its clock in a WORKER and stamps arrivals on the main
+ *           thread. This lane runs BOTH clocks in one hidden page and prints
+ *           them side by side. It is the only lane that launches Chrome with
+ *           background throttling LEFT ON (`throttled: true`) — every other rig
+ *           in this repo disables it, and none of them can see this.
+ *           MEASURED 2026-09-02: timer 1.2 Hz / p50 983.6 ms late, worker beat
+ *           63.3 Hz / p50 0.0 ms, on the same hidden page.
+ *   cost    THE BUDGET (< 1 ms of main thread per second of capture). The same
+ *           fixed workload, alternating with and without a sampler running, in
+ *           ONE page load so nothing else differs. Medians of N repetitions.
+ *   take    THE CARD. Record a real take through the product, stop it, and read
+ *           the `lateness` dimension off `__inoutReport()`.
+ *   editor  B10, AS A NUMBER. The editor samples its own first 15 s, which is
+ *           where the export panel encodes 300 frames on the main thread
+ *           (~11 s in). `__inoutEditorReport()` is the reading B10 has to move.
+ *
+ *   node scripts/g7-lateness.mjs                      # all four, own dev server
+ *   node scripts/g7-lateness.mjs --lanes=editor
+ *   node scripts/g7-lateness.mjs --url=https://inout-kappa.vercel.app
+ *
+ * ALWAYS THROUGH THE GATE — it is a headed browser and a real take:
+ *   scripts/gate.sh node scripts/g7-lateness.mjs
+ */
+import { spawn } from 'node:child_process'
+import { createServer } from 'node:net'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { launchChromeRetrying, quitChrome, resolveChrome, sleep } from './lib/chrome.mjs'
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const args = process.argv.slice(2)
+const arg = (name, dflt) => {
+  const hit = args.find((a) => a.startsWith(`--${name}=`))
+  return hit ? hit.slice(name.length + 3) : dflt
+}
+const LANES = arg('lanes', 'clamp,cost,take,editor').split(',')
+const TAKE_SEC = Number(arg('take', '20'))
+const CLAMP_SEC = Number(arg('clamp', '20'))
+const COST_REPS = Number(arg('reps', '3'))
+const EXTERNAL = arg('url', '')
+const QUERY = arg('query', 'synthetic=1')
+
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2
+}
+const r1 = (n) => Math.round(n * 10) / 10
+const r3 = (n) => Math.round(n * 1000) / 1000
+
+/* ───────────────────────────── the lanes ───────────────────────────── */
+
+/**
+ * BOTH CLOCKS, ONE HIDDEN PAGE. The worker is written out here rather than
+ * imported from the app on purpose: this lane has to be able to say the app's
+ * design is WRONG, and a lane that measures the app's own worker could only
+ * ever agree with it.
+ */
+const CLAMP = (ms, period) => `
+(() => {
+  const src = \`
+    let seq = 0, start = 0, period = ${period}, t = null
+    onmessage = (e) => {
+      if (e.data.type === 'start') { start = performance.now(); seq = 0; t = setTimeout(tick, period) }
+      else { clearTimeout(t); close() }
+    }
+    function tick() {
+      const now = performance.now()
+      seq++
+      const due = start + seq * period
+      postMessage({ due: performance.timeOrigin + due, workerLate: Math.max(0, now - due), seq })
+      let next = start + (seq + 1) * period
+      if (next <= now) { seq = Math.ceil((now - start) / period); next = start + (seq + 1) * period }
+      t = setTimeout(tick, next - now)
+    }\`
+  const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })))
+  const beat = { late: [], missed: 0, lastSeq: 0 }
+  w.onmessage = (e) => {
+    const now = performance.timeOrigin + performance.now()
+    const d = e.data
+    if (beat.lastSeq && d.seq > beat.lastSeq + 1) beat.missed += d.seq - beat.lastSeq - 1
+    beat.lastSeq = d.seq
+    beat.late.push(Math.max(0, now - d.due - d.workerLate))
+  }
+  w.postMessage({ type: 'start' })
+
+  const timer = { late: [] }
+  let last = performance.now()
+  const iv = setInterval(() => {
+    const now = performance.now()
+    timer.late.push(Math.max(0, now - last - ${period}))
+    last = now
+  }, ${period})
+
+  // What the page WAS while this ran — sampled, because the whole lane is about
+  // a state the page enters after the measurement starts.
+  const vis = []
+  const visIv = setInterval(() => vis.push(document.visibilityState), 1000)
+
+  const stat = (xs) => {
+    if (!xs.length) return { n: 0 }
+    const s = [...xs].sort((a, b) => a - b)
+    const q = (p) => Math.round(s[Math.min(s.length - 1, Math.floor(p * s.length))] * 10) / 10
+    return { n: xs.length, p50: q(0.5), p95: q(0.95), max: Math.round(s[s.length - 1] * 10) / 10 }
+  }
+  window.__g7clamp = new Promise((res) => {
+    setTimeout(() => {
+      clearInterval(iv)
+      clearInterval(visIv)
+      w.postMessage({ type: 'stop' })
+      w.terminate()
+      const secs = ${ms} / 1000
+      res({
+        periodMs: ${period},
+        windowMs: ${ms},
+        visibility: [...new Set(vis)],
+        timer: { ...stat(timer.late), hz: Math.round((timer.late.length / secs) * 10) / 10 },
+        worker: {
+          ...stat(beat.late),
+          hz: Math.round((beat.late.length / secs) * 10) / 10,
+          missed: beat.missed,
+        },
+      })
+    }, ${ms})
+  })
+  return 'started'
+})()
+`
+
+/**
+ * THE COST, MEASURED THE ONLY WAY THAT MEANS ANYTHING: the same work twice,
+ * differing in nothing but whether a sampler is running, inside ONE page load.
+ * Fixed unit COUNT and variable wall clock — so the difference in wall clock IS
+ * the cost, with no throughput arithmetic in between. The yield between units
+ * is what lets the beats be delivered at all: without it the queue would drain
+ * after the measurement and the sampler would look free.
+ */
+const COST = (units, sampling) => `
+(async () => {
+  const work = () => { let x = 0; for (let i = 0; i < 120000; i++) x += Math.sqrt(i); return x }
+  ${sampling ? 'const run = await window.__inoutLatenessStart()' : ''}
+  for (let i = 0; i < 5; i++) work()   // warm the JIT, so rep 1 is not the slow one
+  const t0 = performance.now()
+  let sink = 0
+  for (let i = 0; i < ${units}; i++) {
+    sink += work()
+    await new Promise((r) => setTimeout(r, 2))
+  }
+  const wallMs = performance.now() - t0
+  ${sampling ? 'const summary = run.stop()' : 'const summary = null'}
+  return { wallMs: Math.round(wallMs * 10) / 10, units: ${units}, sink: sink > 0, summary }
+})()
+`
+
+async function laneClamp(chrome, out) {
+  const started = await chrome.evaluate(CLAMP(CLAMP_SEC * 1000, 16))
+  if (started !== 'started') throw new Error('clamp lane did not start')
+  // HIDE THE TAB — which is the whole lane. A second tab in the foreground is
+  // exactly what a take looks like: Robert presses record and switches to the
+  // thing he is recording.
+  const created = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, {
+    method: 'PUT',
+  })
+    .then((r) => r.json())
+    .catch(() => null)
+  out.hidTab = Boolean(created?.id)
+  await sleep((CLAMP_SEC + 3) * 1000)
+  if (created?.id) {
+    await fetch(`http://127.0.0.1:${chrome.port}/json/close/${created.id}`).catch(() => undefined)
+    await sleep(1000)
+  }
+  const res = await chrome.evaluate('window.__g7clamp', 60_000)
+  out.clamp = res
+  out.clampVerdict =
+    `hidden page (${(res?.visibility ?? []).join('/')}): main-thread timer ${res?.timer?.hz} Hz, ` +
+    `p50 ${res?.timer?.p50} / max ${res?.timer?.max} ms late — worker beat ${res?.worker?.hz} Hz, ` +
+    `p50 ${res?.worker?.p50} / max ${res?.worker?.max} ms late, ${res?.worker?.missed} missed`
+  console.error(`g7: ${out.clampVerdict}`)
+}
+
+async function laneCost(chrome, out) {
+  const ready = await chrome.evaluate('typeof window.__inoutLatenessStart === "function"')
+  if (!ready) throw new Error('__inoutLatenessStart is not on this build — cost cannot be measured')
+  const on = []
+  const off = []
+  const units = 60
+  for (let i = 0; i < COST_REPS; i++) {
+    // Alternating, always off first, so a machine that warms or throttles over
+    // the run cannot masquerade as the cost of sampling.
+    const a = await chrome.evaluate(COST(units, false), 180_000)
+    off.push(a.wallMs)
+    const b = await chrome.evaluate(COST(units, true), 180_000)
+    on.push(b.wallMs)
+    if (b.summary) out.costSummary = b.summary
+  }
+  const mOn = median(on)
+  const mOff = median(off)
+  const perSec = ((mOn - mOff) / mOn) * 1000
+  out.cost = {
+    units,
+    reps: COST_REPS,
+    offWallMs: off.map(r1),
+    onWallMs: on.map(r1),
+    medianOffMs: r1(mOff),
+    medianOnMs: r1(mOn),
+    costMsPerSec: r3(perSec),
+    selfReportedMsPerSec: out.costSummary?.selfCostMsPerSec ?? null,
+    samplesSeen: out.costSummary?.samples ?? null,
+    periodMs: out.costSummary?.periodMs ?? null,
+  }
+  out.costVerdict =
+    `sampling costs ${r3(perSec)} ms per second of main thread ` +
+    `(${r1(mOff)} ms of work → ${r1(mOn)} ms, median of ${COST_REPS}); ` +
+    `the sampler's own reading: ${out.costSummary?.selfCostMsPerSec ?? '?'} ms/s over ` +
+    `${out.costSummary?.samples ?? '?'} samples`
+  console.error(`g7: ${out.costVerdict}`)
+}
+
+async function laneTake(chrome, out) {
+  const started = await chrome.evaluate(
+    `(() => { const b = document.querySelector('button.recbtn'); if (!b) return 'no record button'; b.click(); return 'ok' })()`,
+  )
+  if (started !== 'ok') throw new Error(`could not start a take: ${started}`)
+  await sleep(TAKE_SEC * 1000)
+  await chrome.evaluate(`(() => { document.querySelector('button.recbtn')?.click(); return 'ok' })()`)
+  for (let i = 0; i < 90; i++) {
+    const done = await chrome.evaluate(`!!document.querySelector('.tl__ruler')`)
+    if (done) break
+    await sleep(500)
+  }
+  const card = await chrome.evalJson(`(async () => JSON.stringify(await window.__inoutReport()))()`)
+  const dim = (card?.dimensions ?? []).find((d) => d.id === 'lateness')
+  out.take = { verdict: card?.verdict, line: card?.line, lateness: dim }
+  out.takeVerdict = `take card ${card?.verdict}: lateness ${dim?.status} — ${dim?.detail}`
+  console.error(`g7: ${out.takeVerdict}`)
+}
+
+async function laneEditor(chrome, out) {
+  // The editor's own sampler started on its mount and stops itself at 15 s.
+  // Poll rather than sleep: the auto-stop is a timer like any other.
+  for (let i = 0; i < 60; i++) {
+    const card = await chrome.evalJson(
+      `(async () => JSON.stringify(await window.__inoutEditorReport()))()`,
+    )
+    if (card?.dimensions?.[0]?.status !== 'unmeasured') {
+      out.editor = card
+      break
+    }
+    await sleep(1000)
+  }
+  out.sizeProbe = chrome.consoleLines.filter((l) => l.includes('size probe')).slice(-2)
+  const dim = out.editor?.dimensions?.[0]
+  out.editorVerdict = `editor card ${out.editor?.verdict}: ${dim?.status} — ${dim?.detail}`
+  console.error(`g7: ${out.editorVerdict}`)
+}
+
+/* ───────────────────────────── the run ───────────────────────────── */
+
+function allocatePort() {
+  return new Promise((res, rej) => {
+    const s = createServer()
+    s.once('error', rej)
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address()
+      s.close(() => res(port))
+    })
+  })
+}
+
+async function waitForHttp(url, until) {
+  while (Date.now() < until) {
+    try {
+      const r = await fetch(url)
+      if (r.ok) return
+    } catch {
+      /* not up yet */
+    }
+    await sleep(300)
+  }
+  throw new Error(`server never came up at ${url}`)
+}
+
+async function main() {
+  const bin = resolveChrome()
+  const out = { lanes: LANES, takeSec: TAKE_SEC }
+  let vite = null
+  let base = EXTERNAL
+  if (!base) {
+    const port = await allocatePort()
+    // Vite binds `localhost`, which on this machine is ::1 ALONE — a 127.0.0.1
+    // URL is refused and reads as "the server never came up".
+    base = `http://localhost:${port}`
+    vite = spawn('npm', ['run', 'dev', '--', '--port', String(port), '--strictPort'], {
+      cwd: ROOT,
+      stdio: 'pipe',
+    })
+    await waitForHttp(`${base}/index.html`, Date.now() + 90_000)
+    console.error(`g7: dev server on ${base} (this worktree)`)
+  }
+  out.url = `${base}/?${QUERY}`
+
+  const profiles = []
+  const openChrome = async (throttled) => {
+    const profile = mkdtempSync(join(tmpdir(), 'inout-g7-'))
+    profiles.push(profile)
+    return launchChromeRetrying({ bin, profile, url: out.url, headed: true, throttled })
+  }
+
+  let chrome = null
+  try {
+    // THE CLAMP LANE NEEDS ITS OWN CHROME, and that is the point of it: every
+    // other lane runs with background throttling disabled (the rigs' default,
+    // because a throttled compositor measures a take nobody records), and this
+    // one has to run with it ON.
+    if (LANES.includes('clamp')) {
+      chrome = await openChrome(true)
+      await sleep(2500)
+      await laneClamp(chrome, out)
+      await quitChrome(chrome).catch(() => undefined)
+      chrome = null
+    }
+    if (LANES.some((l) => ['cost', 'take', 'editor'].includes(l))) {
+      chrome = await openChrome(false)
+      await sleep(2500)
+      const visible = await chrome.evaluate('document.visibilityState')
+      out.visibility = visible
+      if (visible !== 'visible') {
+        throw new Error(`the page is ${visible} — every number here would be the clamp`)
+      }
+      if (LANES.includes('cost')) await laneCost(chrome, out)
+      if (LANES.includes('take')) await laneTake(chrome, out)
+      if (LANES.includes('editor')) await laneEditor(chrome, out)
+    }
+    console.log(JSON.stringify(out, null, 2))
+  } finally {
+    if (chrome) await quitChrome(chrome).catch(() => undefined)
+    for (const p of profiles) rmSync(p, { recursive: true, force: true })
+    if (vite) {
+      vite.kill('SIGTERM')
+      setTimeout(() => vite.kill('SIGKILL'), 3000).unref?.()
+    }
+  }
+}
+
+main().catch((err) => {
+  console.error(`g7: ${err.message}`)
+  process.exit(1)
+})
