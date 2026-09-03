@@ -900,3 +900,31 @@ THE LESSON FOR THE NEXT AGENT WHO WANTS TO BE CLEVER: J2 was competent codec wor
 derivation is correct, the hidden-picture trick is real — and it was still wrong, because it paid for
 speed with the shipped file, with player compatibility, and with edits the user already has. Before
 proposing an engine, name what it takes away. If the answer is anything, it is not a proposal.
+
+session 2026-09-03 — G6(f) THE SCREEN ENCODER IS NOT STARVED: A REQUESTED BITRATE IS A CEILING, NOT A
+FLOOR. The question, from rec_78ogcw052vdn: the 720p camera PiP wrote MORE bytes (900 MB at 2.49 Mbps)
+than the 3024x1964 screen (814 MB at 2.25 Mbps of 8 requested) — is the screen encoder starved, or does
+still content legitimately compress to 28 % of its request? Measured with the o11 bits audit, one
+machine, one 8 Mbps request, two contents (`scripts/gate.sh node scripts/exp.mjs o11 '{"takeMs":10000}'`
+— note the TASKS line said `npm run exp -- bits` and there IS no `bits` experiment; the id is `o11`).
+CAPTURE encoder (MediaRecorder, the raw channel's own path), 8 Mbps requested: screen-like still content
+(an editor page that scrolls one line every 2.5 s) achieved 2.53 Mbps = 31.6 % of the request; the
+motion source (a full-frame gradient that changes everywhere every frame) achieved 4.43 Mbps = 55.4 %.
+The field's 28 % sits inside the still band. RENDER encoder, same 8 Mbps request: motion held
+2.400-2.409 Mbps — 30.0-30.1 % — across five independent GOP renders, screen ran 1.25-2.63 Mbps
+(15.6-32.8 %) as the cadence changed.
+THREE THINGS SETTLE IT. (1) NEITHER content reaches its request. The most-changing picture this rig can
+paint stops at 55 %, so "achieved below requested" is not a starvation signal at all — `videoBitsPerSecond`
+is a target the encoder is free to undershoot, and it undershoots by content. (2) A starved encoder does
+not hold a rate constant to 0.1 % across five separate renders; the motion lane did. (3) PSNR against the
+2 s baseline read 66.1-93.0 dB, far above the ~45 dB at which two files are the same picture — no quality
+was given up to reach those bytes. And the camera outwriting the screen is the same fact from the other
+side: bytes track CHANGE, not pixel count, so a moving 720p face costs more than a still 3024x1964 page.
+The 48-minute field take held 2.25 Mbps to the end, which is itself against starvation — a starved
+encoder degrades as it goes.
+WHAT THIS DOES NOT PROVE, stated so nobody over-reads it: the rig paints 1920x1080 and its camera is
+synthetic, so it establishes the CONTENT mechanism and does not by itself rule out something specific to
+3024x1964. Anyone who still suspects starvation there should read the FRAME accounting of that take, not
+its byte count — bytes cannot distinguish the two and frames can. No product change follows from this;
+the size lane's lever is content-side (X17's census, SIZE-CODEC), not a bitrate the encoder is declining
+to spend.
