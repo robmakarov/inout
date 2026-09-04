@@ -1183,3 +1183,25 @@ spur -53.0 dB, tail 82 ms, export 3.5x) AND on the `?painter=webgl2` control (54
 3.64x) · oracle v1 PASS (61.3/81.3, export 1.2x) on a second reading after one INCONCLUSIVE at export
 0.99x under load/core 1.64 — v1 has ZERO references to the painter, so that was G6's confirm-a-red rule
 working, not a regression.
+
+2026-09-04 robert (25) — THE FALLBACK IS THE SAME ENGINE WITH ONE STAGE SWAPPED, AND IT IS A TASK ROW ONLY.
+Asked, after O4 closed: "what else webgpu unlocks for us and where it cant work", then "so how to make
+best fallback to safari/firefox v1 and browser that dont have it not fucking up best frontier shit that
+will be available in those who can run advanced shit?" SHOWN, NOT RULED (WebGPU): it unlocks O9(a)'s
+supersampling inside the live painter for a fraction of the 3.6 ms just removed, camera background
+blur/replace as the first feature to spend the freed GPU on (approved shape in BACKLOG, needs his yes,
+opt-in), multi-source layouts at one bind each, F12's model, X17's census as a compute pass; owning the
+RGB→NV12 step needs a per-frame readback and is a measurement first. It CANNOT: speed export (X5 refused
+2026-08-26, draw 2 % against 79 % encode-wait), run on the max path (no composite), run on Safari or
+Firefox today (v2 needs a track processor those engines lack on the main thread), or recover anything
+lost before the frame arrives (Chrome's NV12 share, P3 gamut, SDR, cursor — P4). Chromium Linux only on
+Intel Gen12+ (Chrome 144); the 90 % is an Apple-silicon fact (IOSurface), unmeasured elsewhere.
+RULED: on the fallback question he was offered task + Playwright download (WebKit and Firefox, ~90 MB
+each) / task row only / PROPOSALS only / no, and chose "Task row only". P9 is written in TASKS (Phase 3,
+safari next by his 09-02 port order): one engine (the v2 worker) chosen by probes, the frame source as
+the one swappable stage — Chromium main-thread processor · Safari 18+ worker-only processor with the
+track transferred · Firefox via v1's AudioWorklet sampler emitting VideoFrames — v1 the untouched floor,
+declare-never-degrade, one oracle cell per rung on its real engine. The download and the Safari/Firefox
+cells wait for a later yes; P1 stays blocked on him. Two Chromium-ladder holes found in the reading went
+to BACKLOG: a lost WebGPU device mid-take paints nothing until the next shape change; the WebGL2 rung's
+NV12 colour differs from the WebGPU look he chose.
