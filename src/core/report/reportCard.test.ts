@@ -557,3 +557,45 @@ describe('G7: main-thread lateness', () => {
     expect(card.verdict).toBe('incomplete')
   })
 })
+
+/**
+ * P9/O4 — WHICH MACHINERY MADE THE COMPOSITE, ON THE CARD.
+ *
+ * The intake and the painter are both chosen at runtime by probe and both fall
+ * through to a rung below when a machine cannot honour them. A card that does
+ * not name them cannot notice one rung behaving differently from another, which
+ * is the only enforcement "a silent difference between rungs is a defect" has
+ * after the take is over.
+ */
+describe('the picture line names what made the composite', () => {
+  function withComposite(over: Record<string, unknown>): Recording {
+    const take = fiftyMinuteTake()
+    take.composite = {
+      blobKey: 'b_composite',
+      mimeType: 'video/mp4',
+      durationMs: TAKE_MS,
+      width: 1920,
+      height: 1080,
+      engine: 'v2',
+      ...over,
+    } as Recording['composite']
+    return take
+  }
+  const picture = (take: Recording): string =>
+    buildReportCard(take).dimensions.find((d) => d.id === 'picture')?.detail ?? ''
+
+  it('names the rung and the backend that ran', () => {
+    const detail = picture(withComposite({ intake: 'element-sampler', painter: 'webgpu' }))
+    expect(detail).toContain('composite by element-sampler into webgpu')
+  })
+
+  it('says a take was recorded before the fields existed instead of guessing', () => {
+    const detail = picture(withComposite({}))
+    expect(detail).toContain('an unrecorded intake')
+    expect(detail).toContain('an unrecorded painter')
+  })
+
+  it('says nothing about machinery on a take with no composite', () => {
+    expect(picture(fiftyMinuteTake())).not.toContain('composite by')
+  })
+})
