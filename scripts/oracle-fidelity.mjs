@@ -202,6 +202,10 @@ async function main() {
   // Red proof for the instant-lane gates: without a composite the lane cannot
   // run, and the run must FAIL rather than quietly gate the render alone.
   const noComposite = process.argv.includes('--no-composite')
+  // Extra page knobs, passed straight through (e.g. `--query=noisegate=on`), so
+  // a switch that touches the mix can be measured on the instrument that grades
+  // the mix rather than argued about.
+  const extraQuery = (process.argv.find((a) => a.startsWith('--query=')) ?? '').slice(8)
   try {
     await runQuiet(CHROME, ['--version'])
   } catch {
@@ -238,6 +242,7 @@ async function main() {
         JSON.stringify({ composite: !noComposite }),
         `--port=${port}`,
         `--logDir=${logDir}`,
+        ...(extraQuery ? [`--query=${extraQuery}`] : []),
       ])
       const load = sampler.stop()
       if (!cdp.ok) {

@@ -141,6 +141,12 @@ export interface SpectralGateParams {
    * inaudible, but a trigger the gate had no business pulling.
    */
   steadyRatio: number
+  /**
+   * How far above the take's own broadband floor a bin may sit and still count
+   * as bed, dB. A sustained tone is perfectly stationary and is NOT noise; see
+   * the note in `noiseProfile`, where this is applied.
+   */
+  bedSpreadDb: number
 }
 
 export const GATE_DEFAULTS: SpectralGateParams = {
@@ -149,6 +155,7 @@ export const GATE_DEFAULTS: SpectralGateParams = {
   noiseQuantile: 0.2,
   silenceDb: 90,
   steadyRatio: 0.45,
+  bedSpreadDb: 40,
 }
 
 /**
@@ -173,6 +180,7 @@ export function noiseProfile(
   frame = GATE_FRAME,
   hop = GATE_HOP,
   quantile = GATE_DEFAULTS.noiseQuantile,
+  bedSpreadDb = GATE_DEFAULTS.bedSpreadDb,
 ): NoiseProfile {
   const bins = frame / 2 + 1
   const win = hannWindow(frame)
@@ -201,6 +209,36 @@ export function noiseProfile(
     const median = at(0.5)
     floor[b] = q
     steady[b] = median > 0 ? q / median : 0
+  }
+  /**
+   * A SUSTAINED TONE IS PERFECTLY STATIONARY, AND THAT IS NOT ENOUGH TO MAKE IT
+   * NOISE. Found 2026-09-04 by this project's own fidelity instrument, not by
+   * this file's fixtures: with the gate on, `oracle-fidelity` came back RED on
+   * both takes at **5.93 dB of tone error** — the gate was pulling the test
+   * tones down by 6 dB and calling them a bed. The mechanism, measured: a 1 kHz
+   * sine held for the whole window has `steady = 1.000` (it never varies, which
+   * is the definition the gate was using) and its bin's floor sits **76.1 dB
+   * above the median floor across bins**. It was being gated against its own
+   * level, because the quiet quantile of a bin that is never quiet IS the
+   * signal.
+   *
+   * So stationarity alone cannot say "bed", and the missing half is LEVEL: a
+   * bed sits at the take's broadband floor. The median floor across bins is
+   * that floor, robustly — half the spectrum of any real take is bed — and a
+   * bin more than `bedSpreadDb` above it is content, not bed, however steady.
+   *
+   * 40 dB is deliberately generous, and it is chosen for HUM: mains hum is
+   * narrowband, stationary and genuinely a bed, and it sits tens of dB above
+   * broadband hiss. The tone this caught is 76 dB up. Zeroing `steady` here
+   * rather than adding a test at the two call sites keeps one rule in one
+   * place: both `gate()` and `StreamingGate` already decline a bin whose steady
+   * is below the threshold.
+   */
+  const ranked = Array.from(floor).sort((a, b) => a - b)
+  const medianFloor = ranked[Math.floor(ranked.length / 2)] ?? 0
+  const bedCeiling = medianFloor * Math.pow(10, bedSpreadDb / 20)
+  if (medianFloor > 0) {
+    for (let b = 0; b < bins; b++) if (floor[b]! > bedCeiling) steady[b] = 0
   }
   return { floor, steady }
 }
@@ -396,9 +434,34 @@ export class StreamingGate {
     return out
   }
 
-  /** No more input: hand back everything still held. */
+  /**
+   * No more input: hand back everything still held — INCLUDING the samples no
+   * window ever covered.
+   *
+   * THIS DROPPED THE END OF EVERY TAKE and the wiring's own test caught it
+   * (2026-09-04, `gateWiring.test.ts`): the last frame can only start at a
+   * multiple of the hop, so up to `frame - 1` samples sit past the end of the
+   * accumulator, and emitting only what the accumulator covers loses them. On a
+   * 0.5 s signal that was 192 samples; on any take it is a truncation at the
+   * tail, which is a length error and therefore a sync error.
+   *
+   * They are handed back RAW, which is exactly what the whole-signal `gate()`
+   * already does with them (its `norm[i]` is 0 there and it falls through to
+   * the input). Never zero-padded into a final window: dividing by a window sum
+   * of nearly nothing AMPLIFIES, and that is the 4.3 dB defect this file's
+   * header already records.
+   */
   flush(): Float32Array {
-    return this.emitTo(this.accAt + this.acc.length)
+    const gated = this.emitTo(this.accAt + this.acc.length)
+    const inputEnd = this.bufAt + this.buf.length
+    if (this.emitAt >= inputEnd) return gated
+    const tail = new Float32Array(gated.length + (inputEnd - this.emitAt))
+    tail.set(gated)
+    for (let at = this.emitAt; at < inputEnd; at++) {
+      tail[gated.length + at - this.emitAt] = this.buf[at - this.bufAt]!
+    }
+    this.emitAt = inputEnd
+    return tail
   }
 
   private append(chunk: Float32Array): void {

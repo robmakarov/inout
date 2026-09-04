@@ -39,6 +39,7 @@ import { setConstantQualityOverride } from './constantQuality'
 import { setKeyframeIntervalOverride } from './keyframeInterval'
 import { setFullColourOverride } from './fullColour'
 import { separateAudioTracks, setAudioTrackModeOverride, type AudioTrackMode } from './audioTracks'
+import { setNoiseGateOverride } from './gateFlag'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
@@ -71,6 +72,8 @@ export type ExportWorkerIn =
         /** O9(b)'s `?colour=all` — the 4:4:4 rung. Default off. */
         fullColour?: boolean
         audioTracks?: AudioTrackMode
+        /** O10c's `?noisegate=` — deterministic spectral gating. Default off. */
+        noiseGate?: boolean
         /** `?gop=` — the keyframe interval, which is also J1's chunk grid. */
         gop?: number
       }
@@ -151,6 +154,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (typeof msg.flags.fullColour === 'boolean') setFullColourOverride(msg.flags.fullColour)
     if (typeof msg.flags.gop === 'number') setKeyframeIntervalOverride(msg.flags.gop)
     if (msg.flags.audioTracks) setAudioTrackModeOverride(msg.flags.audioTracks)
+    if (typeof msg.flags.noiseGate === 'boolean') setNoiseGateOverride(msg.flags.noiseGate)
   }
   if (msg.pace) paceLevel = msg.pace
   try {

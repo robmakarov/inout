@@ -36,6 +36,7 @@ import { chunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { constantQualityQp } from '@core/compose/constantQuality'
 import { editRenderEnabled } from '@core/compose/editRenderFlag'
 import { fullColourEnabled } from '@core/compose/fullColour'
+import { noiseGateEnabled } from '@core/compose/gateFlag'
 import { keyframeIntervalSec } from '@core/compose/keyframeInterval'
 import { loudnessMode } from '@core/compose/loudnessMode'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
@@ -85,6 +86,7 @@ export const SWITCH_READERS: Readonly<Record<string, () => string>> = {
   audiobuf: () => String(trackTapBufferMs()),
   resamp: () => onOff(bandLimitedResampling()),
   audiotracks: () => audioTrackMode(),
+  noisegate: () => (noiseGateEnabled() ? 'on' : 'off'),
   loudness: () => loudnessMode(),
   chunked: () => onOff(chunkedRenderEnabled()),
   bgrender: () => onOff(editRenderEnabled()),

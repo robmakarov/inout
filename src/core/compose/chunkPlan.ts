@@ -70,6 +70,7 @@ import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
 import { fullColourActive } from './fullColour'
 import { audioTrackModeActive } from './audioTracks'
+import { noiseGateActive } from './gateFlag'
 
 /**
  * Bump on ANY change that can move a pixel or a byte: the draw (layout.ts,
@@ -97,6 +98,13 @@ export interface RenderFlagPrint {
    * said so in its own console line.
    */
   audioTracks: string
+  /**
+   * O10c's `?noisegate=` — it changes the samples themselves, so a file made
+   * with it off must never be served for a press made with it on. O10b's own
+   * switch was forgotten here and the first press was handed a stale
+   * pre-render; this row is that lesson applied before it could happen twice.
+   */
+  noiseGate: boolean
 }
 
 /**
@@ -120,6 +128,7 @@ export function currentRenderFlags(): RenderFlagPrint {
     sourceFrame: sourceFrameEnabled(),
     fullColour: fullColourActive(),
     audioTracks: audioTrackModeActive(),
+    noiseGate: noiseGateActive(),
   }
 }
 

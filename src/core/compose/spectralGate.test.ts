@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATE_DEFAULTS, StreamingGate, fft, gate, hannWindow, noiseProfile } from './spectralGate'
+import { GATE_DEFAULTS, GATE_FRAME, StreamingGate, fft, gate, hannWindow, noiseProfile } from './spectralGate'
 
 /**
  * O10c's claims, each pinned by the measurement it is a claim about. The order
@@ -261,5 +261,61 @@ describe('fed a second at a time, it is the same gate', () => {
     const err = new Float32Array(n)
     for (let i = 0; i < n; i++) err[i] = ragged[i]! - even[i]!
     expect(db(rms(err, 4096, n - 4096))).toBeLessThan(db(rms(even, 4096, n - 4096)) - 100)
+  })
+})
+
+describe('a sustained tone is not a noise bed', () => {
+  /**
+   * FOUND BY `oracle-fidelity`, NOT BY THIS FILE (2026-09-04). With the gate
+   * wired and switched on, the project's own mix instrument came back RED on
+   * both takes at 5.93 dB of tone error: the gate was pulling its test tones
+   * down 6 dB. A 1 kHz sine held for the whole window reads `steady = 1.000` —
+   * it never varies, which was the whole definition of "bed" — and its bin's
+   * floor sits 76 dB above the median floor across bins, so it was being gated
+   * against its own level.
+   *
+   * These are that finding, kept where it can fail again.
+   */
+  const SR = 48000
+  const build = (make: (t: number) => number, seconds = 3): Float32Array => {
+    const n = Math.round(seconds * SR)
+    const out = new Float32Array(n)
+    for (let i = 0; i < n; i++) out[i] = make(i / SR)
+    return out
+  }
+  let seed = 99
+  const rnd = (): number => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 2 - 1
+
+  it('leaves a steady 1 kHz tone alone, to well under a tenth of a dB', () => {
+    const tone = build((t) => 0.3 * Math.sin(2 * Math.PI * 1000 * t) + 0.002 * rnd())
+    const result = gate(tone, noiseProfile(tone), GATE_DEFAULTS)
+    // The level of the tone itself, measured over the interior so the
+    // reconstruction edges are not in it.
+    const rms = (a: Float32Array): number => {
+      let sum = 0
+      for (let i = GATE_FRAME; i < a.length - GATE_FRAME; i++) sum += a[i]! * a[i]!
+      return Math.sqrt(sum / (a.length - 2 * GATE_FRAME))
+    }
+    const movedDb = 20 * Math.log10(rms(result.out) / rms(tone))
+    expect(Math.abs(movedDb)).toBeLessThan(0.1)
+  })
+
+  it('still takes a broadband bed out — the rule keeps the gate a gate', () => {
+    const bed = build(() => 0.01 * rnd(), 4)
+    const result = gate(bed, noiseProfile(bed), GATE_DEFAULTS)
+    let before = 0
+    let after = 0
+    for (let i = GATE_FRAME; i < bed.length - GATE_FRAME; i++) {
+      before += bed[i]! * bed[i]!
+      after += result.out[i]! * result.out[i]!
+    }
+    expect(10 * Math.log10(after / before)).toBeLessThan(-1)
+  })
+
+  it('declares the tone not-a-bed in the profile itself, so both paths agree', () => {
+    const tone = build((t) => 0.3 * Math.sin(2 * Math.PI * 1000 * t) + 0.002 * rnd())
+    const profile = noiseProfile(tone)
+    const bin = Math.round((1000 / SR) * GATE_FRAME)
+    expect(profile.steady[bin]).toBe(0)
   })
 })

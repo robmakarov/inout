@@ -117,8 +117,13 @@ const COST_EVERY = 64
  * does not sample — and because a user who wants their machine left alone
  * should not have to argue with us (prerenderFlag.ts's precedent).
  *
- * `?latebeat=N` overrides the schedule period for one load. Not a product
- * knob: it is how the cost curve is measured (16 ms vs 32 ms vs 64 ms).
+ * `?latebeat=N` USED TO LIVE HERE and was RETIRED 2026-09-04 by U4's rule that
+ * the switch count only ever goes down. It existed to measure this sampler's
+ * own cost curve (16 vs 32 vs 64 ms); that curve was measured, the answer is
+ * DEFAULT_PERIOD_MS above, and nothing in the repo — no rig, no script, no
+ * test, no doc — ever passed it. `latenessPeriodMs(ms)` still takes the period
+ * as an argument, so a rig that wants to walk it again can, in code, where a
+ * measurement belongs.
  */
 function search(name: string): string | null {
   if (typeof location === 'undefined') return null
@@ -130,8 +135,7 @@ export function latenessEnabled(): boolean {
 }
 
 export function latenessPeriodMs(fallback: number = DEFAULT_PERIOD_MS): number {
-  const raw = Number(search('latebeat'))
-  return Number.isFinite(raw) && raw >= 4 && raw <= 1000 ? raw : fallback
+  return fallback
 }
 
 /* ───────────────────── the accumulator (pure) ───────────────────── */

@@ -38,6 +38,7 @@ import { prerenderKey, takePrerender } from './prerender'
 import { exportSmartCut, isPixelDefaultEdit } from './smartCut'
 import { smartCutEnabled } from './smartCutFlag'
 import { fullColourActive } from './fullColour'
+import { noiseGateActive } from './gateFlag'
 import { separateAudioTracks } from './audioTracks'
 
 export type ExportPath = 'instant' | 'smartcut' | 'render'
@@ -150,7 +151,17 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   const wantSeparate =
     separateAudioTracks() &&
     recording.channels.filter((c) => c.media === 'audio').length > 1
-  const source = fullColour || wantSeparate ? null : copy.source
+  /**
+   * O10c — AND A COPY CANNOT TAKE THE HISS OUT EITHER. The gate runs inside the
+   * render's audio mixer; the instant path hands over the recorded audio track
+   * untouched and smart cut re-encodes only the cut boundaries, so a gated
+   * export through either would come back exactly as noisy as the take while
+   * the switch said the noise was gone. Same rule, third time: a switch that
+   * silently does nothing is the defect, so the copying paths DECLINE BY NAME.
+   * Off by default, so nothing moves for anyone who did not ask.
+   */
+  const wantGate = noiseGateActive()
+  const source = fullColour || wantSeparate || wantGate ? null : copy.source
   if (fullColour && copy.source) {
     const why = 'every colour asked for: a packet copy cannot change 4:2:0 into 4:4:4'
     declined.push({ path: 'instant', reason: why })
@@ -158,6 +169,11 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   }
   if (wantSeparate && copy.source && !fullColour) {
     const why = 'the sounds kept apart: a packet copy hands over the mix the take already has'
+    declined.push({ path: 'instant', reason: why })
+    declined.push({ path: 'smartcut', reason: why })
+  }
+  if (wantGate && copy.source && !fullColour && !wantSeparate) {
+    const why = 'the noise gate is on: a packet copy hands over the sound the take already has'
     declined.push({ path: 'instant', reason: why })
     declined.push({ path: 'smartcut', reason: why })
   }
@@ -202,7 +218,7 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
     } else {
       declined.push({ path: 'smartcut', reason: 'disabled by flag' })
     }
-  } else if (!fullColour) {
+  } else if (!fullColour && !wantGate) {
     // Full colour has already said why, by name, above — saying "nothing to
     // copy" on top of it would report a second, wrong reason for one decision.
     const why = allowPacketCopy
