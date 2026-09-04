@@ -1205,3 +1205,22 @@ declare-never-degrade, one oracle cell per rung on its real engine. The download
 cells wait for a later yes; P1 stays blocked on him. Two Chromium-ladder holes found in the reading went
 to BACKLOG: a lost WebGPU device mid-take paints nothing until the next shape change; the WebGL2 rung's
 NV12 colour differs from the WebGPU look he chose.
+
+robert 2026-09-04 (26): THE GLUED COPY IS NOT KILLED, IT IS MARKED. "dont kill this glued copy for now,
+mark it is potential junk, but maybe we will bring it back" — said after being shown that on a
+SCREEN-ONLY take the live composite is recorded and then NOT USED: single generation's default rung
+(`export`, src/core/singleGen.ts) makes both copy paths prefer the raw screen channel, which keeps 78 %
+of the source's colour against the composite's 70 %. So a whole hardware encoder runs every take for a
+file nothing opens. The `capture` rung (`?singlegen=capture`) is what stops recording it, and it stays
+OFF and unflipped by this ruling. WHAT IT WOULD GIVE UP, so the trade is not re-derived: source-liveness
+("your screen froze") lives inside the compositor; the recording preview falls back to the raw <video>;
+and a take whose measured-video start falls back to MediaRecorder mid-start has neither a composite nor a
+copyable channel, so its unedited export renders. The first of those is the one that matters and it is
+probably MOVABLE onto the raw channel rather than lost — unmeasured, and nobody should flip the rung
+until it is. RECORDED AS POTENTIAL JUNK, NOT AS DEAD: the composite is still what makes a CAMERA take's
+export instant, and it is a render done at record time from the live picture, which is why it beats a
+later render (70 against 61 — one pass instead of two).
+Also ruled the same day, on O9: he asked what the 4:4:4 rung actually buys and the honest answer is that
+it CANNOT beat what the browser hands us. Real getDisplayMedia delivers NV12 at 1.5 bytes/px (measured,
+docs/qa/o4-gpu-residency.json, `display 3024x1964`); every lever we own can only stop us LOSING more
+than that. See .ai/TASKS O9.
