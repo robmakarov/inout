@@ -2907,3 +2907,11 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* U4: the switches the take's own settings line does not name, read from the
+   registry so it can never again say fewer than there are. Amber, because it is
+   the "something is on" line and green is what "nothing is set" would be. */
+.editor__settings--switches {
+  color: var(--warn);
+  margin-top: -4px;
+}

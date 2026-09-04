@@ -6,6 +6,7 @@ import { captureQualityMode, rateLadderAllowed } from '@core/capture/captureQual
 import { encoderBudgetEnabled } from '@core/capture/encoderBudget'
 import { resolutionStepEnabled } from '@core/capture/resolutionStep'
 import { nativeResEnabled } from '@core/capture/nativeRes'
+import { changedSwitches } from '@core/switches'
 
 /**
  * THE SETTINGS, NEXT TO THE BANNERS, SO A SCREENSHOT CARRIES BOTH — Robert,
@@ -15,6 +16,22 @@ import { nativeResEnabled } from '@core/capture/nativeRes'
  * Every report so far has cost two screenshots and a round trip to work out
  * which switches were on. One line under the take's own warnings ends that: the
  * evidence and the configuration that produced it are the same picture.
+ *
+ * U4 (2026-09-04) ADDED THE SECOND LINE, and the reason is what U4 is about:
+ * this line was HAND-KEPT and named ten switches out of fifty, so a screenshot
+ * of a take made with, say, `?noisegate=on` sticky in his browser carried no
+ * hint that anything was on at all. The second line is read from the REGISTRY
+ * (`@core/switches`), so it can never again name fewer switches than there are,
+ * and it says where each one comes from — the address bar, or sticky in this
+ * browser, which are two different fixes.
+ *
+ * The first line stays hand-written on purpose: it is the TAKE's settings, in
+ * the words the take is discussed in, and it carries the INERT rule below that
+ * no generic list could. The two are complementary, not duplicates.
+ *
+ * It does NOT import `switchBindings.ts`: that pulls twenty-five core modules
+ * in to answer what each module will DO, and the editor chunk is not the place
+ * for it (O7). The registry alone is enough to say what is SET.
  *
  * Read at RENDER time from the same getters capture reads, so it describes the
  * settings as they are now. That is honest for the common case — nobody changes
@@ -46,5 +63,29 @@ export function SettingsBadge() {
   // the second encoder is back on — a take that is slower than the shipped one
   // must say why on its face.
   if (glueRecorded()) on.push('glued copy RECORDED')
-  return <div className="editor__settings">Settings: {on.join(' · ')}</div>
+  // Everything the first line does not name — from the registry, so the count
+  // cannot be wrong. The take's own settings above are not repeated here.
+  const NAMED = new Set([
+    'sourceres',
+    'sourcefps',
+    'quality',
+    'maxladder',
+    'sourceframe',
+    'nativeres',
+    'encoderbudget',
+    'resstep',
+    'singlegen',
+    'glue',
+  ])
+  const rest = changedSwitches().filter((r) => !NAMED.has(r.spec.id))
+  return (
+    <>
+      <div className="editor__settings">Settings: {on.join(' · ')}</div>
+      {rest.length > 0 && (
+        <div className="editor__settings editor__settings--switches">
+          Also set: {rest.map((r) => `${r.spec.id}=${r.value}${r.source === 'url' ? ' (link)' : ''}`).join(' · ')}
+        </div>
+      )}
+    </>
+  )
 }
