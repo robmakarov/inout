@@ -100,6 +100,7 @@ import { BitsAudit, formatBits } from './bits'
 import { DEFAULT_TARGET_LUFS, gainForTargetLufs } from './lufs'
 import { loudnessMode } from './loudnessMode'
 import { drawVideoFrame, type FrameCanvas } from './layout'
+import { supersampleDraw } from './supersample'
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
@@ -486,7 +487,29 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const canvas = new OffscreenCanvas(width, height)
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('Canvas 2D context unavailable')
-    const frame: FrameCanvas = { ctx, width, height, scale: frameScale(width, height) }
+    /**
+     * O9(a). The composition is drawn at an integer multiple of the output and
+     * reduced into `canvas` once per frame, so every delivered pixel is the
+     * exact block average of its draw pixels instead of one bilinear tap of a
+     * minified source. `null` — the default — is today's draw, byte for byte:
+     * `frame` IS the delivery canvas and no blit happens anywhere below.
+     */
+    const ss = supersampleDraw(width, height)
+    const drawCanvas = ss ? new OffscreenCanvas(ss.width, ss.height) : canvas
+    const drawCtx = ss ? drawCanvas.getContext('2d', { alpha: false }) : ctx
+    if (!drawCtx) throw new Error('Canvas 2D context unavailable')
+    if (ss) {
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      console.info(
+        `[compose] O9(a) supersampled draw ${ss.width}x${ss.height} → ${width}x${height} (${ss.factor}x)`,
+      )
+    }
+    const frame: FrameCanvas = ss
+      ? { ctx: drawCtx, width: ss.width, height: ss.height, scale: frameScale(ss.width, ss.height) }
+      : { ctx, width, height, scale: frameScale(width, height) }
+    /** The reduction, counted as draw because that is what it is. */
+    const reduce = ss ? (): void => { ctx.drawImage(drawCanvas, 0, 0, width, height) } : null
 
     // CONSTANT QUALITY, when this browser honours it (Robert 2026-08-29, "more
     // quality and much less size"). Resolved BEFORE the output so the file's
@@ -656,6 +679,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       if (drawWaveform) {
         const tDraw = performance.now()
         drawWaveform(tSec)
+        reduce?.()
         stats.drawMs += performance.now() - tDraw
       } else {
         const tDecode = performance.now()
@@ -689,6 +713,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           if (recMs !== null) view = viewportAt(edit.viewport, recMs)
         }
         drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
+        reduce?.()
         stats.drawMs += performance.now() - tDraw
       }
       // Awaited, and that is not the stall O5 assumed it was: mediabunny's

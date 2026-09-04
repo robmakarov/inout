@@ -15,6 +15,7 @@ import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
+import { setSupersampleFactor, supersampleFactor } from '@core/compose/supersample'
 import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
 import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
@@ -177,6 +178,19 @@ export function TestPanel() {
           redraw()
         }}
       />
+      {/* O9(a). The switch is on the NEW thing because the picture it makes is
+          not the picture every take before it made, and a picture change is
+          Robert's call (.ai/TASKS O9: "his yes before any default moves"). */}
+      <Choice
+        label="Draw bigger, then shrink"
+        hint="Export only, and only worth it when the screen was recorded bigger than the file you export. 1 is what every take so far did: each pixel of the file is one sample of the screen, so thin coloured text gets sampled instead of averaged and comes out washed out. 2 draws the picture at double size and averages it down, which is the same colour a photo gets from a bigger sensor. Costs the drawing four times as much — about 6% of an export — and not one byte more."
+        value={String(supersampleFactor()) as SsChoice}
+        options={['1', '1.5', '2'] as SsChoice[]}
+        set={(v) => {
+          setSupersampleFactor(v === '1' ? null : Number(v))
+          redraw()
+        }}
+      />
       <Choice
         label="Single generation"
         hint="Whether the composite is recorded when a raw channel already holds the picture"
@@ -202,6 +216,7 @@ export function TestPanel() {
           setResolutionStep(null)
           setSingleGenRung(null)
           setChunkedRenderEnabled(null)
+          setSupersampleFactor(null)
           redraw()
         }}
       >
@@ -250,6 +265,8 @@ function Toggle({
     </label>
   )
 }
+
+type SsChoice = '1' | '1.5' | '2'
 
 function Choice<T extends string>({
   label,

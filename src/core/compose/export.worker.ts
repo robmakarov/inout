@@ -36,6 +36,7 @@ import {
 } from './chunkedRender'
 import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from './chunkedFlag'
 import { setConstantQualityOverride } from './constantQuality'
+import { setSupersampleOverride } from './supersample'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
@@ -65,6 +66,8 @@ export type ExportWorkerIn =
         sourceFrame?: boolean
         /** J1's `?chunked=` — the render that remembers. Default off. */
         chunked?: boolean
+        /** O9(a)'s `?ss=` — the supersampled draw. 1 = today's draw. */
+        ss?: number
       }
       /**
        * F16b: this render is a BACKGROUND job and obeys the elastic brake.
@@ -140,6 +143,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (msg.flags.loudness) setLoudnessMode(msg.flags.loudness)
     if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
     if (typeof msg.flags.chunked === 'boolean') setChunkedRenderOverride(msg.flags.chunked)
+    if (typeof msg.flags.ss === 'number') setSupersampleOverride(msg.flags.ss)
   }
   if (msg.pace) paceLevel = msg.pace
   try {

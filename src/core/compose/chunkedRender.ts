@@ -76,6 +76,7 @@ import { KEYFRAME_INTERVAL_SEC, VIDEO_BITRATE, pickEncodingTarget } from './code
 import { constantQualityQp } from './constantQuality'
 import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
+import { supersampleActive } from './supersample'
 import { exportFileName } from './fileName'
 import { createExportScratch, type ExportScratch } from './scratch'
 import {
@@ -137,7 +138,12 @@ export function resetChunkedStatsForTests(): void {
 
 /** The flags the plan has to print, read where they can be read. */
 export function currentRenderFlags(): RenderFlagPrint {
-  return { cq: constantQualityQp(), loudness: loudnessMode(), sourceFrame: sourceFrameEnabled() }
+  return {
+    cq: constantQualityQp(),
+    loudness: loudnessMode(),
+    sourceFrame: sourceFrameEnabled(),
+    ss: supersampleActive(),
+  }
 }
 
 /**
