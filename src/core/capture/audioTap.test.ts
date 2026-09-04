@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { audioTapChoice, canReadTrackPcm, trackPcmSampleRate } from './audioTap'
+import {
+  TRACK_TAP_BUFFER_MS,
+  audioTapChoice,
+  canReadTrackPcm,
+  trackPcmSampleRate,
+  trackTapBufferChunks,
+  trackTapBufferMs,
+} from './audioTap'
 
 /**
  * A1, 2026-09-01. The worklet tap loses ten per cent of a take's audio time on a
@@ -90,5 +97,47 @@ describe('whether the platform can carry the track tap', () => {
     expect(trackPcmSampleRate(track(48_000))).toBe(48_000)
     expect(trackPcmSampleRate(track(undefined))).toBe(0)
     expect(trackPcmSampleRate(track(-1))).toBe(0)
+  })
+})
+
+/**
+ * B12, 2026-09-04. The tap's buffer is the whole of the loss: the platform
+ * default holds ~87 ms and drops the rest, which cost three 45 s takes 20.1,
+ * 28.6 and 32.5 seconds of real audio under a dosed main-thread stall. These
+ * pin the depth and its revert lever — the buffer is what a starved reader
+ * survives on, so a silent change to either is a silent regression.
+ */
+describe('track tap buffer (B12)', () => {
+  afterEach(() => {
+    search(null)
+  })
+
+  it('holds the measured depth at both rates a take actually runs at', () => {
+    search('')
+    // 4000 ms of 128-frame quanta: 48 kHz → 1500, 44.1 kHz → 1379.
+    expect(trackTapBufferChunks(48_000)).toBe(1500)
+    expect(trackTapBufferChunks(44_100)).toBe(1379)
+    // 46x the ~32 quanta the platform default was measured to hold.
+    expect(trackTapBufferChunks(48_000) * 128).toBeGreaterThan(32 * 128 * 40)
+  })
+
+  it('?audiobuf=0 restores the platform default, and 0 chunks means "say nothing"', () => {
+    search('?audiobuf=0')
+    expect(trackTapBufferMs()).toBe(0)
+    expect(trackTapBufferChunks(48_000)).toBe(0)
+  })
+
+  it('?audiobuf= takes a length in ms and ignores nonsense', () => {
+    search('?audiobuf=1000')
+    expect(trackTapBufferChunks(48_000)).toBe(375)
+    search('?audiobuf=banana')
+    expect(trackTapBufferMs()).toBe(TRACK_TAP_BUFFER_MS)
+    search('?audiobuf=-5')
+    expect(trackTapBufferMs()).toBe(TRACK_TAP_BUFFER_MS)
+  })
+
+  it('a track with no rate buys no buffer', () => {
+    search('')
+    expect(trackTapBufferChunks(0)).toBe(0)
   })
 })

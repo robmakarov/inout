@@ -93,14 +93,65 @@ export function canReadTrackPcm(track: MediaStreamTrack): boolean {
   )
 }
 
+/**
+ * B12 — HOW MUCH AUDIO THE TAP MAY HOLD WHILE THE READER IS NOT LOOKING, ms.
+ *
+ * `MediaStreamTrackProcessor` does not wait for a starved reader: chunks past
+ * its buffer are DROPPED, and the platform's default buffer is tiny. Measured
+ * 2026-09-04 on a dosed main-thread block (`scripts/b12-audiostarve.mjs`, three
+ * cells, prod build): the largest gap the tap left in its own chunk timestamps
+ * was the stall MINUS 84, 90 and 87 ms — so the default holds about 87 ms, or
+ * 32 quanta. Everything past that is audio the platform captured and this page
+ * threw away: 20.1 s, 28.6 s and 32.5 s of three 45 s takes, which the
+ * wall-clock hold then repaid as SILENCE. The channel was full length and 42 %
+ * of it was nothing.
+ *
+ * Four seconds is chosen against what was measured, not against a round number:
+ * the worst stall in those cells was 2.9 s, and the take that produced B12 (H2's
+ * 2560x1440@60 cell) stalled harder still. A quantum is 128 frames, so this is
+ * ~1500 chunks and ~1.5 MB of PCM per channel at 48 kHz — bounded by
+ * construction, which is the point of the cap existing at all.
+ *
+ * It raises the threshold; it does not remove it. A stall longer than this
+ * still drops, and the only way to stop that is to take the reader off the main
+ * thread entirely (X11a). What the take carries either way is `tapGapMs`.
+ */
+export const TRACK_TAP_BUFFER_MS = 4000
+/** The quantum every Chromium audio track delivers, frames. */
+const QUANTUM_FRAMES = 128
+
+/** `?audiobuf=<ms>` — 0 restores the platform default (the pre-B12 behaviour). */
+export function trackTapBufferMs(): number {
+  if (typeof location === 'undefined') return TRACK_TAP_BUFFER_MS
+  const raw = new URLSearchParams(location.search).get('audiobuf')
+  if (raw === null) return TRACK_TAP_BUFFER_MS
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : TRACK_TAP_BUFFER_MS
+}
+
+/** Chunks of buffer for `ms` of audio at `sampleRate`. */
+export function trackTapBufferChunks(sampleRate: number, ms = trackTapBufferMs()): number {
+  if (!(ms > 0) || !(sampleRate > 0)) return 0
+  return Math.ceil((ms / 1000) * sampleRate / QUANTUM_FRAMES)
+}
+
 /** Narrow handle on the Chromium-only constructor (absent from the TS lib). */
-export function trackPcmReader(track: MediaStreamTrack): ReadableStreamDefaultReader<AudioData> {
+export function trackPcmReader(
+  track: MediaStreamTrack,
+  maxBufferSize = 0,
+): ReadableStreamDefaultReader<AudioData> {
   const Processor = (
     globalThis as unknown as {
-      MediaStreamTrackProcessor: new (o: { track: MediaStreamTrack }) => {
+      MediaStreamTrackProcessor: new (o: {
+        track: MediaStreamTrack
+        maxBufferSize?: number
+      }) => {
         readable: ReadableStream<AudioData>
       }
     }
   ).MediaStreamTrackProcessor
-  return new Processor({ track }).readable.getReader()
+  // An older Chromium that does not know the member ignores it and records
+  // exactly as it did before — the frozen rule, at no cost.
+  const init = maxBufferSize > 0 ? { track, maxBufferSize } : { track }
+  return new Processor(init).readable.getReader()
 }

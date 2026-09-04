@@ -17,7 +17,14 @@ import {
   WebMOutputFormat,
   type StreamTargetChunk,
 } from 'mediabunny'
-import { audioTapChoice, canReadTrackPcm, trackPcmReader, trackPcmSampleRate } from './audioTap'
+import {
+  audioTapChoice,
+  canReadTrackPcm,
+  trackPcmReader,
+  trackPcmSampleRate,
+  trackTapBufferChunks,
+  trackTapBufferMs,
+} from './audioTap'
 import { ReviveSchedule } from './reviveSchedule'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
@@ -650,6 +657,31 @@ export async function startMeasuredAudioCapture(opts: {
    *  warn 344 times a second — console work on the thread carrying the PCM is
    *  the exact cost this task exists to remove (see the revive-skip note). */
   let chunkWarnLogged = false
+  /**
+   * B12 — THE THREE WAYS AUDIO TIME GOES MISSING, TOLD APART IN THE FILE.
+   *
+   * Both measured-audio channels of H2's heavy cells ended tens of seconds
+   * short of the take on a clean stop, and nothing in the artifact could say
+   * which of these it was:
+   *
+   *   1. the SOURCE rendered fewer quanta than wall time — chunks stay
+   *      contiguous, media time falls behind, WallClockHold's `paddedMs` is the
+   *      repayment and already says so;
+   *   2. the CONSUMER could not keep up — MediaStreamTrackProcessor drops what
+   *      it cannot hand over and the chunk timestamps JUMP. That audio was
+   *      captured and thrown away here; no padding gets it back. `tapGapMs`;
+   *   3. the tap STOPPED — no gap, no pad, the timeline simply ends. Only the
+   *      wall time of the last batch can say it: `lastArrivalMs`.
+   *
+   * `tapGapMs` is the track tap's alone (the worklet is handed quanta and
+   * cannot see what was never rendered); `lastArrivalMs` is written by both.
+   * A revival resets the continuity check — a swap is `revivals`' business, and
+   * counting its seam here would price one loss twice.
+   */
+  const TAP_GAP_FLOOR_US = 1_000
+  let tapPrevEndUs: number | null = null
+  let tapGapUs = 0
+  let tapMaxGapUs = 0
 
   const onBatch = (
     frames: number,
@@ -931,6 +963,15 @@ export async function startMeasuredAudioCapture(opts: {
           planes.push(buf)
         }
         lastChunkTimeS = data.timestamp / 1_000_000
+        // B12: media time this reader was never handed. See the note above.
+        if (tapPrevEndUs !== null) {
+          const gapUs = data.timestamp - tapPrevEndUs
+          if (gapUs > TAP_GAP_FLOOR_US) {
+            tapGapUs += gapUs
+            if (gapUs > tapMaxGapUs) tapMaxGapUs = gapUs
+          }
+        }
+        tapPrevEndUs = data.timestamp + Math.round((n / sampleRate) * 1_000_000)
         pendingChannels = Math.max(pendingChannels, ch)
         pending.push(planes)
         pendingFrames += n
@@ -953,7 +994,9 @@ export async function startMeasuredAudioCapture(opts: {
     // Hand over what the dying tap already delivered before the fresh one can
     // push onto the same accumulator — two pumps must never interleave chunks.
     flushTrackBatch()
-    const next = trackPcmReader(clone)
+    // The new clone's clock is its own; the seam across a swap is `revivals`.
+    tapPrevEndUs = null
+    const next = trackPcmReader(clone, trackTapBufferChunks(sampleRate))
     const old = trackReader
     trackReader = next
     void old?.cancel().catch(() => undefined)
@@ -997,10 +1040,12 @@ export async function startMeasuredAudioCapture(opts: {
     const clone = track.clone()
     trackClone(clone)
     sourceClone = clone
-    trackReader = trackPcmReader(clone)
+    const bufChunks = trackTapBufferChunks(sampleRate)
+    trackReader = trackPcmReader(clone, bufChunks)
     void pumpTrackReader(trackReader)
     console.info(
-      `[capture] ${label} audio tap = track reader (no AudioContext) rate=${sampleRate} ch=${numberOfChannels}`,
+      `[capture] ${label} audio tap = track reader (no AudioContext) rate=${sampleRate} ch=${numberOfChannels} ` +
+        `buffer=${bufChunks > 0 ? `${trackTapBufferMs()}ms (${bufChunks} quanta)` : 'platform default'}`,
     )
   }
 
@@ -1133,6 +1178,16 @@ export async function startMeasuredAudioCapture(opts: {
           trimmedMs: Math.round(trimmedMs),
           silentTailMs: Math.round(silentTailMs),
           revivals,
+          // B12: which of the three ways audio time goes missing this take hit.
+          // Zeros are the finding on a healthy take, so they are written.
+          tapGapMs: Math.round(tapGapUs / 1000),
+          tapMaxGapMs: Math.round(tapMaxGapUs / 1000),
+          // `lastArrivalMs` is the anchor's own arrival stamp, in take time:
+          // when PCM last reached this thread. Nothing else here can say that
+          // the tap simply stopped.
+          ...(Number.isFinite(lastArrivalMs)
+            ? { lastArrivalMs: Math.round(lastArrivalMs - opts.epoch) }
+            : {}),
           // G6(h): which tap carried the PCM. Decided at arm from capability
           // and a flag, so it differs between two takes on one build; the
           // artifact has to carry it or a gate cannot check its own premise.

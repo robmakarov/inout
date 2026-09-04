@@ -44,6 +44,27 @@ export interface ChannelDiagnostics {
   trimmedMs?: number
   /** Input was pure digital silence for this long when the segment ended, ms. */
   silentTailMs?: number
+  /**
+   * B12 — AUDIO THE PLATFORM CAPTURED AND THIS PAGE NEVER RECEIVED, ms.
+   *
+   * Read off the tap's own chunk timestamps: `MediaStreamTrackProcessor` drops
+   * what a starved reader cannot take, and the media time then JUMPS. That is a
+   * different loss from `paddedMs` — padding repays quanta the SOURCE never
+   * rendered and the samples never existed; this is a gap in samples that did,
+   * and nothing downstream can get them back. Track tap only (the worklet is
+   * handed quanta and cannot see what it was not given).
+   */
+  tapGapMs?: number
+  /** The largest single such gap, ms — a burst against a steady bleed. */
+  tapMaxGapMs?: number
+  /**
+   * B12 — WHEN PCM LAST REACHED THE PAGE, ms from the take's epoch.
+   *
+   * The third way a channel ends short and the only one no other counter here
+   * can name: no gap, nothing padded, the tap simply stopped. Compared against
+   * the take's own length it says whether audio was still arriving at the stop.
+   */
+  lastArrivalMs?: number
   /** Times the audio source tap was rebuilt after sustained digital silence. */
   revivals?: number
   /** Track/context life events (mute, unmute, ended, ctx state, revive…), ms from epoch. */
