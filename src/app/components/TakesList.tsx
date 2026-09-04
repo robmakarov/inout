@@ -172,7 +172,12 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     if (saving) return
     setSaving({ id: rec.id, label: 'Preparing…' })
     try {
-      const [{ exportByBestPath }, { settingsForTier, tiersForTake }, { saveToFile }, store] =
+      const [
+        { exportByBestPath },
+        { settingsForTier, tiersForTake, tierIsComposite },
+        { saveToFile },
+        store,
+      ] =
         await Promise.all([
           import('@core/compose'),
           import('@core/compose/quality'),
@@ -191,9 +196,12 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
         recording: rec,
         edit: clampEditState(rec, edit ?? defaultEditState(rec)),
         settings: settingsForTier(top, rec),
-        // Only the default step may copy the composite — the same fence the
-        // editor applies, answered by the same function (O3c).
-        allowPacketCopy: top.id === '1080p',
+        // A step may copy the composite when it asks for the composite's own
+        // GEOMETRY — the same question the editor asks, answered by the same
+        // function. It used to compare the step's NAME to '1080p' here, which
+        // is how an unedited take at any other step re-rendered (O3c, and the
+        // fence's own contract in choose.ts).
+        allowPacketCopy: tierIsComposite(rec, top),
         onProgress: (p: ExportProgress) =>
           setSaving({ id: rec.id, label: progressLabel(p) }),
       })

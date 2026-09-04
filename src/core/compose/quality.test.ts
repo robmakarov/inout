@@ -16,6 +16,7 @@ import {
   flooredByPixelOrder,
   resolveTier,
   settingsForTier,
+  tierIsComposite,
   tiersForTake,
 } from './quality'
 
@@ -246,5 +247,51 @@ describe('the ladder cannot promise a bigger picture for fewer bytes', () => {
       { tier: step('1080p', 1920, 1080), size: size(400_000, true) },
     ])
     expect(out[0].size.bytes).toBe(90_000)
+  })
+})
+
+describe('a step may copy the composite when it asks for the composite\'s geometry', () => {
+  /**
+   * THE FENCE ASKED THE WRONG QUESTION and it cost Robert 72 minutes of rebuild
+   * on a 124.8-minute take that had nothing to rebuild — "i moved nothing in 5
+   * minutes video and nothing was instant stil", his unedited 2560x1662 export
+   * certifying `"path":"render"`.
+   *
+   * choose.ts's contract says "True only when the requested output geometry IS
+   * the composite's"; every caller asked `isDefaultTier(tier)`, i.e. is this
+   * step NAMED `1080p`. `defaultTierForTake` returns the step the take was
+   * RECORDED at, which for a max take is `source` and for a 1440 one is
+   * `1440p` — so the composite was refused for every take not exported at
+   * exactly 1080p.
+   */
+  const take = (composite: { width: number; height: number } | null) =>
+    ({
+      id: 'rec_fence',
+      createdAt: 1,
+      durationMs: 300_000,
+      channels: [],
+      ...(composite
+        ? { composite: { blobKey: 'c', mimeType: 'video/mp4', durationMs: 300_000, ...composite } }
+        : null),
+    }) as never
+
+  const tier = (id: string, width: number, height: number) =>
+    ({ id, width, height, label: id, fps: 30, videoBitrate: 1, audioBitrate: 1 }) as never
+
+  it('says yes for a 2560x1662 step over a 2560x1662 composite — the case that re-rendered', () => {
+    expect(tierIsComposite(take({ width: 2560, height: 1662 }), tier('source', 2560, 1662))).toBe(true)
+  })
+
+  it('says no when the geometry differs, whatever the step is called', () => {
+    expect(tierIsComposite(take({ width: 2560, height: 1662 }), tier('1080p', 1920, 1080))).toBe(false)
+    expect(tierIsComposite(take({ width: 1920, height: 1080 }), tier('source', 2560, 1662))).toBe(false)
+  })
+
+  it('still says yes for the 1080p step over a 1080p composite — nothing regressed', () => {
+    expect(tierIsComposite(take({ width: 1920, height: 1080 }), tier('1080p', 1920, 1080))).toBe(true)
+  })
+
+  it('says no when there is no composite at all — every take since J6', () => {
+    expect(tierIsComposite(take(null), tier('1080p', 1920, 1080))).toBe(false)
   })
 })

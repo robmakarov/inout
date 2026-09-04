@@ -4,7 +4,7 @@ import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
   defaultTierForTake,
-  isDefaultTier,
+  tierIsComposite,
   resolveTier,
   settingsForTier,
   tiersForTake,
@@ -294,7 +294,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       recording,
       edit,
       settings,
-      allowPacketCopy: isDefaultTier(tier),
+      // The same geometry question the export press asks, or the pre-render
+      // would decide to render a take whose export is a packet copy.
+      allowPacketCopy: tierIsComposite(recording, chosen),
     })
     editBindsPrerender({ recording, edit, settings })
     if (!wouldRender) cancelPrerender()
@@ -348,14 +350,17 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * gates the path a user actually gets.
    */
   const onExport = async (chosen: QualityTier) => {
-    // Only the default tier may copy the COMPOSITE: any other tier is a
-    // different resolution, so the recorded composite is not it. A single raw
-    // channel that already holds the chosen tier's geometry is still
-    // packet-copyable at any tier (O3c) — choose.ts answers that itself.
-    const defaultTier = isDefaultTier(chosen)
+    // A step may copy the COMPOSITE when it asks for the composite's own
+    // GEOMETRY — not when it happens to be named `1080p`, which is the question
+    // this used to ask and the reason an unedited 2560x1662 take re-rendered
+    // (quality.ts `tierIsComposite`). A single raw channel that already holds
+    // the chosen step's geometry is still copyable at any step (O3c) —
+    // choose.ts answers that itself.
     // The step at THIS take's shape — the decoder's answer where there is one,
     // so the file matches the stage the user just judged it on (F13).
-    const settings = settingsForTier(resolveTier(chosen, frameAspect, frameRate))
+    const resolved = resolveTier(chosen, frameAspect, frameRate)
+    const defaultTier = tierIsComposite(recording, resolved)
+    const settings = settingsForTier(resolved)
     const effectiveEdit = useAppStore.getState().editState ?? edit
     const m = await loadExportJobs()
     m.startExportJob({

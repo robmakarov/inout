@@ -346,6 +346,37 @@ export function isDefaultTier(tier: QualityTier): boolean {
 }
 
 /**
+ * MAY THIS STEP HAND BACK THE COMPOSITE'S OWN PACKETS? — the question
+ * `allowPacketCopy` has always MEANT and did not ASK until 2026-09-05.
+ *
+ * choose.ts's own contract says it: "True only when the requested output
+ * geometry IS the composite's". Every caller answered a different question —
+ * `isDefaultTier(tier)`, i.e. is this step NAMED `1080p` — and
+ * `defaultTierForTake` correctly returns the step the take was RECORDED at
+ * (`source` for a max take, `1440p` for a 1440 one). Neither is `1080p`. So the
+ * composite was refused for every take not exported at exactly 1080p, and an
+ * UNEDITED take re-rendered pixels a file on disk already held: Robert, 2026-09-03,
+ * "i moved nothing in 5 minutes video and nothing was instant stil" — his
+ * unedited 2560x1662 export certifies `"path":"render"`, and a 124.8-minute take
+ * paid 72 minutes of rebuild for it.
+ *
+ * Asking the geometry question is also what makes this correct when the frame
+ * follows the source (F13): a composite written at the take's own shape is
+ * copyable at the step that asks for that shape, whatever the step is called.
+ *
+ * SINCE J6 (2026-09-04) THERE IS USUALLY NO COMPOSITE AT ALL, so on the shipped
+ * rung this costs nothing today — `chooseCopySource` reaches "the take has no
+ * composite" first. It still bites with `?glue=record`, and a fence that asks
+ * the wrong question is a fence that will be wrong again the next time a
+ * composite exists.
+ */
+export function tierIsComposite(recording: Recording, tier: QualityTier): boolean {
+  const c = recording.composite
+  if (!c) return false
+  return tier.width === c.width && tier.height === c.height
+}
+
+/**
  * The copy source THIS tier's export would use, or null (O3c). This is the
  * panel's and the estimator's question — "is this step instant, and is its
  * number the file?" — answered by the same function the export ladder answers
@@ -359,7 +390,7 @@ export function copySourceForTier(recording: Recording, tier: QualityTier): Copy
   // disagree with a caller that resolved against a better answer (the editor's
   // measured aspect, F13). The badge must be the path's own verdict.
   return chooseCopySource(recording, settingsForTier(tier), {
-    allowComposite: isDefaultTier(tier),
+    allowComposite: tierIsComposite(recording, tier),
   }).source
 }
 
