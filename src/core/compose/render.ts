@@ -103,6 +103,7 @@ import { drawVideoFrame, type FrameCanvas } from './layout'
 import { fullColourActive, fullColourCodec, noteFullColourDeclined } from './fullColour'
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
+import { audioTrackGroups, separateAudioTracks } from './audioTracks'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { createPaceGate } from './paceGate'
@@ -671,8 +672,45 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
     }) : null
     if (videoSource) out.addVideoTrack(videoSource, { frameRate: fps })
+    /**
+     * O10b — ONE TRACK, OR ONE PER CHANNEL.
+     *
+     * `flat` is every export before this and stays the default: all the mixers
+     * sum into one stereo track. `separate` gives each captured channel its own
+     * track in the container, so mic and tab audio can be pulled apart by
+     * anything that understands more than one audio track, and a player that
+     * does not still plays the first one.
+     *
+     * THE GAINS DO NOT MOVE between the two. Every track keeps the bus gain and
+     * the loudness makeup the flat mix would have applied, so summing the
+     * separate tracks gives the flat mix back rather than something louder —
+     * the file is a different arrangement of the same sound, not a different
+     * sound.
+     */
+    const closeAudio = (): void => {
+      audioSource?.close()
+      for (const g of groupSources) g.close()
+    }
+    const separate = needAudio && separateAudioTracks() && audioTrackGroups(audioMixers, recording).length > 1
+    const groups = separate ? audioTrackGroups(audioMixers, recording) : []
     let audioSource: AudioSampleSource | null = null
-    if (needAudio) {
+    const groupSources: AudioSampleSource[] = []
+    if (needAudio && separate) {
+      for (const g of groups) {
+        const src = new AudioSampleSource({
+          codec: target.audioCodec,
+          bitrate: AUDIO_BITRATE,
+          onEncodedPacket: (p) => bits.audio(p.byteLength),
+        })
+        groupSources.push(src)
+        // The name is what a player shows in its track menu, so it is the
+        // channel's own word ('mic', 'tab audio') and never an id.
+        out.addAudioTrack(src, { name: g.label })
+      }
+      console.info(
+        `[compose] audio written as ${groups.length} separate tracks: ${groups.map((g) => g.label).join(', ')}`,
+      )
+    } else if (needAudio) {
       audioSource = new AudioSampleSource({
         codec: target.audioCodec,
         bitrate: AUDIO_BITRATE,
@@ -728,15 +766,24 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     stats.prepareMs = performance.now() - t0
 
     const writeAudioChunk = async (chunkIndex: number): Promise<void> => {
-      if (!audioSource) return
+      if (!audioSource && groupSources.length === 0) return
       const tAudio = performance.now()
       const startFrame = chunkIndex * AUDIO_SAMPLE_RATE
       const frames = Math.min(AUDIO_SAMPLE_RATE, totalAudioFrames - startFrame)
       if (frames <= 0) return
+      const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
+      // THE SAME PASS, ONE SET OF MIXERS AT A TIME. Flat is one lane holding
+      // every mixer, which is exactly the loop that shipped; separate is one
+      // lane per channel. Everything after the sum — the join fades, the
+      // limiter, the waveform peaks — runs per lane, because a click at a cut
+      // is a click on whichever track carries it.
+      const lanes = groupSources.length
+        ? groups.map((g, i) => ({ mixers: g.mixers, sink: groupSources[i]!, peaks: i === 0 }))
+        : [{ mixers: audioMixers, sink: audioSource!, peaks: true }]
+      for (const lane of lanes) {
       const left = new Float32Array(frames)
       const right = new Float32Array(frames)
-      const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
-      for (const mixer of audioMixers) await mixer.mixInto(left, right, chunkOutStartSec)
+      for (const mixer of lane.mixers) await mixer.mixInto(left, right, chunkOutStartSec)
       // Cut joins: fade the SUM through zero so no join can click.
       if (joinFrames.length) {
         const half = Math.max(1, Math.round((JOIN_FADE_MS / 1000) * AUDIO_SAMPLE_RATE))
@@ -755,12 +802,16 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         left[k] = softLimitSample(left[k])
         right[k] = softLimitSample(right[k])
       }
-      if (waveformMode) collectPeaks(peaks, left, right, startFrame, AUDIO_SAMPLE_RATE)
+      // The waveform lane draws ONE picture, so it is fed by the first lane
+      // only — a separate-track export must not draw two waveforms on top of
+      // each other where a flat one drew the sum.
+      if (waveformMode && lane.peaks) collectPeaks(peaks, left, right, startFrame, AUDIO_SAMPLE_RATE)
       const sample = makeStereoSample(left, right, chunkOutStartSec)
       try {
-        await audioSource.add(sample)
+        await lane.sink.add(sample)
       } finally {
         sample.close()
+      }
       }
       stats.audioMs += performance.now() - tAudio
     }
@@ -832,7 +883,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
 
     if (waveformMode) {
       // Audio pass first: the mixed peaks drive every waveform frame.
-      if (audioSource) {
+      if (audioSource || groupSources.length) {
         for (let c = 0; c < audioChunks; c++) {
           throwIfAborted()
           await writeAudioChunk(c)
@@ -840,9 +891,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           if (pace) await pace.wait()
           if (yieldEveryFrames) await yieldToUi()
         }
-        audioSource.close()
+        closeAudio()
       }
-      const base = audioSource ? 0.5 : 0.05
+      const base = audioSource || groupSources.length ? 0.5 : 0.05
       const drawWaveform = createWaveformRenderer(frame, peaks)
       for (let f = 0; f < totalFrames; f++) {
         throwIfAborted()
@@ -867,7 +918,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         if (pace) await pace.wait()
         if (yieldEveryFrames) await yieldToUi()
       }
-      audioSource?.close()
+      closeAudio()
     } else if (!wantAudio) {
       /** J1 — ONE CHUNK: the window's frames, and nothing else. */
       for (let f = windowStartFrame; f < windowEndFrame; f++) {
@@ -909,7 +960,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         throwIfAborted()
         await renderFrame(frameIndex, null)
       }
-      audioSource?.close()
+      closeAudio()
     }
     videoSource?.close()
 

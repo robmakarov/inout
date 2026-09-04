@@ -69,6 +69,7 @@ import { constantQualityQp } from './constantQuality'
 import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
 import { fullColourActive } from './fullColour'
+import { audioTrackModeActive } from './audioTracks'
 
 /**
  * Bump on ANY change that can move a pixel or a byte: the draw (layout.ts,
@@ -88,6 +89,14 @@ export interface RenderFlagPrint {
   sourceFrame: boolean
   /** O9(b)'s `?colour=all` — 4:4:4 changes every byte of every chunk. */
   fullColour: boolean
+  /**
+   * O10b's `?audiotracks=` — one mixed audio track or one per channel. It
+   * changes the file's track layout and therefore its bytes, so it belongs
+   * here for the same reason the other four do: caught the day it was written,
+   * by an export that served a flat pre-render for a separate-track press and
+   * said so in its own console line.
+   */
+  audioTracks: string
 }
 
 /**
@@ -110,6 +119,7 @@ export function currentRenderFlags(): RenderFlagPrint {
     loudness: loudnessMode(),
     sourceFrame: sourceFrameEnabled(),
     fullColour: fullColourActive(),
+    audioTracks: audioTrackModeActive(),
   }
 }
 

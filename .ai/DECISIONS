@@ -1570,3 +1570,27 @@ the tap was handed sound at all.
 
 NOT CLOSED BY THIS SESSION — the "try it" was his, so the retirement is his too. The measurement is
 here and the row waits on his word.
+
+## O10b — THE SOUNDS KEPT APART (2026-09-04, opt-in, default unchanged)
+Mic and system audio can now be written as SEPARATE tracks in the one file instead of summed into
+one. Measured through the product, not argued: one take recorded once and exported twice by pressing
+the editor's own Export button, so the two files differ by the switch and by nothing else —
+**ffprobe reads two audio tracks, named "Microphone" and "System audio", against one in the flat
+file**, h264 + aac in both, 1,359,675 bytes against 1,274,736.
+THE DEFAULT DOES NOT MOVE and that is the whole safety of it: `flat` is the same single source and
+the same loop that shipped, and it stays the default. The gains do not move either — every track
+carries the bus gain and loudness makeup the flat mix would have applied, so summing the tracks gives
+the flat mix back rather than something louder.
+THREE PATHS DECLINE IT BY NAME, because the alternative is a file that plays and is wrong: the
+instant copy and smart cut hand over the audio track the take already has, so both decline when a
+take has MORE THAN ONE audio channel (one channel is already one track, and nothing declines); and
+J1's chunked render concatenates into ONE audio track, so it declines and the export renders
+unbroken. That last one costs a long take J1's chunk reuse, and it is the reason this is opt-in
+rather than a default.
+FOUND WHILE BUILDING IT, and it is the day's own lesson repeating: the first separate-track press was
+served a FLAT pre-render, because `audioTracks` was not in `prerenderKey` — the exact hole closed for
+`?cq=`, `?sourceframe=`, `?colour=` and `?loudness=` hours earlier. It is in `RenderFlagPrint` now,
+which is what made it a five-minute fix instead of a silent wrong file.
+GATES: oracle PASS (sync 42.1/57.7 ms, instant and smartcut still taken on a default export) ·
+fidelity PASS (render toneErr 0.04 dB, instant 6.05 dB, separation 55.9/67.9 dB) · typecheck green ·
+1259 tests, 10 new. Evidence docs/qa/o10b-multitrack.json; files in ~/Downloads/o10b-*.mp4.

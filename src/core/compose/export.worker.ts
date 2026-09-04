@@ -38,6 +38,7 @@ import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from '
 import { setConstantQualityOverride } from './constantQuality'
 import { setKeyframeIntervalOverride } from './keyframeInterval'
 import { setFullColourOverride } from './fullColour'
+import { separateAudioTracks, setAudioTrackModeOverride, type AudioTrackMode } from './audioTracks'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
@@ -69,6 +70,7 @@ export type ExportWorkerIn =
         chunked?: boolean
         /** O9(b)'s `?colour=all` — the 4:4:4 rung. Default off. */
         fullColour?: boolean
+        audioTracks?: AudioTrackMode
         /** `?gop=` — the keyframe interval, which is also J1's chunk grid. */
         gop?: number
       }
@@ -148,6 +150,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (typeof msg.flags.chunked === 'boolean') setChunkedRenderOverride(msg.flags.chunked)
     if (typeof msg.flags.fullColour === 'boolean') setFullColourOverride(msg.flags.fullColour)
     if (typeof msg.flags.gop === 'number') setKeyframeIntervalOverride(msg.flags.gop)
+    if (msg.flags.audioTracks) setAudioTrackModeOverride(msg.flags.audioTracks)
   }
   if (msg.pace) paceLevel = msg.pace
   try {
@@ -160,7 +163,21 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
      * An ABORT is not a decline. A user who cancelled must not be answered
      * with a second, slower render of the thing they cancelled.
      */
-    if (chunkedActive()) {
+    /**
+     * O10b DECLINES THE CHUNKED PATH BY NAME. J1's concatenation copies packets
+     * into ONE audio track (chunkedRender.ts), so a separate-track render would
+     * have its extra tracks silently dropped at the join — the file would play
+     * and be wrong, which is the worst shape a defect can take. Until the
+     * concatenation carries N tracks, asking for separate tracks takes the
+     * unbroken render, and says so rather than leaving it to be discovered.
+     */
+    if (chunkedActive() && separateAudioTracks()) {
+      console.info(
+        '[compose] separate audio tracks asked for: the chunked render is declined ' +
+          '(its concatenation carries one audio track), rendering unbroken',
+      )
+    }
+    if (chunkedActive() && !separateAudioTracks()) {
       try {
         const result = await renderChunked({
           recording: msg.recording,

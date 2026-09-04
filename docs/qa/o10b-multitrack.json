@@ -1,0 +1,67 @@
+{
+  "task": "O10b \u2014 mic and system audio as separate tracks",
+  "date": "2026-09-04",
+  "default": "flat (one mixed audio track) \u2014 unchanged, and the flat path is the same single source and the same loop that shipped",
+  "measuredThroughTheProduct": {
+    "note": "one take recorded once and exported TWICE from it by pressing the editor Export button, so the two files differ by the switch and nothing else",
+    "flat": {
+      "bytes": 1274736,
+      "pressMs": 2594,
+      "streams": [
+        {
+          "index": 0,
+          "type": "video",
+          "codec": "h264",
+          "channels": null,
+          "name": null
+        },
+        {
+          "index": 1,
+          "type": "audio",
+          "codec": "aac",
+          "channels": 2,
+          "name": null
+        }
+      ]
+    },
+    "separate": {
+      "bytes": 1359675,
+      "pressMs": 3605,
+      "streams": [
+        {
+          "index": 0,
+          "type": "video",
+          "codec": "h264",
+          "channels": null,
+          "name": null
+        },
+        {
+          "index": 1,
+          "type": "audio",
+          "codec": "aac",
+          "channels": 2,
+          "name": "Microphone"
+        },
+        {
+          "index": 2,
+          "type": "audio",
+          "codec": "aac",
+          "channels": 2,
+          "name": "System audio"
+        }
+      ]
+    }
+  },
+  "gates": {
+    "tracksSeparateAndNamed": "ffprobe reads two audio tracks named Microphone and System audio against one in the flat file",
+    "everyPathStatesWhatItTook": "the render prints how many tracks it wrote; choose.ts records the instant and smart-cut declines by name; the worker prints the chunked decline",
+    "oracle": "PASS sync=42.1/57.7ms, instant and smartcut both still taken on a default export",
+    "fidelity": "PASS render toneErr 0.04 dB, instant 6.05 dB (bus -6.02), sep 55.9/67.9 dB",
+    "tests": "1259 green, 10 new"
+  },
+  "declines": [
+    "instant and smart cut, when the take has more than one audio channel (a packet copy hands over the mix the take already has)",
+    "J1's chunked render (its concatenation carries one audio track), so a separate-track export renders unbroken and loses chunk reuse \u2014 the reason this is opt-in"
+  ],
+  "foundWhileBuilding": "the first separate-track press was served a FLAT pre-render, because the new switch was not in prerenderKey \u2014 the same hole closed for the other four flags earlier the same day. audioTracks is in RenderFlagPrint now."
+}

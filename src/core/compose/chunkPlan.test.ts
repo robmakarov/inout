@@ -14,7 +14,7 @@ import { audioDescriptorOf, audioPresent, planChunks, planReuse, spanPieces } fr
 import { defaultCameraPose, defaultEditState } from '@core/timeline'
 import type { EditState, ExportSettings, Recording } from '@core/types'
 
-const FLAGS = { cq: 20, loudness: 'peak', sourceFrame: false, fullColour: false }
+const FLAGS = { cq: 20, loudness: 'peak', sourceFrame: false, fullColour: false, audioTracks: 'flat' }
 const SETTINGS: ExportSettings = { width: 1920, height: 1080, fps: 30, keyFrameIntervalSec: 5 }
 
 function take(durationMs: number, opts: { camera?: boolean; audio?: boolean } = {}): Recording {

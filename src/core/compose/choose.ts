@@ -38,6 +38,7 @@ import { prerenderKey, takePrerender } from './prerender'
 import { exportSmartCut, isPixelDefaultEdit } from './smartCut'
 import { smartCutEnabled } from './smartCutFlag'
 import { fullColourActive } from './fullColour'
+import { separateAudioTracks } from './audioTracks'
 
 export type ExportPath = 'instant' | 'smartcut' | 'render'
 
@@ -138,9 +139,25 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
    * `source` is exactly what it was and both fast paths are untouched.
    */
   const fullColour = fullColourActive()
-  const source = fullColour ? null : copy.source
+  /**
+   * O10b — THE COPYING PATHS CANNOT SPLIT A MIX EITHER, and for the same kind
+   * of reason as the colour above: an instant copy hands over the audio track
+   * the take already has, so a take with two audio channels would come back as
+   * one mixed track while the switch said separate. It only bites when there is
+   * something to separate — a take with one audio channel is already "each
+   * channel on its own track", so nothing declines and the fast path stays.
+   */
+  const wantSeparate =
+    separateAudioTracks() &&
+    recording.channels.filter((c) => c.media === 'audio').length > 1
+  const source = fullColour || wantSeparate ? null : copy.source
   if (fullColour && copy.source) {
     const why = 'every colour asked for: a packet copy cannot change 4:2:0 into 4:4:4'
+    declined.push({ path: 'instant', reason: why })
+    declined.push({ path: 'smartcut', reason: why })
+  }
+  if (wantSeparate && copy.source && !fullColour) {
+    const why = 'the sounds kept apart: a packet copy hands over the mix the take already has'
     declined.push({ path: 'instant', reason: why })
     declined.push({ path: 'smartcut', reason: why })
   }

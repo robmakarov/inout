@@ -14,6 +14,7 @@ import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBud
 import { painterChoice, setPainterChoice, type PainterChoice } from '@core/capture/painterChoice'
 import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/frameIntake'
 import { audioTapThreadChoice, setAudioTapThread } from '@core/capture/audioTap'
+import { audioTrackMode, setAudioTrackMode } from '@core/compose/audioTracks'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
@@ -221,6 +222,18 @@ export function TestPanel() {
           redraw()
         }}
       />
+      {/* O10b. The container word never reaches him either: the row says what he
+          GETS, which is the sounds kept apart or summed. */}
+      <Choice
+        label="Microphone and computer sound"
+        hint="mixed together is the normal one: one soundtrack, every player opens it. kept apart puts your voice and the computer's sound on two separate soundtracks inside the one file, so an editor can mute or level them on their own — most players will just play the first one, and the export takes a little longer because it cannot be copied straight out."
+        value={audioTrackMode() === 'separate' ? 'kept apart' : 'mixed together'}
+        options={['mixed together', 'kept apart']}
+        set={(v) => {
+          setAudioTrackMode(v === 'kept apart' ? 'separate' : 'flat')
+          redraw()
+        }}
+      />
       {/* O9(b). SIZE-CODEC: the codec is never a user word, so the row says what
           he GETS. Opt-in and staying opt-in — the file is blind-shared and no
           probe can ask a recipient what they can play. */}
@@ -273,6 +286,7 @@ export function TestPanel() {
           setChunkedRenderEnabled(null)
           setFullColourEnabled(null)
           setAudioTapThread(null)
+          setAudioTrackMode(null)
           redraw()
         }}
       >
