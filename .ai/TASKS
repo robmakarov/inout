@@ -66,8 +66,9 @@ ORDER SET BY ROBERT 2026-09-03 (robert (23)) — "fix bugs, fix shit not working
 | ~~E3~~ | **BACKGROUND WORK CARRIES A DEADLINE — DONE 2026-09-04, verified on prod at default flags.** Two real costs, both measured BEFORE they were built. (1) A CLAIMED pre-render kept the brake: `takePrerender` hands the job to the export a person is waiting for, but the pace source was fixed at start — and the Export button sits inside the editor's own `onPointerDownCapture={noteEditingActivity}`, so the claiming press WAS the throttle. Joining a pre-render could finish LATER than having none, against F16's "may only ever SAVE time". **press -> file 23,146 ms hand off / 65,624 ms with a pointer on the editor -> 6,572 / 9,205 ms (65.6 s -> 9.2 s)**, and the after-run was on a busier machine. The pace is now per JOB (`createJobPace()`, `background` -> `now`, one-way). (2) The editor-ahead window closed two frames after the PREVIEW painted, so everything the editor built after that raced the pre-render on one media engine. It is refcounted now (`holdEditorAhead`) and three things hold it: the preview, the timeline LANE ART (**4,133 -> 812 ms against a 604 ms control**) and the export SIZE PROBE, which G7's editor card found was the bigger one — **RED worst second 51 ms at 10.0s -> GREEN 10.8 ms**, control 10.3. Cost: the pre-render alone, ready 9.3 s after stop on a 40 s take instead of ~3, and the press is never braked. (3) Nothing for the UPLOAD: one opaque `supabase.storage.upload()` of a finished file, no chunking, no media engine, user-initiated — its deadline is already `now`. No new switch; `?bgpace=0` is still the whole-brake revert. Verdict in DECISIONS | light-medium | **CLOSED** | — |
 | ~~R1~~ | **the render is too slow — CLOSED FOR GOOD 2026-09-03: THE RENDER'S CEILING IS THE ENGINE, AND ONE LANE ALREADY REACHES IT.** The last untested lever (more than one encoder at a time) was BUILT and measured through the production export, then taken back out: on a 240 s max take it is worth **1.04× and 1.07×** on two readings. It looks like 1.78× only in an encoder-only rig, which has no decoder in it — decode contends for the same media engine (7.4 → 25.6 s at 240 s). One production lane sustains 84-99 fps of 3024×1964 output, ABOVE what that rig calls the whole engine's ceiling. Nothing is left on this axis | medium | **CLOSED** | — |
 TAKE THESE WITHOUT ROBERT (2026-09-04, his instruction: "i want other session to take over as much tasks it can do without me as possible"). Every one is fully specified, gated, and needs nothing from him until its A/B at the very end:
- ~~**G8**~~ ~~**B1b**~~ ~~**E3**~~ (all closed 2026-09-04) · ~~**M4**~~ ~~**O10b**~~ (both closed 2026-09-04) · **O10c** (opt-in, default OFF — only a default FLIP needs him) · ~~**J7**~~ ~~**J5**~~ ~~**J6**~~ (all closed 2026-09-04) · ~~**A2**~~ (its premise measured away 2026-09-04, now awaiting his word) · ~~**X11a**~~ (closed 2026-09-04).
-DO NOT TAKE, they are his and a session cannot finish them: U4 (he said not without him) · X17 (his real screen) · B13 (his music) · X11 (a capture change needs his yes) · W2 · X14a's video half (the macOS display-capture wall) · O10d · O11d.
+ ~~**G8**~~ ~~**B1b**~~ ~~**E3**~~ ~~**M4**~~ ~~**O10b**~~ ~~**J7**~~ ~~**J5**~~ ~~**J6**~~ ~~**X11a**~~ ~~**A2**~~ (all closed 2026-09-04; A2's premise was measured away and it now awaits his word) · ~~**O10c**~~ ~~**U4**~~ (both closed 2026-09-04, overnight).
+THE LIST IS EMPTY, and that is the finding: every fully-specified unblocked task is done. What is left in Phase 1 is MEASUREMENT ON THE REAL MACHINE (the soak below) and the nine `answered` switches U4's census handed Robert, each of which is one word from him.
+DO NOT TAKE, they are his and a session cannot finish them: X17 (his real screen) · B13 (his music) · X11 (a capture change needs his yes) · W2 · X14a's video half (the macOS display-capture wall) · O10d · O11d. **U4 WAS ON THIS LINE AND WAS TAKEN 2026-09-04** on his instruction that night ("tasks from roadmap that you can do without me one by one"), which is newer than the note that put it here; it landed with no default moved and nothing a take does changed, and the one thing he can SEE is the new state line on the capture screen — his to keep or to send back behind `/?test`.
 THREE SESSIONS ARE LIVE ON ONE CHECKOUT WITH NO WORKTREES (measured 2026-09-04) — cut `scripts/worktree.sh <id>` before editing, never move the `main` ref from it, and re-read this file against `git log` before editing it: a roadmap commit went in calling O4 READY hours after O4 had landed, because it was written from a stale read.
 P9 OWNS THE FRAME-SOURCE SEAM while it runs: leave the capture video path, the track processor and engine selection alone.
 Parallel-safe combos: M1 alone (capture worker) · X14a alone (probe, its own files). A2's premise was measured away by X11a (2026-09-04) and now awaits Robert. E3 IS CLOSED (2026-09-04) and it moved three files a later task will meet: `core/backgroundWork.ts` now exports `createJobPace()` (a pace per job, with a deadline) and `holdEditorAhead(what)` (the refcounted editor-ahead window, replacing `noteEditorOpening`/`noteEditorOpen`) — any new background job takes a job pace, and anything the editor builds that a person waits to LOOK at takes a hold. B13's instrument has LANDED in measuredAudio.ts + session.ts (audioTrack, inputLatencyApplied, ?looplat=), so M1(a) now rebases onto it rather than racing it (X11a already landed on it) — and M1(a) should absorb the loopback question, since it is the same defect on the other channel. What is left of B13 is Robert's machine, which blocks nothing here. X17 ∥ anything (measurement only, its own rig). O9 is BUILT: (a) was measured and removed, (b) ships off behind `?colour=all` and touches render.ts, choose.ts and chunkedRender.ts — a task in the export loop rebases onto it rather than racing it.
@@ -174,97 +175,22 @@ FILES FOR ROBERT'S EAR, in ~/Downloads/inout-b13: `C-music-SHIPPED-resampler.mp4
 STILL OWED: his ear on C/D — if he cannot tell them apart the switch goes back the other way, and nothing here claims the difference for him · the picture half of the lead, which is X14a's video verdict.
 Oracle v2 PASS, fidelity PASS both gates; oracle v1's export-throughput gate is red on this work (0.83x) and red on unmodified HEAD run cold beside it (0.74x) — the known G6 flake.
 
-### M1 the combine — ONE elastic system, ONE DOOR [heavy · BUILT, MERGED AND LIVE 2026-09-03 · both flags OFF, the flip is Robert's]
-S1 (the decision log) WAS FOLDED IN HERE 2026-09-02 on Robert's word — "fold S1 into M1 then" — because M1 cannot unify the elastic systems without the thing S1 was going to build.
-THE DOOR, and it is the structural half of this task: every change to quality, rate, resolution, or which channels run passes through ONE function, and that function IS the recorder — the decision is appended (what changed, trigger, measured values, who decided) as the act of making it, so a path CANNOT degrade anything invisibly, because recording it is how you do it. A written rule was rejected as the mechanism (it decays); a test asserts the door is the only way in and a new fallback that bypasses it fails the build. This is what stops the count drifting again: there were never two elastic systems, there were SEVEN, because there was no door (BACKLOG's M1 evidence line).
-THE SEVEN it must own: the frame-rate ladder (captureLadder.ts) · the encoder budget's pre-take reduction (encoderBudget.ts) · the composite watchdog's whole-mix drop (liveCompositeV2.ts:366) · the background-work broker (backgroundWork.ts) · the export QP governor (dying in Q1) · the capture encoders' BITRATE mode, i.e. Chrome's own rate control (rawVideo.worker.ts:238, compositor.worker.ts:416 — taking this one back is idea 6 per DECISIONS robert (15)) · Chrome's own capture adaptation (acquire.ts:467, 614), which cannot be owned but must be DETECTED and recorded.
-KNOWN ENTRIES to wire, worst first from the 2026-09-02 audit; several are defects in their own right and each needs its own verdict — but note the split Robert drew: some behaviours are CORRECT and only their silence is wrong (the composite drop and the codec fallbacks save the take; do not change them, make them announce), while others are simply wrong:
- (a) DEFECT — audio input latency defaults to ZERO when the platform does not report it (measuredAudio.ts:410-415), capped at 200 ms with no derivation; Bluetooth is 100-300 ms, so the sync anchor is silently wrong by that much. Feeds X14; the file's own comment says the delay sits where "no amount of anchor cleverness sees it". Fix first — small, verified, and aimed at what Robert can feel.
- (b) DEFECT? — the tail drain gives up after DRAIN_BUDGET_MS = 2000 (recorderDrain.ts, used at session.ts:2752; liveComposite.ts:94 has its own), records `timedOut`, surfaces nothing. CONFIRM WHICH PATH (MediaRecorder fallback vs default) before sizing it.
- (c) DEFECT — the For-AI export truncates at MAX_FILE_BYTES = 28 MB with a console.warn only (ai/build.ts:459).
- (d) SILENCE ONLY — the composite watchdog drops the whole screen+camera mix (liveCompositeV2.ts:366): correct behaviour, no flag, no grade.
- (e) CHECK THE RATCHET — the encoder budget's pre-take reduction (encoderBudget.ts): can a machine that once collapsed re-earn full resolution, or is `sustained` pinned by the reduced takes it now runs? A one-way ratchet violates "capacity knowledge may shape a take UP, never down".
- (f) SILENCE ONLY — codec ladder rungs skipped for want of a hardware encoder (codecs.ts:154-171): logged once, never graded.
- (g) UNDERIVED CONSTANTS — audio forced to stereo 48 kHz 128 kbps (codecs.ts), the 200 ms latency cap, the 2000 ms drain, displayRelease.ts's 100 ms. Each earns a measurement or goes.
- (h) NOT A LIVE BUG, MAKE IT LOUD — CAPTURE_MAX_* derive from DEFAULT_EXPORT_SETTINGS (acquire.ts:395-423) with no independent justification; the native-res branch is default and bypasses them (acquire.ts:667, `?nativeres=0` is the escape hatch), so this becomes a 1080p cap only if native res is ever off.
-LIKE WATER (DECISIONS robert (12)): continuous adaptation, no perceptible stepping — and since frame rate is quantized by physics (a 60 Hz source samples evenly only at its divisors; 57 fps is judder, which is why 60⇄30 stays a jump and Robert accepted it 2026-09-02), the SMOOTH dials are spent first and rate is the LAST resort. Today the ladder is an early response: that is the defect to fix in the ordering.
-THE EMERGENCY FLOOR (the original M1): at max, E1's predictive detector, sampled from rawVideo.worker.ts (max opens no composite — the ONE elastic system, no fork), arms an EMERGENCY FLOOR when starvation is COMING: sacrifice order, every event certified — composite (none at max) → camera fps → screen fps 60→30 → resolution LAST. AUDIO IS NEVER SACRIFICED. Recovery = O16's segmenting, automatic, seconds. Inherits E2's bias. TECH CANDIDATE first: temporal SVC L1T2 on the max60 encoders — `isConfigSupported` on Robert's Chrome per codec, never from memory; sheds become mux-time packet selection on `metadata.svc.temporalLayerId`; a 30 fps export of a 60 take = base-layer packet copy; where hardware refuses, today's rung mechanism stands.
-GATES: induced load spike on a max60 take → audio silentTail 0, picture loss < 5 s, recovery automatic with seams inside O16's bands (30 ms step, 69 ms seam), every event in the certification and the report card · without the spike nothing engages (max byte-identical) · flag off = byte-identical at every gate · oracle v2+v1 green · oracle:long quoted.
-GATES FROM THE FOLDED S1: one take's decision list readable from its black box with ZERO decisions missing on a run that deliberately triggers (a)-(f) · the report card carries the dimension · a test asserts a rate step, a composite drop and a codec fallback each append an entry THROUGH THE DOOR · a test proves the door is the only way in (a bypassing path fails the build) · Chrome's own adaptation is DETECTED and recorded even though it cannot be owned · the smooth-dials-first ordering demonstrated on one induced spike (rate is the last dial that moves, and the trace shows it) · costs nothing measurable on a clean take (G7's main-thread lateness unmoved) · the (a) latency fix quoted against X14's current 40-66 ms audio-late reading.
-
-HANDOFF 2026-09-03 — BUILT ON `task/m1`, NOT MERGED (branch head has it all; the worktree is
-~/.inout-worktrees/inout-m1 because the system wiped $TMPDIR mid-session and took every worktree with it).
-THE DOOR IS IN AND IT IS ENFORCED. `core/door.ts`: `passDoor(request, apply)` writes the decision and
-hands `apply` the only `DoorTicket` that reaches a dial-moving primitive; the ticket is branded with a
-module-private unique symbol, so a bypassing path cannot be written, only imagined. Outcomes are
-applied / refused / failed. `core/doorOnly.test.ts` scans the shipped source: `applyConstraints` exists
-in ONE file (the door), `noteElastic` in two (its definition and the door's mirror), every
-`encoder.configure` is an allowlist entry that has to say why it is not a dial. PROVEN TO BITE — adding
-a bypassing fallback to deviceGuard.ts turns the suite red and names the file.
-ROUTED (17 sites): the ladder step · the step max REFUSES · encoder-budget composite drop ·
-encoder-budget screen narrowing · watchdog composite drop (d) · acquire export-ceiling cap · F15 rate
-budget · CAPTURE_MAX cap (h) · odd-side evening · raw tab-audio re-ask · P0-tail throttle · a
-timed-out drain (b) · background broker · burst absorber · capture codec rung · export codec rung
-skips (f) · the For-AI 28 MB truncation (c) · Chrome's own adaptation, DETECTED at 1 Hz against what
-our own last decision produced.
-ONE WRITE, TWO VIEWS: a decision carrying a `layer` mirrors into E2's ledger ON ITS OUTCOME, so
-`stopStats.elastic` still means what E2 grades. `stopStats.decisions` is the door's own, the report
-card grades a `decisions` dimension, `__inoutDoor()` reads it mid-take, and the certification carries
-`capture.gaveUp` (12 entries + a count) so a shared FILE says what the take gave up.
-THE FLOOR (`?floor=1`, OFF; `?floorres=1` for the size rung, also OFF). One instrument: the
-compositor's sampler is now `capture/pressureSampler.ts` and BOTH workers use it (equivalence pinned
-by test); rawVideo.worker samples only when asked. `emergencyFloor.ts` is the ORDER, `floorController.ts`
-re-decides nothing — it asks `ladderDecision` and turns the DIRECTION into a rung, asking the same
-function again with the rate moved to the end that leaves room where the floor's ladder is wider.
-GATES, AS NUMBERS (`node scripts/exp.mjs floor --headed --query='screenfps=60&camfps=60'`, 2560x1440@60
-screen + camera through the production session, encoder load 12→24 s of a 45 s take):
- · CALM LANE (armed, no spike): 0 rungs, one screen segment, 60 fps throughout, 5 decisions. Nothing
-   engages without a spike — the gate, met.
- · FLOOR LANE, shipping shape (rate rungs): engaged +841 ms (camera 60→30), screen 60→30 at 15.9 s,
-   screen back at 60 +895 ms after the load lifted, camera +3,975 ms, ONE segment, ZERO seams, audio
-   silentTail 0 on both channels, 13 decisions, 0 refused, 0 failed, elastic order held.
- · WITH THE SIZE RUNG: camera 12.8 s → screen rate 15.9 s → size 2560→1920 at 19.0 s → size back at
-   27.1 s → rate back 30.1 s → camera back 33.2 s. Order held, audio silentTail 0, 18 decisions.
- · THE ONE GATE THAT FAILED ITS BAND, and why `?floorres=` exists: the size step's seam is 5,047 ms
-   taken while critical, against 30 ms for the step back up on the same take (O16's own band). The
-   seam is the LOAD's cost — closing a segment means draining an encoder that is behind — and it lands
-   on the take that can least afford it. The same run could not show the rung EARNING it either (the
-   step landed at 19.0 s, the load lifted at 24.0 s). So the rung is built, tested, in the order, and
-   OFF; a size already given up is always restored whatever the flag says.
- · OFF LANE (the positive control, same spike): 0 floor decisions, no sampler, 60 fps throughout, one
-   segment — max exactly as it ships.
- · COMPOSITE-DROP LANE: `5.6 s channels watchdog applied — the live composite stopped being recorded`.
-   With codecDoor.test.ts and the floor runs, all three paths this gate names by hand are proven in the
-   product.
-TWO DEFECTS THE RIG FOUND AND THIS BRANCH FIXES: `requestedRate` was assigned only inside
-startComposite, past its own early return, so every MAX take reported `asked for 30 fps` however fast
-it recorded (and the floor could never have given a 60 fps take its rate back) · the floor's reason
-line named the worst SIGNAL when what fired was pressure.ts's loss floor ("worker-lateness: 0.47 ms"
-for a step caused by 4 dropped frames).
-AND ONE THE DOOR ITSELF REMOVED: liveCompositeV2 wrote the picture step into the elastic ledger at the
-VERDICT and session.ts then refused to step in max — every loaded max take carried a shed that never
-happened. The record now belongs to the act, with its outcome.
-GATES: typecheck green · 1099 unit tests (was 1061) · drill 29 checks · oracle v2 PASS (sync
-35.6/48.7 ms, instant 51.6, smartcut 52.8, tail 76, export 4.95x) · oracle v1 PASS (sync 56.4/73.3,
-instant 48.3, render 42.3, tail 77, export 1.51x) · oracle:long PASS (120 s: sync 46.8/69.1, instant
-55.1, smartcut 54.2, tail 68, export 6.13x — the instant and smart-cut paths did not move) ·
-oracle:load PASS (source ALIVE, fps PASS, stopMs 25/28, tailGap 16 ms) · armcancel green.
-RUNNING THE RIG: `node scripts/exp.mjs floor '{"takeMs":45000}' --headed --query='screenfps=60&camfps=60'`
-— the query is NOT optional. `createSyntheticChannels` re-applies `?screenfps=` on every take, so a
-rig-set 60 is silently undone and the lane records a "max60" take at 30 fps under no strain at all.
-Lanes: calm · floor · off · composite-drop. `?floorres=` is what turns the size rung on inside it.
-THE FLIP HAS NOT HAPPENED AND IT IS HIS (DECISIONS robert (22), 2026-09-03): "MAX ELASTIC OFF UNTIL I
-SAY SO". Both flags are OFF. An agent read his earlier "it must be fucking same elastic shit we have
-for everything else now, it is just turned off for max to test it" as permission and shipped `?floor=`
-ON for an hour; that sentence says what the thing IS, not where the default sits. He also corrected the
-order of sacrifice in the same exchange: "no rule for resolution first fps, only after that is
-resolution" — the size is NOT forbidden, it is simply LAST, so `?floorres=` is held by its 5,047 ms
-seam alone and fixing that seam makes the rung shippable.
-STILL OWED: Robert's flip (both flags) · entry (a), which is B13's · two instrument findings this work
-turned up, filed in BACKLOG for G6 — the card cannot see a hole between two segments of one kind (it
-graded a take with a 5,047 ms screen gap "all full length"), and after M1 the `rate` dimension reds
-the very takes the floor rescues while `elastic` and `decisions` pass them.
-
+### M1 the combine — ONE elastic system, ONE DOOR [heavy · BUILT, MERGED AND LIVE 2026-09-03 · both flags OFF, THE FLIP IS ROBERT'S]
+COMPRESSED 2026-09-04 (the spec was 12.7k chars of a task that is built): what it DOES is one paragraph
+in `.ai/STATE` ("THE DOOR"), the numbers are in DECISIONS M1, and the code says the rest —
+`core/door.ts` (the ticket nothing can forge), `core/doorOnly.test.ts` (the census that fails the build
+on a bypass), `capture/pressureSampler.ts` (one instrument, both workers), `emergencyFloor.ts` (the
+order) and `floorController.ts` (which re-decides nothing).
+WHAT IS STILL OWED, and it is the only reason this row is still here: **the flip.** `?floor=1` and
+`?floorres=1` are OFF and moving them is Robert's alone — max sheds nothing until he says so ("MAX
+ELASTIC OFF UNTIL I SAY SO"). The floor's own gates were met on a 2560x1440@60 screen+camera take
+(engaged +841 ms, back +895 ms after the load lifted, ONE segment, ZERO seams, silentTail 0, order
+held); the ONE that failed its band is why `?floorres=` is separate and also off — the SIZE step's seam
+is 5,047 ms taken while critical against 30 ms for the step back, and the same run could not show the
+rung earning it.
+THE THREE AUDIT ITEMS M1 NEVER CLOSED were lifted to BACKLOG.md 2026-09-04 rather than left inside a
+task marked done: the audio anchor's zero-latency fallback (a), the encoder budget's possible one-way
+ratchet (e), and four underived constants (g).
 ### A2 shadow-audio [light-medium · capture, additive · Robert "try it"]
 An audio-only MediaRecorder (opus, browser-process buffered) records the same tracks beside the measured path into its own OPFS key; at stop, gaps the report card names are spliced from the shadow (aligned by shared startOffset, ≤1 s cross-correlation per gap edge, resampled; deterministic DSP). Differential witness: a gap in both = below the page; measured-only = ours. Shadow deleted once the take grades green.
 GATES: a take with induced bursts (tapstarve lane) exports with the gaps FILLED — envelope continuous across each splice, no click (spur gate holds), silentTail matching a clean control · a clean take is byte-identical on the measured path and discards the shadow · splice alignment error ≤ 5 ms per seam, quoted · no measurable load at max60 (tapstarve table unchanged) · oracle v2+v1 green · the report card names every splice.
@@ -437,54 +363,14 @@ Instrument a take on Robert's ACTUAL work screen: per second, what fraction of t
 GATES: the census runs on a real take without changing the recording (pinned: byte-identical output) · numbers for all four tile sizes and all four content classes · the cursor-only and text-field-only cases counted separately (they are exactly what AI1's picker dropped) · a one-paragraph verdict per idea 1 / 15 / 16: worth building, or not, with the number that decides it · headed, never the hidden pane.
 ### O10a loudness attenuation [BUILT, INERT — WAITING ON ROBERT'S RULING] — R128/BS.1770 −14 LUFS is implemented behind `?loudness=r128` and is a NO-OP until Robert allows attenuation. Exports sit 1-9 dB above −14 LUFS; turning it on means bright takes LOSE ~9 dB, which is a behaviour a user hears, so it is his call and nobody else's. GATES when allowed: −14 ±0.5 LUFS on the synthetic set · loudness spread across content (7.84 dB today) quoted after · fidelity green · A/B for his ear.
 ### ~~O4 the WebGPU backend~~ DONE 2026-09-04 — BUILT, MEASURED, AND ON BY ROBERT'S RULING
-STEP 1 ANSWERED FIRST AND IT SHRANK THE PRIZE (`node scripts/gpu-residency.mjs`, evidence
-docs/qa/o4-gpu-residency.json, verdict in DECISIONS): the transferred capture frame is NOT read back —
-3024x1964 NV12 uploads in 0.72-0.80 ms against 3.23-3.41 ms for the SAME bytes from a JS ArrayBuffer =
-0.22-0.23x, and 0.20-0.38x at the shipped 1080p rung. A readback + upload cannot be cheaper than the
-upload alone. The 35.6 ms this task was written against is DEAD: the real screen path paints at
-0.29-0.31 ms/Mpx (4K projects to 2.4-2.6 ms/frame) and the 35.6 came from o4step2's uncapped 4K CANVAS
-captureStream, which measures 2.03 ms/Mpx — 6.6x the real screen path per pixel.
-Robert then ruled BUILD IT ANYWAY (2026-09-04), and it is built: `capture/compositorWGPU.ts`, chosen by
-`capture/painterChoice.ts` (`?painter=webgpu|webgl2|2d`, /?test row), webgpu → webgl2 → 2d with each a
-complete painter, so no machine loses a path.
-WHAT IT WON, and it is BIGGER than step 1 projected because the composition draws TWICE (screen, then
-the camera PiP) and WebGL2 uploads once PER DRAW while WebGPU uploads never: the same composition —
-3024x1964 NV12 into a 1080p composite, real fence, batch of 8 — costs 0.416 ms on WebGPU against 4.059
-ms on WebGL2. 3.64 ms a frame, 90 %, i.e. 22 % of a 60 fps budget.
-WHY IT IS NOT THE DEFAULT, and it is a measurement rather than caution (`scripts/painter-parity.mjs`,
-docs/qa/o4-painter-parity.json). The gate said "both painters required identical". ON A SYNTHETIC
-SOURCE THEY ARE: maxAbs 1 of 255, PSNR 110 dB — every shape, corner radius, border stroke, feathered
-edge and blend agrees, so the shaders and the geometry are not in question. ON A REAL NV12 SCREEN FRAME
-THEY ARE NOT: 13,485 pixels of 2,073,600 differ by more than one step, 6,552 by more than four, worst
-37, PSNR 55.9 dB (at 1:1 with no minification: 1,514 of 5,939,136, worst 35, PSNR 69.4 dB). The
-difference is systematic and it is COLOUR — across the twelve worst pixels the green channel is
-identical every time, red is 3-11 higher on WebGPU, blue 29-37 lower, luma within 2.02 of 255. WebGPU
-renders warm saturated content MORE saturated. That is the NV12→RGB conversion differing between
-`texImage2D` and `importExternalTexture`, not the drawing. HE WAS SHOWN THE A/B (~/Downloads/inout-o4)
-AND CHOSE WEBGPU, so it is the default and `?painter=webgl2` is every take made before it. The
-direction is where O9 looked and found nothing to spend: the composite keeps 70-75 % of the source's
-colour against the raw screen's 80-89 %, and this moves it up.
-NO THROUGHPUT REGRESSION: o4step2 v2 1080p 8 s — paint 1.10 ms (webgl2) vs 1.25 (webgpu), 190 vs 197
-frames encoded, 0 dropped either way. Three real takes per painter through fps-check: the composite and
-the RAW channel move together, and the raw channel never touches the painter, so the one collapsed run
-was the machine and did not reproduce. `paintMs` IS NOT COMPARABLE ACROSS BACKENDS — WebGPU's includes
-the submit, WebGL2's includes no GPU work at all.
-TWO BUGS FOUND IN THE BUILDING, both of which produced a SILENTLY BLACK composite and neither of which
-threw: a WGSL reserved word (`in` as a parameter name), and a uniform bound fragment-visible while the
-vertex stage reads it. WebGPU reports both asynchronously or not at all, so the file now asks for
-shader compilation info unconditionally and wraps setup in a validation error scope. Any session
-touching a shader here should expect the same silence.
-GATES MET: 1,182 unit tests + typecheck green (the door test allowlists the canvas `configure`, which
-is a pixel format and not a dial) · oracle v2 PASS on BOTH painters · oracle v1 PASS · oracle:long PASS
-(120 s cell, 189.4 s: sync 48.0/71.3 ms, spur -51.5 dB, tail 75 ms, instant 51.8, smartcut 51.2, export
-5.4x) · first paint +41 B (299,769 against main's 299,728; the 218,793 this file used to quote
-was years stale) · instant and smart-cut paths untouched · export wall clock unmoved.
-DEFAULT FLIPPED the same day on his word, with the oracle re-run on both painters either side of it:
-v2 PASS on webgpu (sync 49.1/62.9, spur -53.0 dB, tail 82 ms) and PASS on the webgl2 control (54.3/67.6,
--40.5 dB, 81 ms); v1 PASS (61.3/81.3, export 1.2x) on a second reading after one INCONCLUSIVE under a
-loaded machine — v1 has ZERO references to the painter, so that was G6's confirmation rule doing its job.
-NOTHING IS LEFT IN THIS TASK. F12's
-zoom model has its WebGPU device.
+COMPRESSED 2026-09-04 (4.5k chars for a task that shipped): `?painter=webgpu|webgl2|2d`, default
+webgpu, and a machine without it falls through by itself. THE NUMBER: `importExternalTexture` binds the
+capture frame's planes and uploads nothing — **0.416 ms a composited frame against WebGL2's 4.059**,
+because WebGL2 uploads once per draw and the composition draws twice. The one thing a user can see is
+warm saturated colour coming out MORE saturated, and that is Robert's ruling on the A/B, not a side
+effect. Details in DECISIONS O4; the code is `capture/compositorWGPU.ts` and `painterChoice.ts`.
+OPEN, and it is in BACKLOG rather than here: a WebGPU device lost mid-take paints nothing until the
+next shape change, and machines on the WebGL2 rung get a less saturated colour than the one he chose.
 ### O10b multitrack export [light-medium · PHASE 1 since 2026-09-02] — mic + system audio as SEPARATE tracks in the container, default flattened exactly as today. GATES: default export byte-identical (pinned) · tracks separate and independently selectable in a player that supports it · every export path states which it took · fidelity green.
 ### O10c deterministic spectral gating [medium · opt-in · PHASE 1 since 2026-09-02] — opt-in, deterministic DSP (no model), raw untouched, default OFF. Feeds B13(3) if the "small noises" turn out to be in the source rather than in our chain. GATES: OFF byte-identical (pinned) · ZERO gating triggers on clean speech, on a breathy-speech fixture too · measured SNR gain on a known-noise rig · fidelity bands green · A/B files for Robert's ear before any default moves.
 ### O10d cross-channel AEC [medium · BLOCKED ON P4 — this is a dependency, not a preference]

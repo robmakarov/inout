@@ -39,6 +39,11 @@
  *   node scripts/memory-slope.mjs --real               # THE MAX60 CELL: the real
  *                                                      # display, the only source
  *                                                      # that survives it (G8)
+ *   node scripts/memory-slope.mjs --tab                # THE SAME CELL WITH TAB
+ *                                                      # AUDIO IN IT — the only
+ *                                                      # lane whose card can be
+ *                                                      # green on `channels` on
+ *                                                      # macOS (see `TAB_TITLE`)
  *
  * HEAVY: announce it, and do not run it while the machine is in use. Exit code
  * is 0 only when every band above held.
@@ -92,12 +97,21 @@ function parseArgs(argv) {
     keepProfile: false,
     real: false,
     source: 'Entire screen',
+    /** THE TAB LANE (see the note above `tabArgs`): capture a TAB instead of
+     *  the whole screen, which is the only way macOS gives Chrome the system
+     *  audio Phase 1's own criterion asks for. */
+    tab: false,
   }
   for (const a of argv) {
     if (a === '--headed') o.headed = true
     else if (a === '--headless') o.headed = false
     else if (a === '--keep-profile') o.keepProfile = true
     else if (a === '--real') o.real = true
+    else if (a === '--tab') {
+      o.real = true
+      o.tab = true
+      o.source = TAB_TITLE
+    }
     else if (a.startsWith('--source=')) o.source = a.slice(9)
     else if (a.startsWith('--url=')) o.url = a.slice(6)
     else if (a.startsWith('--minutes=')) o.minutes = Number(a.slice(10))
@@ -141,8 +155,9 @@ if (!bin) {
  * runs clean.
  *
  * The cost of `--real`: macOS gives Chrome no system audio, so the tab-audio
- * channel of the Phase-1 criterion is missing and the card is RED on `channels`
- * unless `--source=` names a TAB instead of the whole screen.
+ * channel of the Phase-1 criterion is missing and the card is RED on `channels`.
+ * `--tab` is the lane that fixes it — it captures a TAB, which Chrome does hand
+ * the audio of, and it is built here rather than left as a note.
  *
  * fps-check.mjs's own `--real` note says whole-screen capture on macOS is
  * "refused by the OS in 641 ms". That is true of a node-SPAWNED Chrome, whose
@@ -162,11 +177,57 @@ function takeUrl(url) {
   return u.toString()
 }
 
+/**
+ * THE TAB LANE — the last gap in Phase 1's own "done means" cell.
+ *
+ * The criterion is two ≥60-min max60 takes with camera + TAB AUDIO graded
+ * GREEN. `--real` captures the whole screen, and macOS gives Chrome no system
+ * audio off a whole-screen capture at all — so that lane's card is RED on
+ * `channels` for a reason no amount of soaking will change. The roadmap named
+ * the answer and left it unbuilt: capture a TAB instead, where Chrome supplies
+ * the tab's own audio.
+ *
+ * So this opens a second tab that MAKES A SOUND — a self-contained page with a
+ * WebAudio oscillator on it, as a `data:` URL so the lane needs no server and
+ * no network — gives it a title nothing else can match, and answers the picker
+ * with that title. It is the same recipe as the screen lane, pointed at a
+ * different surface.
+ *
+ * WHY A TONE AND NOT SILENCE: a silent tab hands the take an audio track that
+ * never delivers a byte, which grades the same as no tab audio at all and would
+ * make this lane a more elaborate way of failing the same gate.
+ *
+ * The window is sized to the display so the captured tab is the display's own
+ * pixels — a max60 take of a 400x300 tab is not the take Phase 1 is asking
+ * about.
+ */
+const TAB_TITLE = 'INOUT SOAK TONE'
+const TONE_PAGE =
+  'data:text/html,' +
+  encodeURIComponent(
+    `<title>${TAB_TITLE}</title><body style="margin:0;background:#111;color:#eee;font:14px system-ui">` +
+      `<p id=s style="padding:12px">soak tone: waiting for the take</p><script>` +
+      // The oscillator is started on the first frame; a tab with no user
+      // gesture may have its context suspended, so it is resumed on a timer
+      // until it runs. The moving text is deliberate: a still page is a
+      // compressible one, and this lane is meant to cost the encoder something.
+      `const c=new (window.AudioContext||window.webkitAudioContext)();` +
+      `const o=c.createOscillator(),g=c.createGain();` +
+      `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c.destination);o.start();` +
+      `setInterval(()=>{if(c.state!=='running')c.resume();` +
+      `document.getElementById('s').textContent='soak tone '+c.state+' '+new Date().toISOString();},1000);` +
+      `<\/script></body>`,
+  )
+
 /** Chrome's own picker automation, so `getDisplayMedia` is answered by a switch
  *  rather than by a native dialog nothing can reach. Same recipe, same reasons,
  *  as gpu-residency.mjs — including why it is NOT --use-fake-ui-for-media-stream. */
 const realArgs = () => [
   `--auto-select-desktop-capture-source=${opts.source}`,
+  // The tab-specific switch is newer than the desktop one and is what actually
+  // answers the picker with a TAB on current Chrome; an unknown switch is
+  // ignored, so passing both costs the screen lane nothing.
+  ...(opts.tab ? [`--auto-select-tab-capture-source-by-title=${opts.source}`] : []),
   '--auto-accept-this-tab-capture',
   '--disable-features=InfiniteSessionRestore,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma,ThumbnailCapturerMac',
 ]
@@ -209,7 +270,11 @@ const report = {
   task: 'H3',
   url: takeUrl(opts.url),
   headed: opts.headed,
-  source: opts.real ? `the real display (${opts.source})` : `synthetic ${opts.screen}@${opts.screenFps}`,
+  source: opts.tab
+    ? `a real TAB ("${opts.source}"), which is what gives macOS Chrome the tab audio`
+    : opts.real
+      ? `the real display (${opts.source})`
+      : `synthetic ${opts.screen}@${opts.screenFps}`,
   minutes: opts.minutes,
   band: BAND,
   startedAt: new Date().toISOString(),
@@ -262,6 +327,39 @@ try {
   }
   if (!ready) throw new Error('the app never reached the capture screen')
   step('capture screen ready')
+
+  if (opts.tab) {
+    /**
+     * THE SURFACE BEING CAPTURED HAS TO EXIST BEFORE THE PRESS. The picker is
+     * answered by title, so the tone tab is opened first and given a moment to
+     * put its title up; without that the switch matches nothing and
+     * getDisplayMedia comes back with the screen or with nothing at all.
+     *
+     * The window is sized to the display so a max60 take of this tab is the
+     * display's own pixels — Chrome's own bounds, not CSS, which is why this
+     * goes through Browser.setWindowBounds rather than window.resizeTo.
+     */
+    const { targetId } = await session.send('Target.createTarget', { url: TONE_PAGE, background: true })
+    report.toneTab = targetId
+    try {
+      const { windowId } = await session.send('Browser.getWindowForTarget', {})
+      const screen = await session.evalJson(
+        `JSON.stringify({ w: screen.width, h: screen.height })`,
+        null,
+      )
+      if (screen) {
+        await session.send('Browser.setWindowBounds', {
+          windowId,
+          bounds: { left: 0, top: 0, width: screen.w, height: screen.h, windowState: 'normal' },
+        })
+        report.windowSizedTo = screen
+      }
+    } catch (err) {
+      step(`window could not be sized (${String(err)}) — the take is still valid, just smaller`)
+    }
+    await sleep(2000)
+    step(`tone tab open as "${TAB_TITLE}" — the picker is answered with its title`)
+  }
 
   // The idle page, before a take exists — every later sample is read against it.
   report.baseline = {
