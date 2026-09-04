@@ -32,11 +32,17 @@
  * then "resumed". The warning is TRUE and is deliberately not suppressed: for
  * those seconds the source really had delivered nothing.
  *
- * WHAT IS NOT KNOWN, and it is the half that decides whether this matters:
- * Gecko is the only engine this rung is FOR, and Gecko has not been measured.
- * Chromium never chooses this rung. So the first frame is timed and logged per
- * source below — a single Firefox run then answers it instead of someone
- * re-deriving it, and nobody moves the Firefox default without that number.
+ * AND IT IS CHROMIUM'S NUMBER, NOT THIS RUNG'S. The same probe in real Safari
+ * 26.6 (`node scripts/safari.mjs`) reads the element at 35 ms and 114 ms on two
+ * runs, and builds the VideoFrame from it in under a millisecond — 40x to 140x
+ * faster than Chromium for the identical code on an identical canvas track. So
+ * a <video> is not inherently slow to open; this one engine is, and it is the
+ * one engine that never chooses this rung.
+ *
+ * GECKO IS STILL UNMEASURED, and it is the engine this rung is FOR. So the
+ * first frame is timed and logged per source below — one Firefox run answers
+ * it instead of someone re-deriving this, and nobody moves the Firefox default
+ * without that number.
  *
  * WHAT IT COSTS AFTER THAT: building a
  * VideoFrame from an element is a real copy on the main thread — the only rung
