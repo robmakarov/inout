@@ -1681,3 +1681,21 @@ rendered in real Chrome as `ctx=running el=playing`). `launchChrome` takes `mute
 lane says out loud that it makes sound. Also: the camera DID deliver here (first frame +1460 ms,
 filmstrip 20/20), so X14a's "camera delivers zero frames on this machine" does not hold through the
 app's own acquisition.
+
+session 2026-09-05 (3) — ONE OF PHASE 1's TWO TAKES IS ON THE BOARD.
+`node scripts/memory-slope.mjs --tab`, 60 minutes at `qstep=max` on prod:
+**`rec_1ir4llw999k0 · 60.0 min · GREEN — 13 of 13 dimensions measured and inside band`.**
+Screen 2700x1838@60 + camera 1280x720@30 + mic + TAB AUDIO (stereo 44.1 kHz, RAW — ec/ns/agc all
+false), two encoders at 325.4 Mpx/s, 60.0 fps, **4.74 GB written at ~80 MB/min**, still recording at
+sample 60, nothing stopped it. MEMORY WENT DOWN: RSS **-6.03 MB/min**, half-means **1202 -> 1064 MB**,
+and every process type fell (renderer -54, utility -44, browser -28, gpu-process -11 MB); heap
+**+0.077 MB/min**, half-means 10.9 -> 13.1 MB. This is the first take that has ever met this cell's
+configuration — camera AND tab audio, at max, for an hour, graded green.
+**THE RIG FAILED ITS OWN GATE ON THAT RESULT, and that was the last defect of the night.** The band
+was `Math.abs(slope) < 5`, so a take whose memory FELL six megabytes a minute was graded identically
+to one leaking six — the best result this rig has produced, exiting non-zero. The band is a CEILING ON
+GROWTH: the line must not climb faster than the band, and the second half must not sit more than a
+band's worth of the window above the first (the two-half comparison this file's own header already
+names as the statistic that survives macOS's +/-90 MB reclaiming). The heap gained the same two-half
+check, which until now was written but never computed — a no-op that read like a gate.
+WHAT IS LEFT OF THE CELL: the SECOND take. One command, and it is the same one.

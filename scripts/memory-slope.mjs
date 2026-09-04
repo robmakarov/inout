@@ -602,6 +602,10 @@ report.slope = {
   samplesAfterWarmup: warm.length,
   byType,
   rssHalves: halfMeans(warm.map((s) => ({ x: s.minute, y: s.rss.totalKb / 1024 }))),
+  // The heap gets the same two-half comparison as RSS, or its band check below
+  // would be a no-op that always passes — which is worse than no check, because
+  // it reads like one.
+  heapHalves: halfMeans(warm.map((s) => ({ x: s.minute, y: (s.heapUsed ?? 0) / 1048576 }))),
   rssMinMb: warm.length ? +Math.min(...warm.map((s) => s.rss.totalKb / 1024)).toFixed(0) : null,
   rssMaxMb: warm.length ? +Math.max(...warm.map((s) => s.rss.totalKb / 1024)).toFixed(0) : null,
   processCounts: [...new Set(report.samples.map((s) => s.rss.processes))],
@@ -616,10 +620,39 @@ report.slope = {
   rssFirstMb: warm.length ? +(warm[0].rss.totalKb / 1024).toFixed(0) : null,
   rssLastMb: warm.length ? +(warm[warm.length - 1].rss.totalKb / 1024).toFixed(0) : null,
 }
+/**
+ * THE BAND IS A CEILING ON GROWTH, NOT A MAGNITUDE — and it took `Math.abs`
+ * until 2026-09-05, which failed the best result this rig has ever produced.
+ *
+ * The question at the top of this file is "does a take's memory go up
+ * forever?". The first full 60-minute tab soak came back at **-6.03 MB/min**
+ * with half-means 1202 -> 1064 MB: memory went DOWN in every process type over
+ * an hour, the take was still recording at sample 60, and the card was GREEN on
+ * all thirteen dimensions. `Math.abs` graded that identically to a take LEAKING
+ * six megabytes a minute, and the run exited non-zero.
+ *
+ * A fall is not a leak. It is macOS reclaiming, which this file's own header
+ * already describes as a +/-90 MB oscillation — and the same header says the
+ * statistic that survives that oscillation is the comparison of the two HALF
+ * MEANS, not the least-squares line. So both are required now, both
+ * directional: the line must not climb faster than the band, and the second
+ * half must not sit more than a band's worth of the window above the first.
+ * Noise fails neither; a real leak fails both.
+ */
+const windowMin = warm.length > 1 ? warm[warm.length - 1].minute - warm[0].minute : 0
+const grew = (halves, band) =>
+  halves === null || windowMin <= 0 ? true : halves.deltaMb < band * windowMin
+
 report.gates = {
   takeSurvived: !report.error && !report.stoppedItself && !report.crashed,
-  rssSlopeInBand: report.slope.rssMbPerMin !== null && Math.abs(report.slope.rssMbPerMin) < BAND.rssMbPerMin,
-  heapSlopeInBand: report.slope.heapMbPerMin !== null && Math.abs(report.slope.heapMbPerMin) < BAND.heapMbPerMin,
+  rssSlopeInBand:
+    report.slope.rssMbPerMin !== null &&
+    report.slope.rssMbPerMin < BAND.rssMbPerMin &&
+    grew(report.slope.rssHalves, BAND.rssMbPerMin),
+  heapSlopeInBand:
+    report.slope.heapMbPerMin !== null &&
+    report.slope.heapMbPerMin < BAND.heapMbPerMin &&
+    grew(report.slope.heapHalves, BAND.heapMbPerMin),
 }
 exitCode = Object.values(report.gates).every(Boolean) ? 0 : 1
 
