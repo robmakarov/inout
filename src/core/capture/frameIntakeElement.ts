@@ -18,7 +18,27 @@
  *    and an off-document element cannot be laid out, styled or scrolled into
  *    someone's way.
  *
- * WHAT IT COSTS, AND IT IS THE ONE RUNG THAT COSTS ANYTHING HERE: building a
+ * WHAT IT COSTS BEFORE IT COSTS ANYTHING ELSE — THE FIRST PICTURE IS LATE, and
+ * on Chromium it is late by SECONDS. Measured 2026-09-04 on prod, Chrome 152
+ * headed, the SAME canvas track handed to both intakes in the same turn:
+ *
+ *   MediaStreamTrackProcessor   first frame at   10 ms
+ *   <video> readyState >= 2      readable at   4903 ms
+ *
+ * In the document or out of it makes no difference (4800 vs 4803 ms), so it is
+ * the element, not the layout. On a live `?intake=element` take that delay
+ * outran SOURCE_NEVER_DELIVERED_MS (5000) and the take honestly reported
+ * "screen source dead ... composite unusable — unedited export will render",
+ * then "resumed". The warning is TRUE and is deliberately not suppressed: for
+ * those seconds the source really had delivered nothing.
+ *
+ * WHAT IS NOT KNOWN, and it is the half that decides whether this matters:
+ * Gecko is the only engine this rung is FOR, and Gecko has not been measured.
+ * Chromium never chooses this rung. So the first frame is timed and logged per
+ * source below — a single Firefox run then answers it instead of someone
+ * re-deriving it, and nobody moves the Firefox default without that number.
+ *
+ * WHAT IT COSTS AFTER THAT: building a
  * VideoFrame from an element is a real copy on the main thread — the only rung
  * where the thread the UI runs on touches pixels. It is declared
  * (`mainThreadPixels`) rather than hidden, and it is bounded two ways: a frame
@@ -90,6 +110,9 @@ export function startElementSampler(init: ElementSamplerInit): Promise<ElementSa
   if (init.camera) els.set('camera', videoFor(init.camera))
 
   const periodMs = 1000 / Math.max(1, init.fps) - 1
+  /** When this rung was asked to start — the clock the first picture is late against. */
+  const startedAtMs = performance.now()
+  const firstPictureLogged = new Set<Kind>()
   const lastBuiltMs = new Map<Kind, number>()
   const lastMediaSec = new Map<Kind, number>()
   let stopped = false
@@ -122,6 +145,16 @@ export function startElementSampler(init: ElementSamplerInit): Promise<ElementSa
       }
       lastMediaSec.set(kind, mediaSec)
       lastBuiltMs.set(kind, now)
+      if (!firstPictureLogged.has(kind)) {
+        firstPictureLogged.add(kind)
+        // THE NUMBER THAT DECIDES WHETHER THIS RUNG CAN BE A DEFAULT. 10 ms is
+        // what a track processor takes; 4903 ms is what this took on Chromium.
+        // Anything near the second on the engine this rung is FOR is a defect,
+        // not a cost — see the header.
+        console.info(
+          `[capture] element sampler: ${kind} first picture at +${(now - startedAtMs).toFixed(0)}ms`,
+        )
+      }
       init.onFrame(kind, frame, now, mediaSec)
     }
   }
