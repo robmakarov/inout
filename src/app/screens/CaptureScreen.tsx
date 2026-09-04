@@ -51,6 +51,7 @@ import { ChannelChips } from '@app/components/ChannelChips'
 import { QualitySlider } from '@app/components/QualitySlider'
 import { TakesList } from '@app/components/TakesList'
 import { testPanelEnabled } from '@app/lib/testPanel'
+import { SwitchLine } from '@app/components/SwitchLine'
 import { lazy, Suspense } from 'react'
 
 /* Lazily loaded so it costs the first-paint chunk nothing for everyone who is
@@ -998,6 +999,11 @@ export function CaptureScreen() {
         </div>
       )}
       </div>
+      {/* U4 part 1: what is turned on, always on screen and never only behind
+          a `/?test` link — the switch that follows someone into ordinary use is
+          exactly the one no link will show them. Hidden while a take is running,
+          where nothing but the take belongs. */}
+      {!session && <SwitchLine />}
       {!session && testPanelEnabled() && (
         <Suspense fallback={null}>
           <TestPanel />

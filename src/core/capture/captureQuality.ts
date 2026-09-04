@@ -138,6 +138,16 @@ export function preemptiveRefusalAllowed(): boolean {
  */
 export function rateLadderAllowed(): boolean {
   if (captureQualityMode() !== 'max') return true
+  return maxLadderChosen()
+}
+
+/**
+ * WHAT THE SWITCH ITSELF SAYS, with no regard for whether it is in force —
+ * outside max the ladder is on because max is what turns it off, so
+ * `rateLadderAllowed()` answers `true` for a switch that is set to off. The
+ * panel has to show the switch, and say separately that it is inert (U4).
+ */
+export function maxLadderChosen(): boolean {
   return maxLadderFromSearch() ?? maxLadderOverride ?? maxLadderFromStorage() ?? false
 }
 

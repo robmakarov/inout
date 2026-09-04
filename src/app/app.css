@@ -2795,3 +2795,115 @@
 }
 
 
+
+/* U4 — the switch state line. ALWAYS on the capture screen: "default", or
+   "N changed" in a colour that is not green, and one tap gives the list and one
+   Reset. Bottom-left, clear of the stage, the chips, the record button and the
+   test panel (top-left), so it never covers anything it is not about. */
+.swline {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 7;
+  font-size: 11px;
+  max-width: min(340px, calc(100vw - 24px));
+}
+
+.swline__pill {
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  color: var(--text-faint);
+  font: inherit;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.swline--dirty .swline__pill {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.swline__sheet {
+  margin-top: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-md);
+  padding: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.swline__empty {
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.swline__row {
+  padding: 5px 0;
+  border-top: 1px solid var(--surface-3);
+}
+
+.swline__row:first-child {
+  border-top: none;
+}
+
+.swline__name {
+  color: var(--text);
+}
+
+.swline__val {
+  color: var(--text-dim);
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.swline__val code {
+  font-family: var(--font-mono);
+  color: var(--warn);
+}
+
+.swline__reset {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface-3);
+  border: 1px solid var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  padding: 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+/* The panel's generic rows (U4): a number/text field, a link-only value, and
+   the per-switch "put back" that clears one sticky value without resetting the
+   rest. */
+.tp__num {
+  align-self: center;
+  background: var(--surface-3);
+  border: 1px solid var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  width: 68px;
+}
+
+.tp__link {
+  align-self: center;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.tp__clear {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--warn);
+  text-decoration: underline;
+  cursor: pointer;
+}

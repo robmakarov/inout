@@ -37,7 +37,12 @@
  * the default.
  */
 
-export type SingleGenRung = 'off' | 'export' | 'capture'
+// U4 2026-09-04: `capture` is GONE from this type as well as from the code.
+// J6 deleted the rung; the type kept offering it, `isRung` had always
+// refused it, and the panel showed it as a third option that did nothing
+// when pressed. A switch position that cannot be reached is the mess this
+// task is named after.
+export type SingleGenRung = 'off' | 'export'
 
 const STORAGE_KEY = 'inout.compose.singlegen'
 

@@ -55,31 +55,7 @@ export function urlWithoutTestParam(): string {
   return url.pathname + (url.search ? url.search : '') + url.hash
 }
 
-/**
- * A URL PARAMETER BEATS THE PANEL, so the panel has to say so rather than lie
- * about the value it is showing. Every flag here reads
- * `search ?? override ?? storage ?? default`, which is right — a link must win
- * for one load — but it means a leftover `&quality=max` in the address bar
- * makes the panel's own switch look broken.
- */
-export function urlOverrides(): string[] {
-  if (typeof location === 'undefined') return []
-  const known = [
-    'sourceres',
-    'sourcefps',
-    'sourceframe',
-    'quality',
-    'maxladder',
-    'nativeres',
-    'encoderbudget',
-    'resstep',
-    'singlegen',
-    'glue',
-    'rawcodec',
-    'engine',
-    'chunked',
-    'resamp',
-  ]
-  const p = new URLSearchParams(location.search)
-  return known.filter((k) => p.has(k))
-}
+/* `urlOverrides()` used to live here: a HAND-KEPT list of thirteen parameter
+ * names, used to warn that the address bar was winning. U4 deleted it — the
+ * panel now asks `@core/switches` which switches are set from the URL, so the
+ * warning can never again name fewer than there are. */
