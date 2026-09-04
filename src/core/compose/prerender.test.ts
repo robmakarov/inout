@@ -80,6 +80,9 @@ const { setConstantQualityOverride } = await import('./constantQuality')
 const { setSourceFrame } = await import('@core/frame')
 const { setFullColourOverride } = await import('./fullColour')
 const { setLoudnessMode } = await import('./loudnessMode')
+const { setNoiseGateOverride } = await import('./gateFlag')
+const { setAudioTrackModeOverride } = await import('./audioTracks')
+const { currentRenderFlags } = await import('./chunkPlan')
 
 /** Every render flag back to what ships, so one case cannot leak into the next. */
 function resetFlags(): void {
@@ -87,7 +90,32 @@ function resetFlags(): void {
   setSourceFrame(null)
   setFullColourOverride(null)
   setLoudnessMode(null)
+  setNoiseGateOverride(null)
+  setAudioTrackModeOverride(null)
 }
+
+/**
+ * ONE CASE PER RENDER FLAG, AND THE LIST IS CHECKED AGAINST THE CODE. Hand-kept
+ * it went stale twice in two days — `audioTracks` and `noiseGate` were both
+ * added to `RenderFlagPrint` while this loop still covered four flags — and a
+ * flag missing from the key is the exact defect this test exists to prevent
+ * (a file made before a switch was flipped, served for a press made after it).
+ */
+const FLAG_CASES: [string, () => void][] = [
+  // qp20 is what ships, so asking for 20 is not a change — 28 is. And the
+  // OVERRIDE is the seam that works here: `setConstantQuality` writes
+  // localStorage, which a worker has none of and this environment has none
+  // of either, which is the very hole its own header describes.
+  ['cq', () => setConstantQualityOverride(28)],
+  // F13's frame follows the take by DEFAULT, so `true` is not a change.
+  ['sourceFrame', () => setSourceFrame(false)],
+  // The OVERRIDE again: `setFullColourEnabled` writes storage, and
+  // `fullColourActive` is what the key reads.
+  ['fullColour', () => setFullColourOverride(true)],
+  ['loudness', () => setLoudnessMode('r128')],
+  ['audioTracks', () => setAudioTrackModeOverride('separate')],
+  ['noiseGate', () => setNoiseGateOverride(true)],
+]
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording
 const edit = { channels: [], segments: [{ startMs: 0, endMs: 1000 }] } as unknown as EditState
@@ -146,25 +174,21 @@ describe('the pre-rendered export', () => {
   it('a render flag changes the key — every one of them', () => {
     const a = prerenderKey({ recording, edit, settings })
     const shapeA = prerenderShape({ recording, edit, settings })
-    for (const [name, set] of [
-      // qp20 is what ships, so asking for 20 is not a change — 28 is. And the
-      // OVERRIDE is the seam that works here: `setConstantQuality` writes
-      // localStorage, which a worker has none of and this environment has none
-      // of either, which is the very hole its own header describes.
-      ['cq', () => setConstantQualityOverride(28)],
-      // F13's frame follows the take by DEFAULT, so `true` is not a change.
-      ['sourceframe', () => setSourceFrame(false)],
-      // The OVERRIDE again: `setFullColourEnabled` writes storage, and
-      // `fullColourActive` is what the key reads.
-      ['colour', () => setFullColourOverride(true)],
-      ['loudness', () => setLoudnessMode('r128')],
-    ] as [string, () => void][]) {
+    for (const [name, set] of FLAG_CASES) {
       set()
       expect(prerenderKey({ recording, edit, settings }), name).not.toBe(a)
       expect(prerenderShape({ recording, edit, settings }), name).not.toBe(shapeA)
       resetFlags()
       expect(prerenderKey({ recording, edit, settings }), name).toBe(a)
     }
+  })
+
+  it('covers every flag the key actually carries — the list cannot go stale', () => {
+    const carried = Object.keys(currentRenderFlags()).sort()
+    const covered = FLAG_CASES.map(([name]) => name).sort()
+    expect(covered, 'a flag in RenderFlagPrint with no case above is a flag nothing pins').toEqual(
+      carried,
+    )
   })
 
   it('starts ONE render, and asking again for the same output does not start another', () => {
