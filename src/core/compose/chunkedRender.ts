@@ -120,6 +120,16 @@ export interface ChunkedRenderStats {
   renderMs: number
   concatMs: number
   totalMs: number
+  /**
+   * J7 — the chunked path's OWN fixed cost, none of which is proportional to
+   * how much of the take actually changed. `planMs` hashes every chunk
+   * descriptor and lists OPFS; `muxOpenMs` is the concatenation's ladder walk,
+   * scratch open and `out.start()`; `publishMs` is the `scratch.finish()` that
+   * runs after finalize and that `concatMs` therefore never counted.
+   */
+  planMs: number
+  muxOpenMs: number
+  publishMs: number
   /** Packets copied into the final file — the concatenation, measured. */
   videoPacketsCopied: number
   audioPacketsCopied: number
@@ -268,6 +278,10 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
         !needAudio ? 'not present' : audioMissing ? 'to render' : 'already made'
       } (J1)`,
   )
+  // J7: everything up to here is the plan — chunk grid, one content hash per
+  // chunk, one OPFS listing — and it runs whether or not a single frame is
+  // stale. Fixed cost of pressing export, measured rather than assumed.
+  const planMs = performance.now() - t0
 
   // Work units, so progress is honest about what is actually left to do.
   const units = missing.size + (audioMissing ? Math.max(1, Math.round(plan.chunks.length * 0.1)) : 0)
@@ -288,6 +302,9 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     renderMs: 0,
     concatMs: 0,
     totalMs: 0,
+    planMs: Math.round(planMs),
+    muxOpenMs: 0,
+    publishMs: 0,
     videoPacketsCopied: 0,
     audioPacketsCopied: 0,
     reencodedFrames: 0,
@@ -295,7 +312,9 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   }
   const rollup: RenderStats = {
     frames: 0, decodeMs: 0, drawMs: 0, encodeMs: 0, audioMs: 0,
-    prepareMs: 0, finalizeMs: 0, totalMs: 0, probeDecodes: 0,
+    prepareMs: 0, finalizeMs: 0, publishMs: 0,
+    prep: { open: 0, probe: 0, target: 0, cq: 0, colour: 0, scratch: 0, start: 0 },
+    totalMs: 0, probeDecodes: 0,
   }
   const addUp = (): void => {
     const s = getLastRenderStats()
@@ -307,6 +326,16 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     rollup.audioMs += s.audioMs
     rollup.prepareMs += s.prepareMs
     rollup.finalizeMs += s.finalizeMs
+    // J7: the per-chunk fixed cost, summed. A chunked export pays a whole
+    // prepare per chunk file, so this rollup is where the floor is visible.
+    rollup.publishMs += s.publishMs
+    rollup.prep.open += s.prep.open
+    rollup.prep.probe += s.prep.probe
+    rollup.prep.target += s.prep.target
+    rollup.prep.cq += s.prep.cq
+    rollup.prep.colour += s.prep.colour
+    rollup.prep.scratch += s.prep.scratch
+    rollup.prep.start += s.prep.start
     rollup.probeDecodes += s.probeDecodes
   }
 
@@ -406,6 +435,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
       out.addAudioTrack(audioSource)
     }
     await out.start()
+    stats.muxOpenMs = Math.round(performance.now() - tConcat)
 
     let firstDescription: AllowSharedBufferSource | undefined
     let firstVideo = true
@@ -483,6 +513,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     stats.concatMs = Math.round(performance.now() - tConcat)
 
     let blob: Blob
+    const tPublish = performance.now()
     if (scratch) {
       blob = await scratch.finish(target.mimeType)
     } else {
@@ -490,6 +521,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
       if (!buffer) throw new ChunkedRenderUnavailable('the muxer produced no output')
       blob = new Blob([buffer], { type: target.mimeType })
     }
+    stats.publishMs = Math.round(performance.now() - tPublish)
     report('finalizing', 1)
 
     stats.bytes = blob.size
@@ -500,7 +532,8 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     console.info(
       `[compose] chunked export done — ${stats.chunks} chunks (${stats.reused} reused, ` +
         `${stats.rendered} rendered), audio ${stats.audioReused ? 'reused' : 'rendered'}; ` +
-        `render ${stats.renderMs}ms + concat ${stats.concatMs}ms; ` +
+        `plan ${stats.planMs}ms + render ${stats.renderMs}ms + concat ${stats.concatMs}ms ` +
+        `(mux open ${stats.muxOpenMs}ms) + publish ${stats.publishMs}ms; ` +
         `${stats.videoPacketsCopied} video and ${stats.audioPacketsCopied} audio packets COPIED, ` +
         `${stats.reencodedFrames} re-encoded (J1)`,
     )

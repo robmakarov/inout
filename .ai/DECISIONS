@@ -1248,3 +1248,35 @@ composite.
 CONSEQUENCE HE SHOULD BE HELD TO WHEN O9 COMES BACK: the only objection to 4:4:4 by default was that it
 kills instant export. With the export pre-made while he edits there is no instant path left to kill, so
 the colour default becomes nearly free. O9(b) is re-opened by this, not closed.
+
+J7 2026-09-04 — THE SHORT-EDIT FLOOR IS NOT THE CEREMONY. IT IS THE ENCODER, AND J1 ALREADY CAPS IT.
+Robert asked for easy short edits to be faster; the task assumed the cost was fixed overhead — prepareMs
++ finalizeMs, logged since O5 and never read — and named five suspects. Every suspect is now measured
+(`npm run exp -- j7`, 1080p30, manufactured take, medians of 2-5 runs) and the premise is REFUSED:
+  · A SMALL EDIT COSTS 1.80 / 1.84 / 1.91 s on a 10 / 30 / 60 s take — FLAT (slope 2.2 ms per second of
+    take). J1 works: an edit costs its span, not the take. Of that 1.84 s, 1.59 s (86 %) is the encoder
+    re-encoding the 300 frames of the two 5 s chunks the edit touched, 0.12 s is muxer finalize, 0.04 s
+    is the concatenation, and 0.9 ms is prepare.
+  · THE SUSPECTS, ALL OF THEM, ON A 30 s FIRST PRESS: prepare+finalize+publish = 610 ms of 5668 ms
+    (11 %); on the unbroken render 253 ms of 5137 ms (5 %). Codec ladder 29 ms ONCE per page (memoized:
+    0.3 ms after) · constant-quality probe 2 ms · encoder warm 1.7 ms · scratch open 5.5 ms · colour
+    probe 0. The loudness probe is 89 % of prepare IN THE RIG ONLY — a manufactured take carries no
+    capture envelope so it always probes; X1's shipped gate already holds probeDecodes at 0 for a real
+    take. THE MUXER'S FINALIZE IS THE ONE REAL ONE: 59 ms PER OUTPUT FILE, flat, and a chunked export
+    makes one file per 5 s of output (60 s cold: 762 ms over 13 files).
+  · WHERE THE TIME IS: encodeMs, 90-91 % of every rendering lane, ~5.3 ms/frame ≈ 190 fps at 1080p, with
+    decode 19-75 ms and draw 35-195 ms — the render is not starved, it is encoder-bound. That is
+    THROUGHPUT, which is the axis J5 hides.
+  · J5'S SHAPE IS UNCHANGED, AND THIS WAS THE REASON J7 RAN FIRST. Every chunk pre-made, the press costs
+    16.7 ms + 0.5 ms per second of take: 19 / 38 / 48 ms at 10 / 30 / 60 s. There is no ceremony left for
+    J5 to trip over — it does not need to cut one and must not be scoped to.
+CUT NOTHING HERE. Removing every millisecond J7 named buys 11 % of a first press and 7 % of a small edit;
+the second a short edit spends is encode of chunks the edit did not change. Permanent instrumentation
+ships instead: RenderStats now carries `prep.{open,probe,target,cq,colour,scratch,start}` and
+`publishMs`, ChunkedRenderStats carries `planMs`/`muxOpenMs`/`publishMs`, and both print their split, so
+this is readable off any export instead of re-measured.
+THE ONE LEVER, PRICED AND HIS TO PULL: the chunk grid IS the output's keyframe interval. On a 30 s take,
+5 s → 2.5 s → 1 s chunks takes a small edit 1758 → 1443 → 1341 ms (−18 %, −24 %) and the file 4926 →
+5073 → 5511 KB (+3 %, +12 %), while the FIRST press gets slower (5598 → 5770 → 6733 ms) because the
+per-file 59 ms triples. 2.5 s is the knee. It is a codec change and a file-size change, so it is Robert's
+call, not a task.

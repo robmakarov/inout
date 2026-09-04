@@ -212,6 +212,35 @@ export interface RenderStats {
   prepareMs: number
   /** finalize() — the muxer flushing and patching the file. */
   finalizeMs: number
+  /**
+   * J7: publishing the finished bytes — `sink.publish()` / `scratch.finish()`.
+   * It runs AFTER finalize() and was inside no stage at all, so on a short
+   * export it was time that totalMs charged and no line accounted for.
+   */
+  publishMs: number
+  /**
+   * J7 — WHERE prepareMs GOES. Every field is ms of the same wall clock
+   * prepareMs measures, and together with a small unattributed remainder they
+   * sum to it. THIS IS THE SHORT-EDIT FLOOR: none of these scale with the
+   * length of the take, so on a 30 s edit they are the export, and a chunked
+   * export pays the lot ONCE PER CHUNK.
+   */
+  prep: {
+    /** Opening video channel readers + audio mixers (demux, seek). */
+    open: number
+    /** The loudness probe — a second full decode. 0 when the envelope answered. */
+    probe: number
+    /** The codec ladder's `isConfigSupported` walk (`pickEncodingTarget`). */
+    target: number
+    /** The constant-quality codec probe, when quantizer mode is asked for. */
+    cq: number
+    /** O9(b)'s 4:4:4 probe. 0 unless `?colour=all`. */
+    colour: number
+    /** Opening the OPFS scratch file. */
+    scratch: number
+    /** `out.start()` — muxer header + encoder configure/warm. */
+    start: number
+  }
   totalMs: number
   /** Audio MIXERS opened purely to MEASURE loudness — a second full decode of
    *  the take (one mixer per channel × kept span). 0 when the capture envelope
@@ -243,7 +272,26 @@ function formatStats(s: RenderStats): string {
     `draw ${Math.round(s.drawMs)}ms (${pct(s.drawMs)}) · ` +
     `encode-wait ${Math.round(s.encodeMs)}ms (${pct(s.encodeMs)}) · ` +
     `audio ${Math.round(s.audioMs)}ms (${pct(s.audioMs)}) · ` +
-    `finalize ${Math.round(s.finalizeMs)}ms (${pct(s.finalizeMs)})`
+    `finalize ${Math.round(s.finalizeMs)}ms (${pct(s.finalizeMs)}) · ` +
+    `publish ${Math.round(s.publishMs)}ms (${pct(s.publishMs)})` +
+    `\n${formatPrep(s)}`
+  )
+}
+
+/**
+ * J7: prepare's own split, printed beside it. `prepareMs` has been logged on
+ * every export since O5 and it never said WHAT it was, so nobody read it: on a
+ * short edit it is most of the export and every millisecond of it is fixed.
+ */
+export function formatPrep(s: RenderStats): string {
+  const p = s.prep
+  const named = p.open + p.probe + p.target + p.cq + p.colour + p.scratch + p.start
+  const r = (ms: number): number => Math.round(ms)
+  return (
+    `[export] prepare ${r(s.prepareMs)}ms = open ${r(p.open)} · ` +
+    `loudness ${r(p.probe)}${s.probeDecodes ? ` (${s.probeDecodes} probe decodes)` : ' (no probe)'} · ` +
+    `ladder ${r(p.target)} · cq ${r(p.cq)} · colour ${r(p.colour)} · ` +
+    `scratch ${r(p.scratch)} · encoder-start ${r(p.start)} · rest ${r(s.prepareMs - named)}`
   )
 }
 
@@ -338,10 +386,14 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     audioMs: 0,
     prepareMs: 0,
     finalizeMs: 0,
+    publishMs: 0,
+    prep: { open: 0, probe: 0, target: 0, cq: 0, colour: 0, scratch: 0, start: 0 },
     totalMs: 0,
     probeDecodes: 0,
   }
   const t0 = performance.now()
+  /** J7: one clock, read around each fixed stage. `since(t)` is ms elapsed. */
+  const since = (t: number): number => performance.now() - t
   setLastRenderStats(null)
 
   report('preparing', 0)
@@ -375,6 +427,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
   } | null = null
 
   try {
+    const tOpen = performance.now()
     for (const channel of recording.channels) {
       if (channel.media !== 'video' || waveformMode) continue
       // J1: the caller brought its own, already positioned at this window.
@@ -396,6 +449,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     }
 
     if (wantAudio) audioMixers.push(...(await openAudioMixers(recording, edit, throwIfAborted)))
+    stats.prep.open = since(tOpen)
     const needAudio = audioMixers.length > 0
     /**
      * J1: the ladder's rung must be the FINAL FILE'S rung, not this call's. A
@@ -419,6 +473,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // targeting was defeated by a single mic bump; percentile loudness isn't.
     // No-op for a healthy mix, so the fidelity oracle is untouched.
     if (needAudio) {
+      const tProbe = performance.now()
       // O2: an UNEDITED window is exactly the mix capture measured, so the
       // probe pass can be skipped here too. Any trim changes the mix — those
       // render paths still probe.
@@ -473,6 +528,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           for (const m of probe) m.dispose()
         }
       }
+      stats.prep.probe = since(tProbe)
     }
     // Layout slot is decided once for the whole export: camera only fills the
     // frame when no screen channel contributes anywhere in the output window.
@@ -481,7 +537,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     // F2: same zero-cost rule as the camera track — no track, no per-frame work.
     const viewportMoves = viewportTrackIsActive(edit.viewport)
+    const tTarget = performance.now()
     const target = await pickEncodingTarget(width, height, targetNeedsAudio, videoBitrate)
+    stats.prep.target = since(tTarget)
     throwIfAborted()
 
     const canvas = new OffscreenCanvas(width, height)
@@ -509,8 +567,10 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // custom encoder drops it and drives the QP instead. A browser without
     // quantizer mode never marks the config and encodes exactly as before.
     const wantQp = constantQualityQp()
+    const tCq = performance.now()
     const cqCodec =
       wantQp === null ? null : await constantQualityCodec(target.videoCodec, width, height)
+    stats.prep.cq = since(tCq)
     const qp = cqCodec === null ? null : wantQp
     if (qp !== null) registerConstantQualityEncoder()
     else if (wantQp !== null) {
@@ -528,7 +588,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
      * that is not avc, so a 4:4:4 export never carries a cq string.
      */
     const want444 = wantVideo && fullColourActive()
+    const tColour = performance.now()
     const codec444 = want444 ? await fullColourCodec(width, height, videoBitrate) : null
+    stats.prep.colour = since(tColour)
     if (want444 && !codec444) {
       noteFullColourDeclined('no AV1 4:4:4 encoder config at this frame size', {
         width,
@@ -550,7 +612,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // the fallback for platforms where the scratch can't be opened.
     // J1: the caller's sink wins — a chunk file, or the audio artifact. Nobody
     // else has one, so the scratch stays exactly what it was for every export.
+    const tScratch = performance.now()
     if (!sink) scratch = await createExportScratch()
+    stats.prep.scratch = since(tScratch)
     const bufferTarget = sink || scratch ? null : new BufferTarget()
     const out = new Output({
       format: target.format,
@@ -616,7 +680,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       })
       out.addAudioTrack(audioSource)
     }
+    const tStart = performance.now()
     await out.start()
+    stats.prep.start = since(tStart)
     report('preparing', 0.05)
 
     // Output-timeline frame index of every cut join, for the seam fade.
@@ -858,6 +924,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       console.info(formatBits(bits.summarize(durationSec), `render ${width}×${height} ${target.videoCodec}`))
     }
     let blob: Blob
+    const tPublish = performance.now()
     if (sink) {
       blob = await sink.publish(target.mimeType)
     } else if (scratch) {
@@ -867,6 +934,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       if (!buffer) throw new Error('Muxer produced no output')
       blob = new Blob([buffer], { type: target.mimeType })
     }
+    stats.publishMs = since(tPublish)
     report('finalizing', 1)
     stats.totalMs = performance.now() - t0
     setLastRenderStats(stats)

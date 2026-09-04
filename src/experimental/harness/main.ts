@@ -363,6 +363,28 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'j7',
+    title: 'J7 — the short-edit floor: what an export costs before it draws anything',
+    detail:
+      'the SAME zoom edit at several take lengths, four lanes each (cold cache · one nudged span · every chunk pre-made · unbroken render), so the fixed cost falls out as the intercept of wall clock against length instead of being asserted. Reads the per-stage split inside prepare — channel open, loudness probe, codec ladder, constant-quality probe, colour probe, scratch open, encoder start — plus finalize and the publish that no stage used to count. The warm lane is the floor J5 cannot hide.',
+    run: async (args) => {
+      const { runShortEditFloor } = await import('../perf/shortEditFloor')
+      return runShortEditFloor({
+        lengthsSec: Array.isArray(args?.lengthsSec) ? (args.lengthsSec as number[]) : undefined,
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        audioChannels: typeof args?.audioChannels === 'number' ? args.audioChannels : undefined,
+        coldRuns: typeof args?.coldRuns === 'number' ? args.coldRuns : undefined,
+        tweakRuns: typeof args?.tweakRuns === 'number' ? args.tweakRuns : undefined,
+        warmRuns: typeof args?.warmRuns === 'number' ? args.warmRuns : undefined,
+        unbrokenRuns: typeof args?.unbrokenRuns === 'number' ? args.unbrokenRuns : undefined,
+        rebuild: typeof args?.rebuild === 'boolean' ? args.rebuild : undefined,
+      })
+    },
+  },
+  {
     id: 'b1b',
     title: 'B1b — the size probe against the file, and against its own ten seconds',
     detail:
