@@ -187,12 +187,32 @@ export async function launchChrome({
   let seq = 0
   const pending = new Map()
   const consoleLines = []
+  /**
+   * A DEAD TARGET ANSWERS NOTHING, AND THAT USED TO BE A HANG (G8, 2026-09-04).
+   *
+   * `evaluate` was bounded and every OTHER call was not, so a rig that lost its
+   * renderer waited on the first bare `send` forever. memory-slope at max spent
+   * 11 and 20 minutes there, printing nothing after its header, and the row that
+   * came out of it said the RIG stalls — the tab had crashed 18 s into the take
+   * (`Inspector.targetCrashed`, browser-target status "crashed", errorCode 5)
+   * and nothing in the rig could say so. So: every call is bounded, and the
+   * crash itself is recorded ONCE and fails every later call instantly rather
+   * than making each one wait out its own timeout.
+   */
+  let dead = null
+  const killPending = (err) => {
+    for (const { reject } of pending.values()) reject(err)
+    pending.clear()
+  }
   sock.addEventListener('message', (ev) => {
     const m = JSON.parse(ev.data)
     if (m.id && pending.has(m.id)) {
       const { resolve, reject } = pending.get(m.id)
       pending.delete(m.id)
       m.error ? reject(new Error(m.error.message)) : resolve(m.result)
+    } else if (m.method === 'Inspector.targetCrashed') {
+      dead = { crashed: true, atMs: Date.now(), why: "the page's renderer crashed (Inspector.targetCrashed)" }
+      killPending(new Error(dead.why))
     } else if (m.method === 'Runtime.consoleAPICalled') {
       const text = m.params.args.map((a) => a.value ?? a.description ?? '').join(' ')
       // Capped, and the cap is a ring rather than a cut-off: an hour-long soak
@@ -201,21 +221,27 @@ export async function launchChrome({
       if (consoleLines.length > 600) consoleLines.splice(0, 200)
     }
   })
-  const send = (method, params = {}) =>
-    new Promise((resolve, reject) => {
+  sock.addEventListener('close', () => {
+    dead ??= { crashed: false, atMs: Date.now(), why: 'the CDP connection closed' }
+    killPending(new Error(dead.why))
+  })
+  const send = (method, params = {}, timeoutMs = 30_000) => {
+    if (dead) return Promise.reject(new Error(`${method}: ${dead.why}`))
+    let timer = null
+    return new Promise((resolve, reject) => {
       const id = ++seq
       pending.set(id, { resolve, reject })
+      timer = setTimeout(() => {
+        pending.delete(id)
+        reject(new Error(`${method} timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
       sock.send(JSON.stringify({ id, method, params }))
-    })
+    }).finally(() => clearTimeout(timer))
+  }
   /** Every page-side call is bounded: a media promise that never settles must
    *  fail the run loudly rather than stall it silently. */
   const evaluate = async (expression, timeoutMs = 30_000) => {
-    const r = await Promise.race([
-      send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }),
-      new Promise((_, rej) =>
-        setTimeout(() => rej(new Error(`page evaluate timed out after ${timeoutMs}ms`)), timeoutMs),
-      ),
-    ])
+    const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, timeoutMs)
     return r.result?.value
   }
   /** CDP hands back a string OR an already-decoded value depending on the
@@ -235,7 +261,22 @@ export async function launchChrome({
   await send('Runtime.enable')
   await send('Page.enable')
 
-  return { proc, kill, port, send, evaluate, evalJson, consoleLines, stderr, url }
+  return {
+    proc,
+    kill,
+    port,
+    send,
+    evaluate,
+    evalJson,
+    consoleLines,
+    stderr,
+    url,
+    /** `null` while the page is alive; `{ crashed, atMs, why }` once it is not.
+     *  A rig reads this to report a dead tab as a dead tab. */
+    get dead() {
+      return dead
+    },
+  }
 }
 
 /** Launch, with one retry: a Chrome that never exposes a debug target is a

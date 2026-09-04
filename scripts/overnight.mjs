@@ -24,7 +24,7 @@
  *
  *   1. B10 x3       the editor stall, on a quiet machine at last (~10 min)
  *   2. oracle x20    cold, the flake distribution G6's rule is read against
- *   3. max60 soak    60 min at 3024x1964@60 — a Phase-1 done-criterion
+ *   3. max60 soak    60 min on the REAL display at max — a Phase-1 done-criterion
  *   4. max60 soak    again: the criterion is TWO
  *   5. oracle:load   the heavy two-phase stop-path gate
  *
@@ -109,14 +109,13 @@ const STEPS = SMOKE
     id: `max60-soak-${i}`,
     what: `60-minute max60 soak ${i} of 2 (Phase-1 done-criterion)`,
     timeoutMs: 100 * 60 * 1000,
-    args: [
-      'scripts/memory-slope.mjs',
-      '--headed',
-      '--minutes=60',
-      '--screen=3024x1964',
-      '--screenfps=60',
-      `--out=${join(RAW, `max60-soak-${i}.json`)}`,
-    ],
+    // THE REAL DISPLAY, NOT A CANVAS (G8, 2026-09-04). These two lanes used to
+    // pass `--screen=3024x1964 --screenfps=60`, and that cell CANNOT run: the
+    // synthetic canvas hands the take BGRA at 5.9 Mpx × 60 and the tab's
+    // renderer crashes 14-28 s after the press, four runs out of four. The same
+    // take off the real display (NV12, straight from the compositor) survives.
+    // The night that produced G8 spent both of these lanes on a dead tab.
+    args: ['scripts/memory-slope.mjs', '--headed', '--minutes=60', '--real', `--out=${join(RAW, `max60-soak-${i}.json`)}`],
     needsDiskGb: SOAK_NEEDS_GB,
   })),
       {
