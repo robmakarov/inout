@@ -1502,3 +1502,39 @@ line.
 GATES: typecheck green, `npm test` 1248/1248 (5 new, pinning the flag's three sources and their
 order). Oracle 14/14 PASS as above. Evidence docs/qa/x11a-worker-tap.json; rigs
 `scripts/x11a-workertap.mjs`, `scripts/x11a-anchor.mjs`.
+
+## M4 — A 60 fps FILE CAN CARRY A 30 fps FILE INSIDE IT (probe, 2026-09-04)
+ANSWERED YES, on every codec this machine can encode at max, and the base layer is not
+approximately right — it is PIXEL-IDENTICAL. `scripts/m4-temporal.mjs`, 3024x1964, 60 frames a cell,
+qp20, evidence docs/qa/m4-temporal-layers.json.
+
+  codec                hw        layers    base alone   layered file   base vs a like-for-like   vs what a
+                                 seen      (worst px)   vs flat        re-encode                 half-rate export makes today
+  avc1.640033          hardware  30 / 30   yes (0/255)  0.94x          1.059x                    0.832x
+  hvc1.1.6.L150.B0     hardware  30 / 30   yes (0/255)  0.952x         1.065x                    0.868x
+  vp09.00.10.08        software  30 / 30   yes (0/255)  0.987x         1.327x                    1.17x
+  av01.0.08M.08        software  30 / 30   yes (0/255)  0.965x         1.645x                    1.681x
+  avc/hevc software, vp9/av1 hardware: no level supported at 3024x1964.
+
+THE SENTENCE FOR M1: on the two codecs the product actually encodes with, a 60 fps take can be
+recorded as two temporal layers for FREE — the layered file is 5-6 % SMALLER than the flat one — and
+its 30 fps half can then be had by dropping packets at a cost of about 6 % over encoding those frames
+properly. So a sub-max export becomes packet selection, and the same property is what a stream would
+shed under pressure. VP9 and AV1 layer too but cost 33 % and 65 %, and both are software here.
+
+GATE 2 IS A FILE AND IT WAS CHECKED FROM OUTSIDE: `--save=` writes the base-only and whole streams as
+Annex-B, and ffprobe reads 30 frames out of ~/Downloads/inout-m4/m4-base-30fps.h264 against 60 out of
+m4-whole-60fps.h264, 1920x1080 h264 both. Nothing in the product wrote or read them.
+
+WHAT THE PROBE COST TO GET RIGHT, because two of the three numbers it first printed were the rig's
+own and both looked plausible: (1) a 30-picture RING under 60 submissions makes every base-layer
+frame appear twice and the base read 0.519x a proper encode — the ring is a SPEED rig's tool and this
+measures bytes, so every frame here is its own picture. (2) counting decoder outputs is not a test of
+whether a base layer stands alone: a decoder handed a stream with missing references CONCEALS the
+hole and emits a picture anyway, so the check is now the PIXELS against the same timestamps decoded
+from the whole stream. (3) the first cost line compared a half-rate arm that declared half the
+framerate, which this encoder charges 1.84x for — see the platform finding below.
+
+TWO PLATFORM FACTS FOUND UNDERNEATH, both filed in BACKLOG and neither of them M4's to fix:
+`bitrateMode: 'quantizer'` silently DROPS frames, and the declared `framerate` moves the bytes for
+identical pictures.

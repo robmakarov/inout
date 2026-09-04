@@ -1,0 +1,617 @@
+{
+  "width": 3024,
+  "height": 1964,
+  "frames": 60,
+  "rows": [
+    {
+      "family": "avc",
+      "hw": "prefer-hardware",
+      "codec": "avc1.640033",
+      "measuredAtFps": 15,
+      "rateTries": 2,
+      "halfSameRate": {
+        "codec": "avc1.640033",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 769388,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 496,
+        "decoderConfig": {
+          "codec": "avc1.640033",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "flat60": {
+        "codec": "avc1.640033",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 1793597,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 60
+        },
+        "layeredForReal": false,
+        "wallMs": 915,
+        "decoderConfig": {
+          "codec": "avc1.640033",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "svc60": {
+        "codec": "avc1.640033",
+        "framerate": 15,
+        "scalabilityMode": "L1T2",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": "L1T2",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 1686601,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 30,
+          "1": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 954,
+        "decoderConfig": {
+          "codec": "avc1.640033",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "flat30": {
+        "codec": "avc1.640033",
+        "framerate": 7.5,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 978826,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 463,
+        "decoderConfig": {
+          "codec": "avc1.640033",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "svc60t3": {
+        "unsupported": true,
+        "config": {
+          "codec": "avc1.640033",
+          "width": 3024,
+          "height": 1964,
+          "framerate": 15,
+          "bitrateMode": "quantizer",
+          "latencyMode": "quality",
+          "hardwareAcceleration": "prefer-hardware",
+          "scalabilityMode": "L1T3"
+        }
+      },
+      "baseAlone": {
+        "baseChunks": 30,
+        "baseBytes": 814642,
+        "decodedFrames": 30,
+        "pairedFrames": 30,
+        "meanPixelDiff": 0,
+        "worstPixelDiff": 0,
+        "standsAlone": true,
+        "error": null
+      },
+      "cellsKeptEveryFrame": true,
+      "cost": {
+        "svcOverFlat": 0.94,
+        "baseShareOfSvc": 0.483,
+        "baseOverTodaysExport": 0.832,
+        "baseOverLikeForLike": 1.059,
+        "bytesPerFrame": {
+          "flat": 29893,
+          "svc": 28110,
+          "base": 27155,
+          "todaysExport": 32628,
+          "likeForLike": 25646
+        }
+      }
+    },
+    {
+      "family": "avc",
+      "hw": "prefer-software",
+      "error": "no level supported at 3024x1964"
+    },
+    {
+      "family": "hevc",
+      "hw": "prefer-hardware",
+      "codec": "hvc1.1.6.L150.B0",
+      "measuredAtFps": 15,
+      "rateTries": 2,
+      "halfSameRate": {
+        "codec": "hvc1.1.6.L150.B0",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 812891,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 494,
+        "decoderConfig": {
+          "codec": "hvc1.1.6.L150.B0",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "flat60": {
+        "codec": "hvc1.1.6.L150.B0",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 1807653,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 60
+        },
+        "layeredForReal": false,
+        "wallMs": 944,
+        "decoderConfig": {
+          "codec": "hvc1.1.6.L150.B0",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "svc60": {
+        "codec": "hvc1.1.6.L150.B0",
+        "framerate": 15,
+        "scalabilityMode": "L1T2",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": "L1T2",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 1720406,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 30,
+          "1": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 945,
+        "decoderConfig": {
+          "codec": "hvc1.1.6.L150.B0",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "flat30": {
+        "codec": "hvc1.1.6.L150.B0",
+        "framerate": 7.5,
+        "scalabilityMode": "none",
+        "hw": "prefer-hardware",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 996768,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 487,
+        "decoderConfig": {
+          "codec": "hvc1.1.6.L150.B0",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": true
+        }
+      },
+      "svc60t3": {
+        "unsupported": true,
+        "config": {
+          "codec": "hvc1.1.6.L150.B0",
+          "width": 3024,
+          "height": 1964,
+          "framerate": 15,
+          "bitrateMode": "quantizer",
+          "latencyMode": "quality",
+          "hardwareAcceleration": "prefer-hardware",
+          "scalabilityMode": "L1T3"
+        }
+      },
+      "baseAlone": {
+        "baseChunks": 30,
+        "baseBytes": 865548,
+        "decodedFrames": 30,
+        "pairedFrames": 30,
+        "meanPixelDiff": 0,
+        "worstPixelDiff": 0,
+        "standsAlone": true,
+        "error": null
+      },
+      "cellsKeptEveryFrame": true,
+      "cost": {
+        "svcOverFlat": 0.952,
+        "baseShareOfSvc": 0.503,
+        "baseOverTodaysExport": 0.868,
+        "baseOverLikeForLike": 1.065,
+        "bytesPerFrame": {
+          "flat": 30128,
+          "svc": 28673,
+          "base": 28852,
+          "todaysExport": 33226,
+          "likeForLike": 27096
+        }
+      }
+    },
+    {
+      "family": "hevc",
+      "hw": "prefer-software",
+      "error": "no level supported at 3024x1964"
+    },
+    {
+      "family": "vp9",
+      "hw": "prefer-hardware",
+      "error": "no level supported at 3024x1964"
+    },
+    {
+      "family": "vp9",
+      "hw": "prefer-software",
+      "codec": "vp09.00.10.08",
+      "measuredAtFps": 30,
+      "rateTries": 1,
+      "halfSameRate": {
+        "codec": "vp09.00.10.08",
+        "framerate": 30,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 1372920,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 381,
+        "decoderConfig": {
+          "codec": "vp09.00.10.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "flat60": {
+        "codec": "vp09.00.10.08",
+        "framerate": 30,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 3133377,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 60
+        },
+        "layeredForReal": false,
+        "wallMs": 810,
+        "decoderConfig": {
+          "codec": "vp09.00.10.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "svc60": {
+        "codec": "vp09.00.10.08",
+        "framerate": 30,
+        "scalabilityMode": "L1T2",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": "L1T2",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 3091401,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 30,
+          "1": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 681,
+        "decoderConfig": {
+          "codec": "vp09.00.10.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "flat30": {
+        "codec": "vp09.00.10.08",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 1556199,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 412,
+        "decoderConfig": {
+          "codec": "vp09.00.10.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "svc60t3": {
+        "codec": "vp09.00.10.08",
+        "framerate": 30,
+        "scalabilityMode": "L1T3",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": "L1T3",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 3041923,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 15,
+          "1": 15,
+          "2": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 597,
+        "decoderConfig": {
+          "codec": "vp09.00.10.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "baseAlone": {
+        "baseChunks": 30,
+        "baseBytes": 1821519,
+        "decodedFrames": 30,
+        "pairedFrames": 30,
+        "meanPixelDiff": 0,
+        "worstPixelDiff": 0,
+        "standsAlone": true,
+        "error": null
+      },
+      "cellsKeptEveryFrame": true,
+      "cost": {
+        "svcOverFlat": 0.987,
+        "baseShareOfSvc": 0.589,
+        "baseOverTodaysExport": 1.17,
+        "baseOverLikeForLike": 1.327,
+        "bytesPerFrame": {
+          "flat": 52223,
+          "svc": 51523,
+          "base": 60717,
+          "todaysExport": 51873,
+          "likeForLike": 45764
+        }
+      }
+    },
+    {
+      "family": "av1",
+      "hw": "prefer-hardware",
+      "error": "no level supported at 3024x1964"
+    },
+    {
+      "family": "av1",
+      "hw": "prefer-software",
+      "codec": "av01.0.08M.08",
+      "measuredAtFps": 30,
+      "rateTries": 1,
+      "halfSameRate": {
+        "codec": "av01.0.08M.08",
+        "framerate": 30,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 968796,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 920,
+        "decoderConfig": {
+          "codec": "av01.0.08M.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "flat60": {
+        "codec": "av01.0.08M.08",
+        "framerate": 30,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 2741212,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 60
+        },
+        "layeredForReal": false,
+        "wallMs": 1731,
+        "decoderConfig": {
+          "codec": "av01.0.08M.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "svc60": {
+        "codec": "av01.0.08M.08",
+        "framerate": 30,
+        "scalabilityMode": "L1T2",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": "L1T2",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 2645076,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 30,
+          "1": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 1790,
+        "decoderConfig": {
+          "codec": "av01.0.08M.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "flat30": {
+        "codec": "av01.0.08M.08",
+        "framerate": 15,
+        "scalabilityMode": "none",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": null,
+        "submitted": 30,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 30,
+        "bytes": 948206,
+        "keyFrames": 1,
+        "layerCounts": {
+          "null": 30
+        },
+        "layeredForReal": false,
+        "wallMs": 854,
+        "decoderConfig": {
+          "codec": "av01.0.08M.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "svc60t3": {
+        "codec": "av01.0.08M.08",
+        "framerate": 30,
+        "scalabilityMode": "L1T3",
+        "hw": "prefer-software",
+        "echoedScalabilityMode": "L1T3",
+        "submitted": 60,
+        "submitError": null,
+        "keptEveryFrame": true,
+        "frames": 60,
+        "bytes": 1687165,
+        "keyFrames": 1,
+        "layerCounts": {
+          "0": 15,
+          "1": 15,
+          "2": 30
+        },
+        "layeredForReal": true,
+        "wallMs": 1568,
+        "decoderConfig": {
+          "codec": "av01.0.08M.08",
+          "codedWidth": 3024,
+          "codedHeight": 1964,
+          "description": false
+        }
+      },
+      "baseAlone": {
+        "baseChunks": 30,
+        "baseBytes": 1593770,
+        "decodedFrames": 30,
+        "pairedFrames": 30,
+        "meanPixelDiff": 0,
+        "worstPixelDiff": 0,
+        "standsAlone": true,
+        "error": null
+      },
+      "cellsKeptEveryFrame": true,
+      "cost": {
+        "svcOverFlat": 0.965,
+        "baseShareOfSvc": 0.603,
+        "baseOverTodaysExport": 1.681,
+        "baseOverLikeForLike": 1.645,
+        "bytesPerFrame": {
+          "flat": 45687,
+          "svc": 44085,
+          "base": 53126,
+          "todaysExport": 31607,
+          "likeForLike": 32293
+        }
+      }
+    }
+  ]
+}
