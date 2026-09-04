@@ -16,12 +16,13 @@
  * nothing. Drawing is FRAME-DRIVEN: a static screen costs one keep-alive frame
  * per second instead of thirty identical ones.
  *
- * Two deliberate non-goals, both recorded so they are decisions and not gaps:
- *   · The compositor is 2D, not WebGPU. WebGPU's importExternalTexture would
- *     save a copy per frame, but the cost this task set out to remove was the
- *     main thread and the redundant decodes, and both are gone without it.
- *     Adding a third rendering backend before that claim is measured would be
- *     building on an unproven premise.
+ * THE PAINTER IS CHOSEN AT RUNTIME (O4, 2026-09-04): WebGPU, then WebGL2, then
+ * 2D, each a complete fallback for the one above it — `painterChoice.ts` holds
+ * the switch and the reasoning. The premise this file's header used to call
+ * unproven is now measured (a transferred capture frame is NOT read back;
+ * .ai/DECISIONS), and what WebGPU removes is the upload, 40-50 % of the paint.
+ *
+ * One deliberate non-goal, recorded so it is a decision and not a gap:
  *   · The audio is MIXED ON THE MAIN THREAD and arrives here as PCM. The mix
  *     graph (gain staging + the limiter that only engages on genuine pileups)
  *     is tuned and shipped; re-implementing it here would risk audible change
@@ -44,6 +45,7 @@ import type { PressureSignals } from '../pressure'
 import { burstFramesFor } from './burstBudget'
 import { LATE_TICK_MS, PressureSampler, type PressureCounters } from './pressureSampler'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
+import { createWGPUCompositor, wgpuDevice, type WGPUCompositor } from './compositorWGPU'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
 const ROOT_DIR = 'blobs'
@@ -157,6 +159,14 @@ export interface CompositorStartMsg {
    * `?burst=0` and passes the answer in; a worker cannot see the page's URL.
    */
   burst?: boolean
+  /**
+   * O4 — which painter to build. Same shape as `burst` above and for the same
+   * reason: a worker cannot see the page's URL, so the main thread reads the
+   * flag and passes the answer in. Absent means WebGPU, and any choice this
+   * machine cannot honour falls through to the next backend rather than
+   * failing the take.
+   */
+  painter?: 'webgpu' | 'webgl2' | '2d'
 }
 
 export interface CompositorFrameMsg {
@@ -263,8 +273,8 @@ export interface CompositorStats {
   /** What the encoder actually negotiated — evidence, not decoration. */
   codec: string | null
   hardware: string | null
-  /** Which compositor backend ran — 'webgl2' or the slow '2d' fallback. */
-  backend: 'webgl2' | '2d' | null
+  /** Which compositor backend ran — 'webgpu', 'webgl2', or the slow '2d'. */
+  backend: 'webgpu' | 'webgl2' | '2d' | null
   /**
    * THE SHAPE THIS FILE ACTUALLY IS (F13). The caller's start message is a
    * guess; with `followSource` the first arriving frame corrects it, and
@@ -387,7 +397,15 @@ export interface CompositorStats {
 }
 
 export type CompositorReply =
-  | { ok: true; cmd: 'start' }
+  | {
+      ok: true
+      cmd: 'start'
+      /** Which painter was actually built. A worker's console is invisible to
+       *  the page, so without this NOTHING outside the worker could say whether
+       *  a take asked for WebGPU and silently got WebGL2 — and a rig that
+       *  cannot tell is a rig measuring the wrong backend (O4, 2026-09-04). */
+      backend: 'webgpu' | 'webgl2' | '2d'
+    }
   /** Deliberately NOT sent on receipt: the reply waits for the first frame to
    *  actually reach the preview canvas, so the caller can swap away from its
    *  own preview without a blank flash in between. */
@@ -511,8 +529,42 @@ let camPose: CameraPose | null = null
 let previewCtx: OffscreenCanvasRenderingContext2D | null = null
 /** True until the first blit lands — the 'preview' reply is held until then. */
 let previewAwaitingFirstPaint = false
-/** WebGL2 backend; null means the 2D fallback is in use. */
-let gl: GLCompositor | null = null
+/**
+ * The painter. A WebGPU one also has `end()`, which the GL one does not need —
+ * GL's commands are implicit, WebGPU's have to be submitted before the canvas
+ * can be read — so the worker calls it optionally and neither backend grows a
+ * method it has no use for.
+ */
+type Painter = (GLCompositor | WGPUCompositor) & { end?: () => void }
+/** The chosen painter; null means the 2D fallback is in use. */
+let gl: Painter | null = null
+/**
+ * The WebGPU device, acquired once in `start()`. Held because `adoptShape`
+ * (F13) rebuilds the painter SYNCHRONOUSLY when the arrived frames disagree
+ * with the guess, and an async device request there would either block a frame
+ * or leave the take with no painter at all.
+ */
+let gpuDevice: Awaited<ReturnType<typeof wgpuDevice>> = null
+let painterWanted: 'webgpu' | 'webgl2' | '2d' = 'webgpu'
+
+/**
+ * Build the best painter this machine will give, at or below what was asked
+ * for. Never throws and never returns a half-built one: a caller that gets null
+ * takes the 2D path, which is slow but complete.
+ */
+function makePainter(w: number, h: number): { painter: Painter | null; backend: 'webgpu' | 'webgl2' | '2d' } {
+  if (painterWanted === 'webgpu' && gpuDevice) {
+    const p = createWGPUCompositor(gpuDevice, w, h)
+    if (p) return { painter: p, backend: 'webgpu' }
+    console.warn('[capture] compositor: WebGPU asked for but unavailable — WebGL2')
+  }
+  if (painterWanted !== '2d') {
+    const p = createGLCompositor(w, h)
+    if (p) return { painter: p, backend: 'webgl2' }
+    console.warn('[capture] compositor: WebGL2 unavailable, falling back to 2D (slow)')
+  }
+  return { painter: null, backend: '2d' }
+}
 let output: Output | null = null
 let videoSource: EncodedVideoPacketSource | null = null
 let audioSource: EncodedAudioPacketSource | null = null
@@ -897,15 +949,17 @@ function adoptShape(frame: VideoFrame): void {
   H = want.height
   if (gl) {
     gl.dispose()
-    gl = createGLCompositor(W, H)
+    gl = null
   }
+  const rebuilt = makePainter(W, H)
+  gl = rebuilt.painter
+  stats.backend = rebuilt.backend
   if (gl) {
     canvas = gl.canvas
     ctx = null
   } else {
     canvas = new OffscreenCanvas(W, H)
     ctx = canvas.getContext('2d', { alpha: false })
-    stats.backend = '2d'
   }
   // The preview is blitted 1:1 into whatever the main thread handed over, so it
   // has to turn with the composite or the picture is stretched on screen.
@@ -981,6 +1035,10 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
 
   const tPaint = performance.now()
   paint()
+  // WebGPU records into a command buffer; nothing is on the canvas until the
+  // pass is ended and submitted, and the VideoFrame below reads that canvas.
+  // A no-op on WebGL2, whose commands are implicit.
+  gl?.end?.()
   if (PROBE_GPU) gl?.finish()
   const tFrame = performance.now()
   if (PROBE_GPU) stats.gpuMs += tFrame - tPaint
@@ -1033,17 +1091,30 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   ).createSyncAccessHandle()
   handle.truncate?.(0)
 
-  // WebGL2 first: a capture VideoFrame is already in GPU memory, and drawing
-  // it through a 2D context reads it back every frame (measured at ~150 ms per
-  // 1080p frame, i.e. 6.7 fps — see compositorGL.ts).
-  gl = createGLCompositor(W, H)
+  // THE PAINTER (O4). WebGPU binds the capture frame's planes where they are;
+  // WebGL2 uploads them into an RGBA texture first; 2D drags them back across
+  // the bus every frame (~150 ms per 1080p frame, i.e. 6.7 fps — compositorGL.ts).
+  // The device is requested BEFORE the first frame can arrive, so no take is
+  // ever painted by a backend that was still being negotiated.
+  painterWanted = msg.painter ?? 'webgpu'
+  if (painterWanted === 'webgpu') gpuDevice = await wgpuDevice()
+  const built = makePainter(W, H)
+  gl = built.painter
+  stats.backend = built.backend
+  // SAID OUT LOUD, because a backend that falls back silently is a rig
+  // measuring the wrong thing: an oracle run asked for WebGPU and given WebGL2
+  // would pass and prove nothing. Also the black box's answer to "which painter
+  // painted this take".
+  console.info(
+    `[capture] compositor: painter ${built.backend}` +
+      (painterWanted !== built.backend ? ` (asked for ${painterWanted})` : ''),
+  )
   if (gl) {
     canvas = gl.canvas
   } else {
-    console.warn('[capture] compositor: WebGL2 unavailable, falling back to 2D (slow)')
     canvas = new OffscreenCanvas(W, H)
     ctx = canvas.getContext('2d', { alpha: false })
-    if (!ctx) throw new Error('compositor: no WebGL2 and no OffscreenCanvas 2d')
+    if (!ctx) throw new Error('compositor: no GPU painter and no OffscreenCanvas 2d')
   }
 
   // …and the preview, if one was handed over before the composite existed.
@@ -1053,7 +1124,6 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   stats.codec = config.codec
   stats.hardware = hardware
   stats.configJson = JSON.stringify(config)
-  stats.backend = gl ? 'webgl2' : '2d'
 
   /**
    * Every chunk is written AND FLUSHED where the muxer says it goes, so a tab
@@ -1343,7 +1413,7 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
     switch (msg.cmd) {
       case 'start':
         await start(msg)
-        post({ ok: true, cmd: 'start' })
+        post({ ok: true, cmd: 'start', backend: stats.backend ?? '2d' })
         break
       case 'frame': {
         noteOrigin(msg.atMs)

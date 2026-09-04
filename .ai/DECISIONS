@@ -1127,3 +1127,45 @@ GATES: 1,182 unit tests + typecheck green · the rig carries its own lever (heav
 evidence docs/qa/o4-gpu-residency.json · NOTHING IN THE PRODUCT CHANGED except compositorGL's
 measurement-only fence.
 OPEN AND ROBERT'S: whether the backend is still worth building at 0.27-1.1 ms/frame.
+
+session 2026-09-04 (2) — "BUILD IT NOW ANYWAY": THE WEBGPU PAINTER IS BUILT, IT IS 90 % CHEAPER, AND IT
+IS OFF UNTIL ROBERT LOOKS AT ONE COLOUR.
+Asked, with step 1's number on the table (importExternalTexture reclaims 0.27-1.1 ms/frame), whether to
+build the backend or stop. HIS ANSWER: build it now anyway. Built.
+WHAT SHIPPED: `capture/compositorWGPU.ts` (importExternalTexture, a line-by-line WGSL port of
+compositorGL's shaders) chosen by `capture/painterChoice.ts` — `?painter=webgpu|webgl2|2d`, a /?test
+row, webgpu → webgl2 → 2d with every one of the three a complete painter, so no machine loses a path
+and the engine never refuses a record press. The worker also now REPORTS which painter it built, on the
+page's console and in the start reply: a worker's console is invisible to every rig, so before this
+nothing outside the worker could tell a WebGPU take from a silent fallback, and an oracle run that
+asked for WebGPU and got WebGL2 would have passed and proved nothing.
+IT IS WORTH MORE THAN STEP 1 PROJECTED, and the reason is structural: the composition draws TWICE (the
+screen, then the camera PiP) and WebGL2 uploads the frame once PER DRAW while WebGPU uploads it never.
+Same composition, 3024x1964 NV12 into a 1080p composite, real fence, batch of 8: 0.416 ms on WebGPU
+against 4.059 ms on WebGL2 — 3.64 ms a frame, 90 %, 22 % of a 60 fps budget.
+IT IS OFF BECAUSE IT IS NOT THE SAME PICTURE, and that is measured, not feared. The gate was "both
+painters required identical". On a SYNTHETIC source they are — maxAbs 1 of 255, PSNR 110 dB, so every
+shape, corner radius, border stroke, feathered edge and blend agrees and the shaders are not in
+question. On a REAL NV12 screen frame they are not: 13,485 pixels of 2,073,600 differ by more than one
+step, 6,552 by more than four, worst 37, PSNR 55.9 dB; at 1:1 with no minification 1,514 of 5,939,136,
+worst 35. THE DIFFERENCE IS SYSTEMATIC AND IT IS COLOUR — across the twelve worst pixels the green
+channel is identical EVERY TIME, red is 3-11 higher on WebGPU, blue 29-37 lower, luma within 2.02 of
+255. WebGPU renders warm saturated content more saturated. That is `texImage2D` and
+`importExternalTexture` disagreeing about NV12→RGB, not the drawing. Robert's hard rule is that a
+colour a user can see moves only on his yes, and the "a defect fix ships on" clause does not cover it
+because this is a new engine and not a defect fix. A/B pair in ~/Downloads/inout-o4.
+NO REGRESSION: o4step2 v2 1080p 8 s — paint 1.10 ms (webgl2) vs 1.25 (webgpu), 190 vs 197 frames
+encoded, 0 dropped either way; three real takes per painter through fps-check where the composite and
+the RAW channel move together and the raw channel never touches the painter, so the single collapsed
+run was the machine and did not reproduce. NOTE FOR ANY LATER SESSION: `paintMs` is NOT comparable
+across backends — WebGPU's includes the submit and WebGL2's includes no GPU work at all.
+TWO BUGS, BOTH SILENT, BOTH A BLACK COMPOSITE, NEITHER THREW: a WGSL reserved word (`in` as a parameter
+name) and a uniform bound fragment-visible while the vertex stage reads it. WebGPU delivers a bad
+shader as "[Invalid RenderPipeline] is invalid due to a previous error" at DRAW time and nowhere else,
+so the file now asks for shader compilation info unconditionally and wraps setup in a validation error
+scope. Expect the same silence from any future shader here.
+GATES: 1,182 tests + typecheck green (the door test allowlists the canvas `configure` — a pixel format,
+not a dial) · oracle v2 PASS on BOTH painters · oracle v1 PASS · oracle:long PASS (120 s cell: sync 48.0/71.3 ms, spur -51.5 dB, tail 75 ms, export 5.4x) · first
+paint +41 B (299,769 vs main's 299,728) · instant and smart-cut untouched.
+AWAITING ROBERT: his eye on ~/Downloads/inout-o4, and with it the default. One word in
+`painterChoice()`.

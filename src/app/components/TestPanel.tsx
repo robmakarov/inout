@@ -10,6 +10,7 @@ import {
   type CaptureQualityMode,
 } from '@core/capture/captureQuality'
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
+import { painterChoice, setPainterChoice, type PainterChoice } from '@core/capture/painterChoice'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
@@ -152,6 +153,16 @@ export function TestPanel() {
         on={chunkedRenderEnabled()}
         set={(v) => {
           setChunkedRenderEnabled(v)
+          redraw()
+        }}
+      />
+      <Choice
+        label="Compositor painter"
+        hint="webgl2 is what every take has used. webgpu never uploads the frame, so the composite costs 0.42 ms a frame instead of 4.06 — but warm saturated colour comes out MORE saturated (A/B in ~/Downloads/inout-o4). 2d is the slow floor."
+        value={painterChoice()}
+        options={['webgpu', 'webgl2', '2d'] as PainterChoice[]}
+        set={(v) => {
+          setPainterChoice(v)
           redraw()
         }}
       />

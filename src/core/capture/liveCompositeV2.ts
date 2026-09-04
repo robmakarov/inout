@@ -46,6 +46,7 @@ import {
 import { backgroundPaceEnabled, currentPace, noteTakePressure } from '../backgroundWork'
 import { passDoor } from '../door'
 import { burstAbsorberEnabled } from './burstBudget'
+import { painterChoice } from './painterChoice'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -790,6 +791,10 @@ export async function startLiveCompositeV2(
     // "drop the seventh frame" behaviour, and the A/B control its gate is read
     // against. Read here because a worker cannot see the page's URL.
     burst: burstAbsorberEnabled(),
+    // O4's painter, read here for the same reason as `burst`: a worker cannot
+    // see the page's URL. A machine without WebGPU falls through inside the
+    // worker rather than being decided against here.
+    painter: painterChoice(),
     longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,
@@ -802,6 +807,17 @@ export async function startLiveCompositeV2(
     throw new Error('error' in startReply ? startReply.error : 'compositor start failed')
   }
   workerReady = true
+  // ON THE PAGE'S CONSOLE, because the worker's own is invisible to every rig
+  // and to the black box. It says what was ASKED for too when the two differ,
+  // so a machine that fell back says so instead of quietly reading as a
+  // successful WebGPU take (O4).
+  {
+    const asked = painterChoice()
+    const got = 'backend' in startReply ? startReply.backend : 'unknown'
+    console.info(
+      `[capture] composite painter: ${got}${got === asked ? '' : ` (asked for ${asked})`}`,
+    )
+  }
   for (const batch of queuedAudio) sendAudio(batch)
   queuedAudio.length = 0
 

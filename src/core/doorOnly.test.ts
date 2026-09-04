@@ -111,6 +111,10 @@ describe('the door is the only way in', () => {
       n: 3,
       why: 'the composite opens its video and audio encoders, and reconfigures the video one on a geometry change.',
     },
+    'src/core/capture/compositorWGPU.ts': {
+      n: 1,
+      why: 'O4 — NOT AN ENCODER. This is GPUCanvasContext.configure, which tells WebGPU the pixel format of the canvas the painter draws into. It moves no rate, no resolution, no quality and no channel, so there is nothing for the door to hold; it is listed because the scan is textual and a silent exception would be the hole the door exists to close.',
+    },
     'src/core/capture/measuredAudio.ts': {
       n: 1,
       why: 'A1 — the audio channel opens its opus encoder. AUDIO IS NEVER SACRIFICED, so nothing reconfigures it.',

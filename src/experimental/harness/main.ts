@@ -167,6 +167,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'painterparity',
+    title: 'O4 — the WebGPU painter against the WebGL2 one, pixel by pixel',
+    detail:
+      'composes the capture composition (letterboxed screen + the camera PiP with its rounded corners and stroke) through BOTH shipped painters on the SAME frames, and reports the difference histogram plus the PiP corner box on its own. Wants a REAL display frame, because importExternalTexture binds NV12 planes and a canvas source would test the one path where the two cannot disagree.',
+    run: async (args) => {
+      const { runPainterParity } = await import('../perf/painterParity')
+      return runPainterParity({
+        frames: typeof args?.frames === 'number' ? args.frames : undefined,
+        lane: args?.lane === 'canvas' ? 'canvas' : 'display',
+        matchSource: args?.matchSource === true,
+      })
+    },
+  },
+  {
     id: 'o4step1',
     title: 'O4 step 1 — decompose the residual A/V offset',
     detail:

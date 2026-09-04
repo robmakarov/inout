@@ -340,38 +340,50 @@ GATES: green-channel colour kept ≥ 94 % on the chroma rig at (a), ≥ 99 % at 
 Instrument a take on Robert's ACTUAL work screen: per second, what fraction of the frame changed, at 8/16/32/64 px tiles, split by content (text editing, scrolling, video, cursor-only). Report the distribution, not an average, plus the bytes a lossless tile codec would have cost against what the encoder actually wrote. No engine change ships from this task. Binds robert (8): EVERY MOVEMENT IS KEPT — the census counts what changed, it never introduces a threshold below which change is discarded.
 GATES: the census runs on a real take without changing the recording (pinned: byte-identical output) · numbers for all four tile sizes and all four content classes · the cursor-only and text-field-only cases counted separately (they are exactly what AI1's picker dropped) · a one-paragraph verdict per idea 1 / 15 / 16: worth building, or not, with the number that decides it · headed, never the hidden pane.
 ### O10a loudness attenuation [BUILT, INERT — WAITING ON ROBERT'S RULING] — R128/BS.1770 −14 LUFS is implemented behind `?loudness=r128` and is a NO-OP until Robert allows attenuation. Exports sit 1-9 dB above −14 LUFS; turning it on means bright takes LOSE ~9 dB, which is a behaviour a user hears, so it is his call and nobody else's. GATES when allowed: −14 ±0.5 LUFS on the synthetic set · loudness spread across content (7.84 dB today) quoted after · fidelity green · A/B for his ear.
-### O4 the WebGPU backend [heavy · PHASE 1 since 2026-09-02 on Robert's word, DECISIONS robert (20)]
-STEP 1 IS DONE AND IT SHRANK THE PRIZE — 2026-09-04, `node scripts/gpu-residency.mjs`, evidence
-docs/qa/o4-gpu-residency.json, verdict in DECISIONS. THE TRANSFERRED CAPTURE FRAME IS NOT READ BACK.
-Production's exact shape (real getDisplayMedia → MediaStreamTrackProcessor on the main thread → the
-VideoFrame TRANSFERRED to a worker → texImage2D into WebGL2) uploads 3024x1964 NV12 in 0.72-0.80 ms
-against 3.23-3.41 ms for the SAME 8.9 MB of NV12 out of a JS ArrayBuffer = 0.22-0.23x (five runs); at
-the shipped 1080p rung, 0.27-0.49 ms against 1.29-1.35 ms = 0.20-0.38x. A readback + upload cannot be
-cheaper than the upload alone, so
-there is no readback. On Apple Silicon it is an IOSurface: GPU-texturable AND CPU-mappable at once, so
-the binary this task posed does not exist here.
-THE 35.6 ms IS DEAD AND EVERY GATE BELOW IS RE-WRITTEN AGAINST THE MEASURED NUMBER. Paint (upload +
-full-size draw, amortised, GPU-synced) costs 0.29-0.31 ms/Mpx on the real screen path, so 4K projects
-to 2.4-2.6 ms/frame — 7-8 % of a 33 ms budget at 30 fps, 15 % at 60. The 35.6 came from o4step2's
-uncapped 4K CANVAS captureStream, which measures BGRA 33.2 MB/frame at 2.03 ms/Mpx = 16.8-17.1 ms per
-4K frame, 6.6x the real screen path per pixel (note 10, fifth time).
-WHAT IS ACTUALLY LEFT TO WIN: `importExternalTexture` removes the upload, and the upload is 40-50 % of
-the paint — 0.27 ms at the 1080p rung, 0.73 ms at 3024x1964, ~1.1 ms projected at 4K, per frame. That
-is 1.6-6.6 % of a 60 fps budget and under 1 % of the export loop (draw is already 1.95 % there). O9(a)'s
-supersampling still gets cheaper on a backend that never copies, and F12's zoom super-resolution still
-wants a WebGPU model later; those two are the remaining reasons, not the 4K budget.
-THE 2026-08-24 PARADOX IS NOT A READBACK and is still unexplained — the encoder manages 169 fps in the
-compositor worker yet 101 frames find six already outstanding. The upload is now ruled out as its
-cause; the encoder remains the measured wall. Do not re-propose the upload as the answer.
-ROBERT'S CALL, and nothing here starts without it: build the backend for 0.27-1.1 ms/frame, or stop at
-step 1. His ruling (robert (20)) was that a 2 % lever is still a lever, made when the alternative was
-"worth the whole compositor throughput gap"; that alternative is now measured away.
-GATES (if it is built): pixel parity with compositorGL within the chroma rig's bands, both painters
-required identical (conflict rules: compose/layout.ts, capture/compositor.worker.ts and
-capture/liveComposite.ts must agree, cameraTrack.ts owns the PiP) · 4K composite frame cost quoted
-against the MEASURED 2.4-2.6 ms/frame, not against 35.6 · capability-gated with WebGL2 as the runtime
-fallback and 2D under it, so no machine loses a path · export wall clock not moved up · `npm run
-oracle` v2+v1 green · oracle:long quoted · first paint unmoved (the compositor worker is its own chunk).
+### O4 the WebGPU backend [BUILT 2026-09-04, OFF BY DEFAULT — waiting on Robert's eye for one colour]
+STEP 1 ANSWERED FIRST AND IT SHRANK THE PRIZE (`node scripts/gpu-residency.mjs`, evidence
+docs/qa/o4-gpu-residency.json, verdict in DECISIONS): the transferred capture frame is NOT read back —
+3024x1964 NV12 uploads in 0.72-0.80 ms against 3.23-3.41 ms for the SAME bytes from a JS ArrayBuffer =
+0.22-0.23x, and 0.20-0.38x at the shipped 1080p rung. A readback + upload cannot be cheaper than the
+upload alone. The 35.6 ms this task was written against is DEAD: the real screen path paints at
+0.29-0.31 ms/Mpx (4K projects to 2.4-2.6 ms/frame) and the 35.6 came from o4step2's uncapped 4K CANVAS
+captureStream, which measures 2.03 ms/Mpx — 6.6x the real screen path per pixel.
+Robert then ruled BUILD IT ANYWAY (2026-09-04), and it is built: `capture/compositorWGPU.ts`, chosen by
+`capture/painterChoice.ts` (`?painter=webgpu|webgl2|2d`, /?test row), webgpu → webgl2 → 2d with each a
+complete painter, so no machine loses a path.
+WHAT IT WON, and it is BIGGER than step 1 projected because the composition draws TWICE (screen, then
+the camera PiP) and WebGL2 uploads once PER DRAW while WebGPU uploads never: the same composition —
+3024x1964 NV12 into a 1080p composite, real fence, batch of 8 — costs 0.416 ms on WebGPU against 4.059
+ms on WebGL2. 3.64 ms a frame, 90 %, i.e. 22 % of a 60 fps budget.
+WHY IT IS NOT THE DEFAULT, and it is a measurement rather than caution (`scripts/painter-parity.mjs`,
+docs/qa/o4-painter-parity.json). The gate said "both painters required identical". ON A SYNTHETIC
+SOURCE THEY ARE: maxAbs 1 of 255, PSNR 110 dB — every shape, corner radius, border stroke, feathered
+edge and blend agrees, so the shaders and the geometry are not in question. ON A REAL NV12 SCREEN FRAME
+THEY ARE NOT: 13,485 pixels of 2,073,600 differ by more than one step, 6,552 by more than four, worst
+37, PSNR 55.9 dB (at 1:1 with no minification: 1,514 of 5,939,136, worst 35, PSNR 69.4 dB). The
+difference is systematic and it is COLOUR — across the twelve worst pixels the green channel is
+identical every time, red is 3-11 higher on WebGPU, blue 29-37 lower, luma within 2.02 of 255. WebGPU
+renders warm saturated content MORE saturated. That is the NV12→RGB conversion differing between
+`texImage2D` and `importExternalTexture`, not the drawing. A colour a user can see moves only on
+Robert's yes: A/B pair in ~/Downloads/inout-o4 (gpuFull/glFull, and a 4x nearest crop of the worst
+region). HIS CALL IS THE ONLY THING BETWEEN THIS AND THE DEFAULT.
+NO THROUGHPUT REGRESSION: o4step2 v2 1080p 8 s — paint 1.10 ms (webgl2) vs 1.25 (webgpu), 190 vs 197
+frames encoded, 0 dropped either way. Three real takes per painter through fps-check: the composite and
+the RAW channel move together, and the raw channel never touches the painter, so the one collapsed run
+was the machine and did not reproduce. `paintMs` IS NOT COMPARABLE ACROSS BACKENDS — WebGPU's includes
+the submit, WebGL2's includes no GPU work at all.
+TWO BUGS FOUND IN THE BUILDING, both of which produced a SILENTLY BLACK composite and neither of which
+threw: a WGSL reserved word (`in` as a parameter name), and a uniform bound fragment-visible while the
+vertex stage reads it. WebGPU reports both asynchronously or not at all, so the file now asks for
+shader compilation info unconditionally and wraps setup in a validation error scope. Any session
+touching a shader here should expect the same silence.
+GATES MET: 1,182 unit tests + typecheck green (the door test allowlists the canvas `configure`, which
+is a pixel format and not a dial) · oracle v2 PASS on BOTH painters · oracle v1 PASS · oracle:long PASS
+(120 s cell, 189.4 s: sync 48.0/71.3 ms, spur -51.5 dB, tail 75 ms, instant 51.8, smartcut 51.2, export
+5.4x) · first paint +41 B (299,769 against main's 299,728; the 218,793 this file used to quote
+was years stale) · instant and smart-cut paths untouched · export wall clock unmoved.
+STILL OPEN: Robert's eye on the A/B, and with it the default. If he says the WebGPU colour is right or
+does not care, `painterChoice()` flips one word.
 ### O10b multitrack export [light-medium · PHASE 1 since 2026-09-02] — mic + system audio as SEPARATE tracks in the container, default flattened exactly as today. GATES: default export byte-identical (pinned) · tracks separate and independently selectable in a player that supports it · every export path states which it took · fidelity green.
 ### O10c deterministic spectral gating [medium · opt-in · PHASE 1 since 2026-09-02] — opt-in, deterministic DSP (no model), raw untouched, default OFF. Feeds B13(3) if the "small noises" turn out to be in the source rather than in our chain. GATES: OFF byte-identical (pinned) · ZERO gating triggers on clean speech, on a breathy-speech fixture too · measured SNR gain on a known-noise rig · fidelity bands green · A/B files for Robert's ear before any default moves.
 ### O10d cross-channel AEC [medium · BLOCKED ON P4 — this is a dependency, not a preference]
@@ -407,7 +419,7 @@ GATES: X14a's yes/no table first · the 46.4 ms lead reproduced on a fresh take 
 - ENCODERS (one hw AVC idle): 1920x1080 175 fps (362 Mpx/s) · 2560x1662 96 (410) · 3024x1964 70 (416) · 3840x2160 52 (435); 3024x1964@60 needs 356 Mpx/s = ONE encoder, not two; `latencyMode:'quality'` ~13 % faster; HEVC 8 % smaller; render is decode-bound AT 12 s 1080p (decode-wait 1295 · draw 450 · encode-wait 28 ms; 962 ms decode alone) and ENCODER-bound at native resolution (60 s 3024x1964@60 → 1920x1246@60, cached fixture: 3600 frames, decode 5130 · draw 535 · encode-wait 21,705 ms = 130 fps at qp20; 182 fps with `cq=off`, whose whole difference is output bytes 48.6 vs 33 MB; 540p out on the same source 208 fps, so decode alone is ~207 fps). Encoder alone at 1920x1080 in a worker: bitrate 213 fps · qp20 quantizer 187 · prefer-software 98 (`scripts/encode-cost.mjs`). Framed+zoomed edit costs 0.036 ms/frame. Audio (2 opus channels) 447 ms per 60 s of output = 1.5 %; worker render 6.00× vs main 5.93× at 60 s; smart cut 4.3-5.6× the render, 90-94 % copied; transcode is 1.3-1.4× the render (no lane built); AVC at 0.52× VP9 bytes at 47.8 dB.
 - TEXT/COLOUR: AVC 4:4:4 and VP9 profile 1 unsupported in hardware; AV1 4:4:4 software only (80 fps at 1080p, 245 % CPU peak); codec table per frame (bytes · fringe · smear · contrast): avc 9,856 · 9.45 · 2.85 · 1.00; AV1 4:4:4 9,155 · 4.63 · 3.44 · 0.99; 3× bitrate on 4:2:0 → 9.08. Chain: capture fringe 8.87, export 3.02, total 10.81, contrast 1.00. Colour kept (grey/green/blue): raw screen 79.7/80.0/89.3 %, composite 71.6/70.3/75.2 (CHROMA_BASELINE ±2), render 78.4/67.3/78.3; source arrives NV12 (Chrome's ≈20 %, ours ≈10 %). Aligned supersampling: 1× 80.0 · 1.5× 90.1 · 2× 94.7 · 4:4:4 99.3 %.
 - AUDIO: fidelity bands THD ≤ −60 dB class (measured −77.4), IMD −57.6, separation 53.4 dB, limiter hits 0, level residual ±1 dB past the 1/N bus; spur band −40 dB (moves 25 dB with load → G6c); loudness spread across content 7.84 dB, exports 1-9 dB above −14 LUFS; PAD/hold: WallClockHold symmetric; B2 loaded: ~92 ms real gaps, 184 ms audible of 667 ms padding.
-- MEMORY/PAINT: RSS slope +0.03 / −0.73 MB/min over 60/90 min (read halves, RSS oscillates ±90 MB); heap +0.05; first paint 218,793 B (gate ≤ 300 KB); export peak memory 39.2 MB at 30 min (muxer holds 4 MB); timeline 60 fps flat across 8-120 s takes.
+- MEMORY/PAINT: RSS slope +0.03 / −0.73 MB/min over 60/90 min (read halves, RSS oscillates ±90 MB); heap +0.05; first paint 299,769 B (gate ≤ 300 KB — 7.4 KB of headroom left, measured 2026-09-04; the 218,793 this line used to say was long stale); export peak memory 39.2 MB at 30 min (muxer holds 4 MB); timeline 60 fps flat across 8-120 s takes.
 - FLEET: tests ~1009; oracle one run ≈ 20 s, long cell 182-189 s, oracle:load HEAVY; Robert records 938-3,026 s.
 
 ## WHAT A FRESH SESSION MUST KNOW (the notes, compressed; numbering kept)
@@ -415,7 +427,7 @@ GATES: X14a's yes/no table first · the 46.4 ms lead reproduced on a fresh take 
 
 ## TOOLING (each spawns an ephemeral server + throwaway Chrome unless noted)
 `npm run exp -- <id> [json] [--cpu] [--headed] [--query=k=v]`: o5 (export stages + decode floor + X4 decode-site line) · o5cut (smart cut vs render) · o1 (memory/parity/orphans) · o2 (capture loudness vs probe) · o4step1/o4step2/o4clock · audiolat · armcancel · o11 (bits) · o9 (codec table) · o10 (LUFS) · o3b · x6 · x5 · x12 · x15a/b/c/e (`{"drill":…}`) · f1-f8 lanes · p0tailraw · syncload (run VISIBLE) · tabaudio · tapstarve (A1) · pressure (E1) · rigsource · f16t1 · aiexport · encprobe · capcheck.
-Scripts: `npm run oracle` (`--cold=N`, `--engine=v1`, `--no-composite`, `--dumpDir=`) · `oracle:long` (120 s) · `oracle:load` (HEAVY, two phases, `--headed`, `--fpsBand`) · `oracle:fidelity` · `scripts/crash-bound.mjs` · `memory-slope.mjs` (60 min, headed) · `contain-check.mjs` (H1/H5 cells) · `fps-check.mjs` · `gpu-residency.mjs` (real-screen GPU residency + per-source paint cost; the only rig here that can capture a REAL display — `launchChrome({viaOpen})`) · `anchor-check.mjs` · `camera-check.mjs` · `noise-check.mjs` · `stale-tab-check.mjs` · `editor-drag-cost.mjs` (headed) · `browser-check.mjs` (8 gates → docs/qa) · `ru-reachability.mjs` · `pwa-check.mjs` · `ai-pdf-check.mjs` · `ui-shot.mjs --flow=…` · `o7-measure.mjs` · `syncref.mjs` · `verify-deploy.mjs` · `mirror-watch.mjs`. Playbooks: docs/INDEX.md.
+Scripts: `npm run oracle` (`--cold=N`, `--engine=v1`, `--no-composite`, `--dumpDir=`) · `oracle:long` (120 s) · `oracle:load` (HEAVY, two phases, `--headed`, `--fpsBand`) · `oracle:fidelity` · `scripts/crash-bound.mjs` · `memory-slope.mjs` (60 min, headed) · `contain-check.mjs` (H1/H5 cells) · `fps-check.mjs` · `painter-parity.mjs` (O4's two painters, pixel by pixel, on a REAL screen frame) · `gpu-residency.mjs` (real-screen GPU residency + per-source paint cost; the only rig here that can capture a REAL display — `launchChrome({viaOpen})`) · `anchor-check.mjs` · `camera-check.mjs` · `noise-check.mjs` · `stale-tab-check.mjs` · `editor-drag-cost.mjs` (headed) · `browser-check.mjs` (8 gates → docs/qa) · `ru-reachability.mjs` · `pwa-check.mjs` · `ai-pdf-check.mjs` · `ui-shot.mjs --flow=…` · `o7-measure.mjs` · `syncref.mjs` · `verify-deploy.mjs` · `mirror-watch.mjs`. Playbooks: docs/INDEX.md.
 Console on any build: `__inoutSupport`, `await __inoutReport()`, `__inoutReportAll()`, `__inoutTakeLog()`; journals `inout.wedgeJournal.v1`, `inout.takeReport.v1`.
 
 ## REJECTED / RULED OUT — do not resurrect
