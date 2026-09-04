@@ -65,6 +65,10 @@ import {
   type Recording,
 } from '@core/types'
 import { keyframeIntervalSec } from './keyframeInterval'
+import { constantQualityQp } from './constantQuality'
+import { loudnessMode } from './loudnessMode'
+import { sourceFrameEnabled } from '@core/frame'
+import { fullColourActive } from './fullColour'
 
 /**
  * Bump on ANY change that can move a pixel or a byte: the draw (layout.ts,
@@ -84,6 +88,29 @@ export interface RenderFlagPrint {
   sourceFrame: boolean
   /** O9(b)'s `?colour=all` — 4:4:4 changes every byte of every chunk. */
   fullColour: boolean
+}
+
+/**
+ * THE FLAGS THE BYTES DEPEND ON, READ IN ONE PLACE — and the one place matters.
+ *
+ * This lived in chunkedRender.ts and only the chunk plan asked for it, so the
+ * pre-render's key did not: `prerenderKey` was `[recording.id, edit, settings]`
+ * and carried no render flag at all, which meant a file made BEFORE a switch
+ * was flipped was served for an export made AFTER it and the switch silently
+ * did nothing. `?cq=` and F13's `?sourceframe=` rode that hole; O9(b) dodged it
+ * by refusing the pre-render outright whenever `?colour=all` was on, which is a
+ * patch for one flag rather than the fix. It sits beside `RenderFlagPrint` now
+ * so the plan, the key and the shape cannot read a different set — this module
+ * imports only flag readers, which is what makes it safe for prerender.ts to
+ * ask (chunkedRender.ts is not).
+ */
+export function currentRenderFlags(): RenderFlagPrint {
+  return {
+    cq: constantQualityQp(),
+    loudness: loudnessMode(),
+    sourceFrame: sourceFrameEnabled(),
+    fullColour: fullColourActive(),
+  }
 }
 
 export interface ChunkPlanInput {

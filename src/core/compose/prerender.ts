@@ -46,6 +46,7 @@ import { newId } from '@core/id'
 import { blobStore, persistBlobCopy } from '@core/store'
 import { createJobPace, type JobPace } from '@core/backgroundWork'
 import { keptSegments } from '@core/timeline'
+import { currentRenderFlags } from './chunkPlan'
 import { exportRecording } from './pipeline'
 
 /**
@@ -91,9 +92,21 @@ export interface PrerenderKeyInput {
  * the settings go in whole: a key that summarised them would eventually serve
  * one take's file for another take's edit, which is the single worst thing this
  * module could do.
+ *
+ * AND THE RENDER FLAGS GO IN TOO, since 2026-09-04 — they were missing, and
+ * "everything that changes the bytes" was therefore false. A take stopped with
+ * `?cq=` off, the switch turned on in /?test, then exported, was served the
+ * file made BEFORE the switch and the switch did nothing at all; F13's
+ * `?sourceframe=` rode the same hole, and O9(b) could only work around it by
+ * refusing the pre-render whenever `?colour=all` was on. The flags are read
+ * from the one place the chunk plan reads them (chunkPlan.ts), so a key, a
+ * shape and a chunk can never disagree about what is in force.
+ *
+ * IT INVALIDATES EVERY PRE-RENDER MADE BEFORE THIS CHANGE, which is correct:
+ * those files were keyed by a question that did not include the answer.
  */
 export function prerenderKey({ recording, edit, settings }: PrerenderKeyInput): string {
-  return JSON.stringify([recording.id, edit, settings ?? null])
+  return JSON.stringify([recording.id, edit, settings ?? null, currentRenderFlags()])
 }
 
 /**
@@ -116,7 +129,14 @@ export function prerenderKey({ recording, edit, settings }: PrerenderKeyInput): 
  * channels, the global trim, the settings. Same shape ⇒ same bytes.
  */
 export function prerenderShape({ recording, edit, settings }: PrerenderKeyInput): string {
-  return JSON.stringify([recording.id, { ...edit, segments: keptSegments(edit) }, settings ?? null])
+  return JSON.stringify([
+    recording.id,
+    { ...edit, segments: keptSegments(edit) },
+    settings ?? null,
+    // Same reason as the key: a running job whose flags no longer match is not
+    // making the file this export wants, however identical the edit looks.
+    currentRenderFlags(),
+  ])
 }
 
 export type PrerenderState = 'running' | 'done' | 'failed'

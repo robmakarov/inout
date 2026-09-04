@@ -201,14 +201,14 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   // pressing export early costs the remainder rather than starting the same
   // work twice. Never slower than before: a miss falls straight through.
   /**
-   * O9(b) SKIPS THE PRE-RENDER, and the reason is a hole this task found rather
-   * than made: `prerenderKey` is `[recording.id, edit, settings]` and carries NO
-   * render flag at all. A file made before the switch was flipped is served for
-   * an export made after it, and the switch silently does nothing — the exact
-   * defect `?cq=` and `?sourceframe=` already cost this project once. Those two
-   * still ride that hole (BACKLOG, G lane); this one does not.
+   * O9(b) USED TO SKIP THE PRE-RENDER ENTIRELY when full colour was asked for,
+   * because `prerenderKey` carried no render flag and would have served a 4:2:0
+   * file for a 4:4:4 export. The key carries the flags now (prerender.ts), so a
+   * pre-render made under the same flags is servable and one made under
+   * different flags is not adopted — which is what the skip was standing in
+   * for, for one flag out of four.
    */
-  const ready = fullColour ? null : takePrerender(prerenderKey({ recording, edit, settings }))
+  const ready = takePrerender(prerenderKey({ recording, edit, settings }))
   if (ready) {
     // A JOINED JOB IS THIS EXPORT NOW, so it reports ITS OWN place and obeys
     // THIS export's cancel. The first version of the join reported a flat

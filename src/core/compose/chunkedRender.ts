@@ -63,7 +63,7 @@ import {
   type PaceSource,
   type Recording,
 } from '@core/types'
-import { audioPresent, planChunks, type ChunkPlan, type PlannedChunk, type RenderFlagPrint } from './chunkPlan'
+import { audioPresent, currentRenderFlags, planChunks, type ChunkPlan, type PlannedChunk } from './chunkPlan'
 import {
   chunkKeyFor,
   hashDescriptor,
@@ -74,10 +74,6 @@ import {
 import { buildCertification, certificationComment } from './certify'
 import { VIDEO_BITRATE, pickEncodingTarget } from './codecs'
 import { keyframeIntervalSec } from './keyframeInterval'
-import { constantQualityQp } from './constantQuality'
-import { loudnessMode } from './loudnessMode'
-import { sourceFrameEnabled } from '@core/frame'
-import { fullColourActive } from './fullColour'
 import { exportFileName } from './fileName'
 import { createExportScratch, type ExportScratch } from './scratch'
 import {
@@ -147,15 +143,7 @@ export function resetChunkedStatsForTests(): void {
   lastStats = null
 }
 
-/** The flags the plan has to print, read where they can be read. */
-export function currentRenderFlags(): RenderFlagPrint {
-  return {
-    cq: constantQualityQp(),
-    loudness: loudnessMode(),
-    sourceFrame: sourceFrameEnabled(),
-    fullColour: fullColourActive(),
-  }
-}
+
 
 /**
  * Readers for every video channel that contributes, opened together.

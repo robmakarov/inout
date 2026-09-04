@@ -69,12 +69,25 @@ const {
   editBindsPrerender,
   firstEditDivergenceMs,
   prerenderKey,
+  prerenderShape,
   prerenderStatus,
   resetPrerenderForTests,
   startPrerender,
   takePrerender,
 } = await import('./prerender')
 const { noteTakeActive, resetBackgroundWorkForTests } = await import('@core/backgroundWork')
+const { setConstantQualityOverride } = await import('./constantQuality')
+const { setSourceFrame } = await import('@core/frame')
+const { setFullColourOverride } = await import('./fullColour')
+const { setLoudnessMode } = await import('./loudnessMode')
+
+/** Every render flag back to what ships, so one case cannot leak into the next. */
+function resetFlags(): void {
+  setConstantQualityOverride(undefined)
+  setSourceFrame(null)
+  setFullColourOverride(null)
+  setLoudnessMode(null)
+}
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording
 const edit = { channels: [], segments: [{ startMs: 0, endMs: 1000 }] } as unknown as EditState
@@ -119,6 +132,39 @@ describe('the pre-rendered export', () => {
     expect(prerenderKey({ recording, edit, settings: { ...settings, width: 1280 } })).not.toBe(a)
     expect(prerenderKey({ recording, edit: { ...edit, segments: [] } as EditState, settings })).not.toBe(a)
     expect(prerenderKey({ recording: { ...recording, id: 'rec2' }, edit, settings })).not.toBe(a)
+  })
+
+  /**
+   * THE HOLE THIS CLOSES, and it is why the test above was not enough: the key
+   * carried the recording, the edit and the settings, and NO render flag — so a
+   * file made before a switch was flipped was served for an export made after
+   * it and the switch silently did nothing. `?cq=` and `?sourceframe=` lived
+   * with that; O9(b) could only refuse the pre-render outright. Each flag gets
+   * its own case, because a key that happens to move for one of them is not
+   * evidence about the others.
+   */
+  it('a render flag changes the key — every one of them', () => {
+    const a = prerenderKey({ recording, edit, settings })
+    const shapeA = prerenderShape({ recording, edit, settings })
+    for (const [name, set] of [
+      // qp20 is what ships, so asking for 20 is not a change — 28 is. And the
+      // OVERRIDE is the seam that works here: `setConstantQuality` writes
+      // localStorage, which a worker has none of and this environment has none
+      // of either, which is the very hole its own header describes.
+      ['cq', () => setConstantQualityOverride(28)],
+      // F13's frame follows the take by DEFAULT, so `true` is not a change.
+      ['sourceframe', () => setSourceFrame(false)],
+      // The OVERRIDE again: `setFullColourEnabled` writes storage, and
+      // `fullColourActive` is what the key reads.
+      ['colour', () => setFullColourOverride(true)],
+      ['loudness', () => setLoudnessMode('r128')],
+    ] as [string, () => void][]) {
+      set()
+      expect(prerenderKey({ recording, edit, settings }), name).not.toBe(a)
+      expect(prerenderShape({ recording, edit, settings }), name).not.toBe(shapeA)
+      resetFlags()
+      expect(prerenderKey({ recording, edit, settings }), name).toBe(a)
+    }
   })
 
   it('starts ONE render, and asking again for the same output does not start another', () => {
