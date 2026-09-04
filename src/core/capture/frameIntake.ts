@@ -20,6 +20,27 @@
  * with a main-thread track processor: `main`. Asking for a rung this machine
  * does not have falls through to the next one rather than failing a take — the
  * engine never refuses a record press.
+ *
+ * MEASURED 2026-09-04, Chrome 152 on this Mac, headless AND headed, because the
+ * task was written expecting the opposite and a session nearly quoted three
+ * oracle cells as evidence for a rung that had not run:
+ *
+ *   main thread   MediaStreamTrackProcessor  YES
+ *   worker        MediaStreamTrackProcessor  NO      VideoEncoder YES
+ *   MediaStreamTrack transfer to a worker    DataCloneError
+ *                 ("does not have a transferable type", on a canvas track)
+ *
+ * CHROMIUM AND WEBKIT ARE EXACT COMPLEMENTS ON THIS ONE API: the processor is
+ * on the page here and in the worker there. So `worker-processor` CANNOT BE
+ * EXERCISED ON CHROMIUM AT ALL — its probe correctly answers no and the walk
+ * falls to the sampler, which is the behaviour proven here. Its own evidence
+ * needs a real WebKit and does not exist yet (Robert declined the Playwright
+ * download, 2026-09-04). Do not re-derive this by reading a spec.
+ *
+ * AND A WARNING FOR WHOEVER TAKES THAT CELL: the oracle rig's source is a
+ * CANVAS captureStream, and a canvas track is the one that refused to transfer
+ * above. If WebKit refuses it too, the rig needs a getDisplayMedia or
+ * getUserMedia track before the worker rung can be measured through it at all.
  */
 import type { FrameIntakeDeclaration, FrameIntakeKind } from '../types'
 
@@ -107,14 +128,36 @@ export function canSampleElement(): boolean {
 }
 
 /**
- * Is there ANY intake here? This is the synchronous half of the capability
- * gate — `canLiveCompositeV2` runs before a worker exists, and whether the
- * processor lives in a worker cannot be known from this thread at all. So the
- * sync answer is deliberately the WEAKEST rung: if the sampler can run, v2 has
- * an intake. The worker rung is discovered at start, where it can be asked.
+ * MAY v2 TAKE THIS MACHINE? The synchronous half of `canLiveCompositeV2`, which
+ * runs before a worker exists — and whether the processor lives in a WORKER
+ * cannot be known from this thread at all, so the answer here is about the two
+ * rungs this thread can see and the walk at start finds the rest.
+ *
+ * It is deliberately not "is there any intake".
+ *
+ * A machine WITH a main-thread processor is untouched: it always could run v2,
+ * it still does, and it now does so through this seam. A machine WITHOUT one
+ * records on v1 today, and moving it to v2 is a change to what a user's take is
+ * made by — the frozen rule puts that behind Robert's yes, and behind the
+ * evidence his yes would be given on: each rung's own oracle cell ON ITS OWN
+ * ENGINE. Playwright's WebKit and Firefox are not downloaded (Robert,
+ * 2026-09-04: "No, not now"), so those two cells do not exist and the arrival
+ * waits.
+ *
+ * WHAT THAT DOES NOT MEAN: the seam is not off. Every Chromium take runs
+ * through it, all three rungs run and are measured on Chromium, and asking for
+ * one by name (`?intake=worker`, `?intake=element`, or the /?test panel row)
+ * arms it anywhere — including on an engine with no main-thread processor,
+ * which is how the two missing cells get taken the day the browsers are there.
+ * What waits is one line: which engine a Safari or Firefox user gets by
+ * DEFAULT.
+ *
+ * The sampler probe is second on purpose: on a machine with a main-thread
+ * processor nothing builds a throwaway VideoFrame to answer a question already
+ * answered.
  */
-export function anyIntakeAvailable(): boolean {
-  return trackProcessorCtor() !== null || canSampleElement()
+export function intakeArmed(): boolean {
+  return trackProcessorCtor() !== null || (canSampleElement() && intakeChoice() !== 'auto')
 }
 
 /**

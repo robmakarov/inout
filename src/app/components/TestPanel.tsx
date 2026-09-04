@@ -169,7 +169,7 @@ export function TestPanel() {
       />
       <Choice
         label="How frames get in"
-        hint="auto picks the fastest way this browser can hand the recorder its pictures, and on Chrome that is the same way every take has always used. main reads them on the page. worker hands the whole camera/screen over to the background thread and reads them there — the only way Safari can. element lets a hidden video play and takes a snapshot of it 30-60 times a second, which is how Firefox will do it. Every one of them makes the SAME file; if one of them does not, that is the bug this switch is here to find."
+        hint="Where the recorder gets its pictures from. auto is what every take has always used on Chrome, and is the row to leave alone. main reads the pictures on the page. worker hands the screen over to the background thread and reads them there — the only way Safari can, and it does NOTHING on Chrome (Chrome cannot, so it lands on element and says so in the console). element lets a hidden video play and snapshots it 30-60 times a second, which is how Firefox will do it, and it works here. Every one of them should make the SAME file; the one that does not is the bug this row exists to find."
         value={intakeChoice()}
         options={['auto', 'main', 'worker', 'element'] as IntakeChoice[]}
         set={(v) => {

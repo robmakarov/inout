@@ -49,7 +49,7 @@ import { burstAbsorberEnabled } from './burstBudget'
 import { painterChoice } from './painterChoice'
 import {
   INTAKE_DECLARATION,
-  anyIntakeAvailable,
+  intakeArmed,
   canSampleElement,
   intakeChoice,
   intakeFps,
@@ -312,10 +312,13 @@ export function getCompositeFault(): CompositeFault | null {
 export function canLiveCompositeV2(inputs: LiveCompositeV2Inputs): boolean {
   if (!inputs.screen && !inputs.camera) return false
   return (
-    // P9: ANY intake, not the main-thread processor specifically. Which one is
-    // decided at start, where the worker can be asked; this is the synchronous
-    // half, and it deliberately answers for the weakest rung — see frameIntake.
-    anyIntakeAvailable() &&
+    // P9: ANY intake, not the main-thread processor specifically — but a
+    // machine that has no processor on the page reaches v2 only when a rung is
+    // asked for by name, because THAT is a change to which engine a user's take
+    // is made by and its evidence is not taken yet. `intakeArmed` carries the
+    // whole reason; which rung runs is decided at start, where the worker can
+    // be asked.
+    intakeArmed() &&
     typeof VideoEncoder !== 'undefined' &&
     typeof AudioEncoder !== 'undefined' &&
     typeof VideoFrame !== 'undefined' &&
@@ -426,11 +429,18 @@ export async function startLiveCompositeV2(
     return workerProbe
   }
   const wanted = intakeChoice()
+  /** Every rung passed over on the way down, and what it was missing. */
+  const refused: string[] = []
   let intake: FrameIntakeKind | null = null
   for (const rung of intakeOrder(wanted)) {
-    if (rung === 'main-processor' && trackProcessorCtor() !== null) intake = rung
-    else if (rung === 'element-sampler' && canSampleElement()) intake = rung
-    else if (rung === 'worker-processor' && (await workerHasProcessor())) intake = rung
+    if (rung === 'main-processor') {
+      if (trackProcessorCtor() !== null) intake = rung
+      else refused.push('main-processor: no track processor on the page')
+    } else if (rung === 'element-sampler') {
+      if (canSampleElement()) intake = rung
+      else refused.push('element-sampler: no VideoFrame from an element')
+    } else if (await workerHasProcessor()) intake = rung
+    else refused.push('worker-processor: no track processor in the worker')
     if (intake) break
   }
   if (!intake) {
@@ -445,7 +455,13 @@ export async function startLiveCompositeV2(
   // off `CompositeRecording.intake`.
   console.info(
     `[capture] composite intake: ${intakeStateLine(declared, askedFps)}` +
-      (wanted === 'auto' ? '' : ` (asked for ${wanted})`),
+      (wanted === 'auto' ? '' : ` (asked for ${wanted})`) +
+      // WHY IT IS NOT THE RUNG ABOVE. A fall-through that says only what it
+      // landed on reads exactly like a rung that was never asked for, which is
+      // how three oracle cells were nearly quoted as evidence for a rung that
+      // had not run (2026-09-04, and the cell line's `made=` is the other half
+      // of the same fix).
+      (refused.length ? ` — past ${refused.join(', ')}` : ''),
   )
 
   const startedAt = performance.now()

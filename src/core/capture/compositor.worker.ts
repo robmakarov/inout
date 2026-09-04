@@ -771,6 +771,15 @@ function releaseWorkerTracks(): void {
  * `frame` case so that the two intakes cannot drift apart: a change here is a
  * change for every rung, which is the only way "a silent difference between
  * rungs is a defect" can be more than a wish.
+ *
+ * ONE THING THIS WORKER'S OWN INSTRUMENT READS DIFFERENTLY, named here rather
+ * than left for someone to trip over: `handlerMs`, `idleMs` and `maxIdleMs` are
+ * measured around `self.onmessage`, and on the `worker-processor` rung frames
+ * do NOT arrive through it — they come off the reader loop. So those three read
+ * as a near-idle worker on that rung whatever it is doing. Nothing in the
+ * product consumes them (only src/experimental/perf/compositorEngine.ts does),
+ * so no take behaves differently; a rig quoting them across rungs would be
+ * quoting the instrument, not the engine.
  */
 function ingestFrame(kind: 'screen' | 'camera', frame: VideoFrame, atMs: number): void {
   noteOrigin(atMs)

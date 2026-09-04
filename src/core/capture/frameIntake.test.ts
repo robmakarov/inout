@@ -14,9 +14,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   INTAKE_DECLARATION,
+  intakeArmed,
   intakeFps,
   intakeOrder,
   intakeStateLine,
+  setIntakeChoice,
   type IntakeChoice,
 } from './frameIntake'
 import type { FrameIntakeKind } from '../types'
@@ -87,6 +89,23 @@ describe('which intake a take lands on', () => {
     expect(
       choose('auto', { 'main-processor': false, 'worker-processor': false, 'element-sampler': false }),
     ).toBeNull()
+  })
+})
+
+describe('when v2 may take a machine at all', () => {
+  /**
+   * The arming rule, at the one point a test can reach it here: jsdom has
+   * neither a track processor nor a VideoFrame, so it is a machine with no
+   * intake, and no intake must never arm v2 — whatever was asked for. The other
+   * half of the rule (a sampler-only machine arms only on an explicit ask) is a
+   * statement about which ENGINE a Safari or Firefox user gets, and its
+   * evidence is that browser's own oracle cell, not a jsdom assertion.
+   */
+  it('a machine with no intake at all is never armed', () => {
+    expect(intakeArmed()).toBe(false)
+    setIntakeChoice('element')
+    expect(intakeArmed()).toBe(false)
+    setIntakeChoice(null)
   })
 })
 
