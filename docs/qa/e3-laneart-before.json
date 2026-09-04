@@ -1,0 +1,43 @@
+{
+  "base": "https://inout-kappa.vercel.app",
+  "takeSec": 40,
+  "lanes": [
+    {
+      "lane": "job",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=1&bgrender=1",
+      "build": "index-BgpNt13-.js",
+      "stopToEditorMs": 705,
+      "prerenderStarted": true,
+      "artLines": [
+        "info: [timeline] filmstrip camera: 11/11 frames in 1316 ms",
+        "info: [timeline] filmstrip screen: 11/11 frames in 1218 ms",
+        "info: [timeline] waveform mic: 427/427 columns in 558 ms, peak 0.160",
+        "info: [timeline] waveform system-audio: 427/427 columns in 313 ms, peak 0.103"
+      ],
+      "artCount": 4,
+      "artDoneMs": 4133,
+      "artWallMs": 3405,
+      "editorCard": {},
+      "editorVerdict": "no card"
+    },
+    {
+      "lane": "solo",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=0&bgrender=0",
+      "build": "index-BgpNt13-.js",
+      "stopToEditorMs": 518,
+      "prerenderStarted": false,
+      "artLines": [
+        "info: [timeline] filmstrip camera: 11/11 frames in 393 ms",
+        "info: [timeline] filmstrip screen: 11/11 frames in 152 ms",
+        "info: [timeline] waveform system-audio: 431/431 columns in 57 ms, peak 0.102",
+        "info: [timeline] waveform mic: 432/432 columns in 52 ms, peak 0.157"
+      ],
+      "artCount": 4,
+      "artDoneMs": 628,
+      "artWallMs": 654,
+      "editorCard": {},
+      "editorVerdict": "no card"
+    }
+  ],
+  "verdict": "lane art lands 628 ms after the editor opens with nothing else running, 4133 ms beside the at-stop pre-render (decode 654 -> 3405 ms); editor card no card -> no card"
+}

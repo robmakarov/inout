@@ -42,7 +42,7 @@
 import { elasticLogOpen } from './elasticLog'
 import { passDoor } from './door'
 import { atLeast, type HardwareBlock, type PressureLevel, type PressureReading } from './pressure'
-import type { WorkPace } from './types'
+import type { PaceSource, WorkPace } from './types'
 
 export type { WorkPace }
 
@@ -208,7 +208,10 @@ function paceFor(t: number): { pace: WorkPace; why: string } {
       return { pace: 'trickle', why: 'a hand is on the editor' }
     }
     if (editorOpeningAt !== null && t - editorOpeningAt <= EDITOR_OPENING_MAX_MS) {
-      return { pace: 'trickle', why: 'the editor is opening' }
+      // Which of them is still holding, because "the editor is opening" for
+      // eight seconds is a question and not an answer.
+      const holding = [...editorHolds.values()].join(' + ')
+      return { pace: 'trickle', why: `the editor is opening — ${holding || 'nothing named'}` }
     }
     return { pace: 'full', why: 'no take is recording' }
   }
@@ -347,22 +350,35 @@ export function noteEditingActivity(): void {
 }
 
 /**
- * The editor is opening, and stays ahead of a background render until it says
- * it is on screen (see EDITOR_OPENING_MAX_MS). Idempotent: a re-render that
- * calls it again must not restart the window and extend the hold.
+ * THE EDITOR IS STILL BUILDING WHAT IT SHOWS — hold the render behind it.
+ *
+ * Take one of these when you start something the person is waiting to LOOK at
+ * and release it when that thing is on screen. The window is refcounted since
+ * E3 because there is more than one such thing and they do not finish
+ * together: the preview's first painted frame, and the lane art under the
+ * timeline. It closes when the last holder lets go, or at
+ * EDITOR_OPENING_MAX_MS from the first, whichever comes first.
+ *
+ * Releasing twice is harmless and releasing out of order is fine — a hold is
+ * its own token, not a counter, because both callers here are React effects
+ * whose cleanups can and do run twice.
  */
-export function noteEditorOpening(): void {
-  if (editorOpeningAt !== null) return
-  editorOpeningAt = now()
-  publish(editorOpeningAt)
-}
+const editorHolds = new Map<symbol, string>()
 
-/** The editor has its preview on screen — or has been closed. Either way the
- *  render may have the machine back. */
-export function noteEditorOpen(): void {
-  if (editorOpeningAt === null) return
-  editorOpeningAt = null
-  publish(now())
+export function holdEditorAhead(what: string): () => void {
+  const token = Symbol(what)
+  editorHolds.set(token, what)
+  if (editorOpeningAt === null) {
+    editorOpeningAt = now()
+    publish(editorOpeningAt)
+  }
+  return () => {
+    if (!editorHolds.delete(token)) return
+    if (editorHolds.size > 0) return
+    if (editorOpeningAt === null) return
+    editorOpeningAt = null
+    publish(now())
+  }
 }
 
 /**
@@ -409,6 +425,110 @@ export function onBackgroundWorkChange(cb: Listener): () => void {
   return () => listeners.delete(cb)
 }
 
+// ---------------------------------------------------------------------------
+// E3 — WHEN THE WORK IS DUE, and why a job needs a pace of its own.
+//
+// Everything above answers one question: what may the machine spare? That is
+// half of a pace. The other half is the job's own DEADLINE, and until E3 no
+// job carried one — every background render subscribed to the same broker and
+// obeyed it for its whole life, including the part of its life after somebody
+// pressed Export and started waiting for it.
+//
+// THE DEFECT THAT NAMED THIS SEAM. `takePrerender` retires a running job to a
+// user-visible export ("joining a running job is the point"), and F16's
+// permanent contract, in Robert's words (2026-09-01, DECISIONS (3)), is that a
+// pre-render "may only ever SAVE time". It could not keep that promise: the
+// render was handed its pace source once, at start, and nothing revoked it, so
+// a claimed job kept the brake written for work nobody had asked for. The
+// geometry made it certain rather than unlucky — the Export button lives
+// inside the element carrying `onPointerDownCapture={noteEditingActivity}`, so
+// the very press that claims the job is the event that throttles it to
+// `trickle`, and every pointer move over the editor while the person watches
+// the dock renews that. An export that JOINED a pre-render could therefore
+// finish LATER than the same export with no pre-render at all, which is the
+// one thing F16 promised would never happen.
+//
+// So a deadline is not a heuristic here and it is not a guess about when
+// Robert will press. It is one fact the app already knows and was throwing
+// away: whether somebody is waiting.
+// ---------------------------------------------------------------------------
+
+/**
+ * `background` nobody has asked for this file; the broker above owns its rate.
+ * `now`        a person is waiting for it. There is no rate below full that
+ *              meets that deadline, so the brake comes off — which is exactly
+ *              what a user-visible export has always done (it is handed no
+ *              pace source at all: types.ts, ExportOptions.pace).
+ *
+ * SAID OUT LOUD, because it is the one place `now` crosses Robert's priority
+ * order: a claimed job runs at full even while a take is recording. That is
+ * not new behaviour being introduced under a deadline — it is the behaviour a
+ * user-visible export has always had, and the alternative is worse in exactly
+ * the way F16 forbids. An export pressed during a take with no pre-render
+ * behind it renders at full and finishes; the same press onto a pre-render
+ * would be `paused` and finish NEVER, so having pre-rendered would have cost
+ * the user the file. Reaching it takes pressing Export in one take's editor
+ * while another take records.
+ */
+export type WorkDeadline = 'background' | 'now'
+
+export interface JobPace extends PaceSource {
+  deadline(): WorkDeadline
+  /**
+   * Somebody is waiting for this job now. ONE-WAY: a claim is `takePrerender`
+   * handing the file to an export, and an export never becomes background work
+   * again. A two-way switch would also be a way to re-brake a job a person is
+   * watching, which is the defect this exists to remove.
+   */
+  claim(): void
+  /** Drop the broker subscription. */
+  dispose(): void
+}
+
+/**
+ * One job's pace: the machine's answer until the job is claimed, `full` after.
+ *
+ * Per job and not global, because two jobs can be alive at once (a pre-render
+ * beside a claimed export in the dock) and they no longer have the same
+ * deadline. The subscription is what carries a claim into the export WORKER —
+ * pipeline.ts forwards every change as a `pace` message and paceGate's `wake`
+ * cuts a sleeping job's nap short, so the brake comes off within a message
+ * rather than at the end of a 400 ms rest.
+ */
+export function createJobPace(): JobPace {
+  let due: WorkDeadline = 'background'
+  const subs = new Set<(level: WorkPace) => void>()
+  let offBroker: (() => void) | null = null
+  const level = (): WorkPace => (due === 'now' ? 'full' : currentPace())
+  return {
+    level,
+    subscribe(cb) {
+      subs.add(cb)
+      // One broker subscription per job however many readers it has: the
+      // render subscribes once, but the in-thread fallback and the worker
+      // forwarder are two different callers of the same source.
+      offBroker ??= onBackgroundWorkChange(() => {
+        if (due === 'now') return
+        for (const s of subs) s(level())
+      })
+      return () => {
+        subs.delete(cb)
+      }
+    },
+    deadline: () => due,
+    claim() {
+      if (due === 'now') return
+      due = 'now'
+      for (const s of subs) s('full')
+    },
+    dispose() {
+      subs.clear()
+      offBroker?.()
+      offBroker = null
+    },
+  }
+}
+
 /** Test seam — module state outlives test cases. */
 export function resetBackgroundWorkForTests(): void {
   listeners.clear()
@@ -417,6 +537,7 @@ export function resetBackgroundWorkForTests(): void {
   recheck = null
   takeActive = false
   editingAt = null
+  editorHolds.clear()
   editorOpeningAt = null
   level = null
   leaderWhy = null

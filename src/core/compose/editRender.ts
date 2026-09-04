@@ -35,9 +35,11 @@
  *     and a smart cut are already faster than any render; spending the machine
  *     on them would be F16's "pre-render an instant export" mistake.
  *  4. IT IS BRAKED, and by the instrument that already exists rather than by a
- *     second one: `startPrerender` hands the job `backgroundPace`, which is a
- *     trickle while a hand is on the editor (EDITING_QUIET_MS), a trickle while
- *     the editor is opening, and paused beside a live take.
+ *     second one: `startPrerender` hands the job its own pace over the broker,
+ *     which is a trickle while a hand is on the editor (EDITING_QUIET_MS), a
+ *     trickle while the editor is opening, and paused beside a live take. Since
+ *     E3 that brake ENDS at the export press: `takePrerender` claims the job
+ *     and its deadline becomes `now`.
  *
  * WHAT IT DELIBERATELY DOES NOT DO: cut any of the export's fixed cost. J7
  * measured that floor at 16.7 ms + 0.5 ms per second of take with every chunk

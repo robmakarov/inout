@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
 import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
@@ -14,7 +14,7 @@ import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { cancelPrerender, editBindsPrerender, exportWouldRender } from '@core/compose'
 import { cancelEditRender, noteEditorEdit } from '@core/compose/editRender'
-import { noteEditingActivity, noteEditorOpen, noteEditorOpening } from '@core/backgroundWork'
+import { holdEditorAhead, noteEditingActivity } from '@core/backgroundWork'
 import { startEditorLateness } from '@core/lateness'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { loadRecovery } from '@core/capture'
@@ -51,13 +51,18 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * OPENING THE EDITOR OUTRANKS THE BACKGROUND RENDER (backgroundWork.ts,
    * EDITOR_OPENING_MAX_MS). At the end of a long take the at-stop pre-render is
    * already running flat out on the same decoder this screen needs to show its
-   * first frame, and Robert saw the result as a black screen. The window opens
-   * on mount and closes as soon as the preview has its sources and the browser
-   * has had a frame to paint them.
+   * first frame, and Robert saw the result as a black screen. The hold is taken
+   * on mount and let go as soon as the preview has its sources and the browser
+   * has had a frame to paint them — the LANE ART takes a hold of its own (E3),
+   * so the render stays behind whichever of the two finishes last.
    */
+  const previewHold = useRef<(() => void) | null>(null)
   useEffect(() => {
-    noteEditorOpening()
-    return noteEditorOpen
+    previewHold.current = holdEditorAhead('the editor preview')
+    return () => {
+      previewHold.current?.()
+      previewHold.current = null
+    }
   }, [recording.id])
   /**
    * G7 — HOW LATE THIS THREAD RUNS IN THE EDITOR'S FIRST 15 SECONDS.
@@ -73,7 +78,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // Two frames: one for React to commit the elements, one for the browser to
     // paint them. Anything sooner hands the machine back before the picture is
     // actually up.
-    const a = requestAnimationFrame(() => requestAnimationFrame(noteEditorOpen))
+    const a = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        previewHold.current?.()
+        previewHold.current = null
+      }),
+    )
     return () => cancelAnimationFrame(a)
   }, [pb.ready])
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -271,7 +281,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    *  · a take whose export is a packet copy or a smart cut cancels the job
    *    outright, because those paths are already instant.
    *  · the whole thing is braked by `?bgpace=`, which this screen already feeds
-   *    (`noteEditorOpening` / `noteEditingActivity`): a trickle while the
+   *    (`holdEditorAhead` / `noteEditingActivity`): a trickle while the
    *    editor is opening, a trickle while a hand is on it, paused beside a live
    *    take. The render is supposed to make progress while someone reviews a
    *    take; what it may never do is make the hand stutter.

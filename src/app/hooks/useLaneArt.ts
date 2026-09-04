@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Recording } from '@core/types'
+import { holdEditorAhead } from '@core/backgroundWork'
 import { blobStore } from '@core/store'
 import { planFilmstrip } from '@app/lib/filmstripPlan'
 import type { LaneWave } from '@core/compose/lanewave'
@@ -26,6 +27,18 @@ import type { LaneWaveReply, LaneWaveRequest } from '@core/compose/laneWave.work
  * 4. EVERY FAILURE IS SILENT AND TOTAL. No art, and the lane looks exactly as
  *    it did before F8 — which is the correct behaviour for something the
  *    editor does not need in order to work.
+ * 5. E3 — IT HOLDS THE BACKGROUND RENDER BEHIND IT WHILE IT DECODES. Both of
+ *    these are decode, and at the end of a take whose export must render they
+ *    are decode against the at-stop pre-render, which by then is at FULL
+ *    because the preview has already painted. MEASURED on prod, 40 s take,
+ *    four lanes: the art landed 628 ms after the editor opened with nothing
+ *    else running and 4,133 ms beside that pre-render — 654 ms of decode
+ *    against 3,405 (screen filmstrip 152 -> 1,218 ms, mic waveform 52 -> 558).
+ *    The two jobs do not have the same deadline: this is what the person is
+ *    looking at, and the pre-render has until the export press. So it takes a
+ *    hold of the editor-ahead window (backgroundWork.ts) for as long as it is
+ *    decoding, exactly as the preview does, and lets go when the last lane has
+ *    its picture — or when it is aborted, or when nothing could be built.
  */
 export interface LaneArt {
   url: string
@@ -113,6 +126,7 @@ export function useLaneArt(
     const abort = new AbortController()
     const widthPx = bucket * WIDTH_BUCKET
     if (widthPx <= 0 || !channelKey) return
+    const release = holdEditorAhead('the timeline lane art')
     void (async () => {
       const dpr = Math.min(2, globalThis.devicePixelRatio || 1)
       const publish = (id: string, art: LaneArt): void => {
@@ -202,10 +216,14 @@ export function useLaneArt(
           })
         }
       }
-    })()
+    })().finally(release)
     return () => {
       alive = false
       abort.abort()
+      // The build may still be inside a decode it cannot interrupt; letting go
+      // here as well means an editor that closes never leaves the render held
+      // down waiting for art nobody will see. Releasing twice is a no-op.
+      release()
       for (const u of urls.current) URL.revokeObjectURL(u)
       urls.current = []
       setArt({})

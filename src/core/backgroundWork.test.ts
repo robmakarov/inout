@@ -5,10 +5,10 @@ import {
   EDITOR_OPENING_MAX_MS,
   RAMP_UP_AFTER_MS,
   backgroundWorkState,
+  createJobPace,
   currentPace,
   noteEditingActivity,
-  noteEditorOpen,
-  noteEditorOpening,
+  holdEditorAhead,
   noteTakeActive,
   noteTakePressure,
   onBackgroundWorkChange,
@@ -146,19 +146,40 @@ describe('what a background job may spend', () => {
   it('the editor OPENING steps the job down before any hand touches it', () => {
     vi.useFakeTimers()
     expect(currentPace()).toBe('full')
-    noteEditorOpening()
+    const release = holdEditorAhead('the editor preview')
     expect(currentPace()).toBe('trickle')
     expect(backgroundWorkState().why).toContain('editor is opening')
-    noteEditorOpen()
+    release()
+    expect(currentPace()).toBe('full')
+  })
+
+  /**
+   * E3 — TWO HOLDERS, AND THE WINDOW CLOSES ON THE LAST ONE. The preview and
+   * the lane art do not finish together: measured on prod, the preview paints
+   * two frames after its sources arrive and the lane art was still decoding
+   * 4.1 s later. Before this the render took the machine back in between.
+   */
+  it('the window closes when the LAST holder lets go, not the first', () => {
+    vi.useFakeTimers()
+    const preview = holdEditorAhead('the editor preview')
+    const art = holdEditorAhead('the timeline lane art')
+    expect(currentPace()).toBe('trickle')
+    preview()
+    expect(currentPace()).toBe('trickle')
+    // Releasing twice is a no-op, not a second decrement.
+    preview()
+    expect(currentPace()).toBe('trickle')
+    art()
     expect(currentPace()).toBe('full')
   })
 
   it('a re-render cannot extend the opening window, and the window expires by itself', () => {
     vi.useFakeTimers()
-    noteEditorOpening()
+    holdEditorAhead('the editor preview')
     vi.advanceTimersByTime(EDITOR_OPENING_MAX_MS - 100)
-    // Idempotent: this must NOT restart the clock.
-    noteEditorOpening()
+    // A second holder must NOT restart the clock — a take whose art never
+    // lands cannot hold the render down for the rest of the session.
+    holdEditorAhead('the timeline lane art')
     vi.advanceTimersByTime(200)
     expect(currentPace()).toBe('full')
   })
@@ -166,7 +187,7 @@ describe('what a background job may spend', () => {
   it('a take outranks the editor — an opening editor cannot lift the shed', () => {
     noteTakeActive(true)
     serious()
-    noteEditorOpening()
+    holdEditorAhead('the editor preview')
     expect(currentPace()).toBe('paused')
   })
 
@@ -200,5 +221,81 @@ describe('what a background job may spend', () => {
     expect(seen[0]).toBe('full')
     expect(seen).toContain('paused')
     expect(seen[seen.length - 1]).toBe('full')
+  })
+})
+
+/**
+ * E3 — THE DEADLINE, and the one thing it is allowed to do.
+ *
+ * The broker above answers "what may the machine spare". A job's own pace
+ * answers "and is anybody waiting". Measured on prod before this existed: a
+ * claimed pre-render finished in 65.6 s with a pointer moving over the editor
+ * against 23.1 s with the hand off it (2.84x) — because the Export press that
+ * claimed the job was itself the event that threw it into `trickle`.
+ */
+describe('a job pace (E3)', () => {
+  afterEach(() => {
+    resetBackgroundWorkForTests()
+    vi.useRealTimers()
+  })
+
+  it('follows the broker until it is claimed, then never brakes again', () => {
+    const pace = createJobPace()
+    expect(pace.deadline()).toBe('background')
+    noteTakeActive(true)
+    serious()
+    expect(pace.level()).toBe('paused')
+    pace.claim()
+    expect(pace.deadline()).toBe('now')
+    expect(pace.level()).toBe('full')
+    // Still critical, still recording, and it stays full: from here somebody
+    // is watching a progress bar.
+    serious()
+    expect(pace.level()).toBe('full')
+    expect(currentPace()).toBe('paused')
+    pace.dispose()
+  })
+
+  it('tells its subscribers the moment it is claimed — that is what wakes a sleeping render', () => {
+    const pace = createJobPace()
+    const seen: string[] = []
+    const off = pace.subscribe((l) => seen.push(l))
+    noteTakeActive(true)
+    serious()
+    expect(seen).toContain('paused')
+    pace.claim()
+    expect(seen[seen.length - 1]).toBe('full')
+    // A later broker change must not un-claim it by pushing a braked level.
+    const n = seen.length
+    noteTakeActive(false)
+    noteTakeActive(true)
+    serious()
+    expect(seen.length).toBe(n)
+    off()
+    pace.dispose()
+  })
+
+  it('two jobs hold two deadlines — claiming one does not free the other', () => {
+    const a = createJobPace()
+    const b = createJobPace()
+    noteTakeActive(true)
+    serious()
+    a.claim()
+    expect(a.level()).toBe('full')
+    expect(b.level()).toBe('paused')
+    a.dispose()
+    b.dispose()
+  })
+
+  it('a disposed job stops hearing the broker', () => {
+    const pace = createJobPace()
+    const seen: string[] = []
+    pace.subscribe((l) => seen.push(l))
+    noteTakeActive(true)
+    serious()
+    const n = seen.length
+    pace.dispose()
+    noteTakeActive(false)
+    expect(seen.length).toBe(n)
   })
 })

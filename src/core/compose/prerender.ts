@@ -40,13 +40,11 @@ import type {
   ExportProgress,
   ExportResult,
   ExportSettings,
-  PaceSource,
   Recording,
-  WorkPace,
 } from '@core/types'
 import { newId } from '@core/id'
 import { blobStore, persistBlobCopy } from '@core/store'
-import { currentPace, onBackgroundWorkChange } from '@core/backgroundWork'
+import { createJobPace, type JobPace } from '@core/backgroundWork'
 import { keptSegments } from '@core/timeline'
 import { exportRecording } from './pipeline'
 
@@ -57,11 +55,12 @@ import { exportRecording } from './pipeline'
  * at strictly lower priority and is the first load shed on the machine. This
  * is the only place a job is handed one: a user-visible export never gets a
  * pace, because a person is waiting for it.
+ *
+ * E3 (2026-09-04) made it a pace PER JOB rather than one shared reading of the
+ * broker, because "a person is waiting for it" stopped being a property of
+ * which code started the render: `takePrerender` turns this job into exactly
+ * that export, mid-render. The brake now ends where the waiting begins.
  */
-const backgroundPace: PaceSource = {
-  level: () => currentPace(),
-  subscribe: (cb: (level: WorkPace) => void) => onBackgroundWorkChange((state) => cb(state.pace)),
-}
 
 /**
  * A pre-rendered file has to survive the NEXT export, and by default it does
@@ -140,6 +139,8 @@ interface Job {
   startedAt: number
   abort: AbortController
   blobKey: string
+  /** E3 — this job's own pace. `claim()` when an export takes it out. */
+  pace: JobPace
   promise: Promise<ExportResult>
   /** Set by the claimer (takePrerender) — progress keeps flowing after the
    *  job is retired, because from then on it is a USER-VISIBLE export. */
@@ -184,6 +185,7 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
 
   const abort = new AbortController()
   const blobKey = `${OWN_PREFIX}${newId('p')}`
+  const pace = createJobPace()
   const started: Job = {
     key,
     input,
@@ -193,6 +195,7 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
     startedAt: Date.now(),
     abort,
     blobKey,
+    pace,
     promise: Promise.resolve() as unknown as Promise<ExportResult>,
     forward: null,
     takenOut: false,
@@ -214,8 +217,9 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
       settings: input.settings,
       signal: abort.signal,
       // F16b: a background job, and therefore elastic. Every other caller of
-      // exportRecording is a person waiting for a file.
-      pace: backgroundPace,
+      // exportRecording is a person waiting for a file — and since E3 so is
+      // this one, from the moment `takePrerender` claims it.
+      pace,
       onProgress: (p) => {
         // NOT guarded by `job === started`: once claimed the job is retired
         // from this module but its progress is what the user is watching —
@@ -236,8 +240,13 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
     return { ...result, blob: held, scratchKey: undefined }
   })()
 
+  // The render has ENDED by the time either settle handler runs — finished,
+  // aborted or failed — so this is the one place where dropping the broker
+  // subscription cannot silence a job that is still working. A cancel arrives
+  // here too, through the abort's rejection.
   started.promise.then(
     (result) => {
+      pace.dispose()
       if (job !== started) {
         // Superseded while it ran: its file is nobody's now. A CLAIMED job is
         // different — its file is exactly what the claimer is serving.
@@ -252,6 +261,7 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
       )
     },
     (err: unknown) => {
+      pace.dispose()
       void dropOwnBlob(blobKey)
       if (job !== started) return
       started.state = 'failed'
@@ -375,6 +385,20 @@ export function takePrerender(key: string): TakenPrerender | null {
   const taken = job
   job = null
   taken.takenOut = true
+  /**
+   * E3 — THE DEADLINE MOVES HERE, and this line is the whole task in one call.
+   * From this instant the job is not background work: a person pressed Export
+   * and is watching the dock. Before it existed the press itself throttled the
+   * render it was claiming — the Export button sits inside the editor's
+   * `onPointerDownCapture={noteEditingActivity}` — so joining a running
+   * pre-render could finish LATER than starting a fresh render, against F16's
+   * standing promise that a pre-render "may only ever SAVE time"
+   * (Robert 2026-09-01, DECISIONS (3)). Measured on prod before the fix:
+   * press -> file 65.6 s with a pointer moving over the editor against 23.1 s
+   * with the hand off it — 2.84x, +42.5 s, one build, one machine, same take,
+   * same edit and the same press moment (scripts/e3-claimpace.mjs).
+   */
+  taken.pace.claim()
   return {
     promise: taken.promise,
     abort: taken.abort,

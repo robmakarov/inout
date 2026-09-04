@@ -74,6 +74,7 @@ const {
   startPrerender,
   takePrerender,
 } = await import('./prerender')
+const { noteTakeActive, resetBackgroundWorkForTests } = await import('@core/backgroundWork')
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording
 const edit = { channels: [], segments: [{ startMs: 0, endMs: 1000 }] } as unknown as EditState
@@ -102,6 +103,7 @@ function fakeResult(): ExportResult {
 afterEach(() => {
   cancelPrerender()
   resetPrerenderForTests()
+  resetBackgroundWorkForTests()
   lastPace = undefined
   renderCalls = 0
   settle = null
@@ -213,6 +215,29 @@ describe('the pre-rendered export', () => {
   it('hands the render the elastic brake, which no user-visible export gets', () => {
     startPrerender({ recording, edit, settings })
     expect(lastPace).toBeTruthy()
+  })
+
+  /**
+   * E3 — AND THE BRAKE COMES OFF AT THE PRESS.
+   *
+   * `takePrerender` turns this job into the export a person is waiting for, and
+   * until E3 nothing told the render that. The press itself made it worse than
+   * a coincidence: the Export button lives inside the editor element carrying
+   * `onPointerDownCapture={noteEditingActivity}`, so the claim arrived as a
+   * `trickle`. Measured on prod at default flags: 65.6 s against 23.1 s for the
+   * same export (2.84x) — a joined pre-render finishing LATER than no
+   * pre-render at all, against F16's promise that it "may only ever SAVE time".
+   */
+  it('a claimed job leaves the brake behind — its deadline is now', () => {
+    startPrerender({ recording, edit, settings })
+    const pace = lastPace as { level(): string; deadline(): string }
+    expect(pace.deadline()).toBe('background')
+    noteTakeActive(true)
+    expect(pace.level()).toBe('paused')
+    takePrerender(prerenderKey({ recording, edit, settings }))
+    expect(pace.deadline()).toBe('now')
+    expect(pace.level()).toBe('full')
+    noteTakeActive(false)
   })
 
   it('cancelling aborts the render rather than letting it finish unwanted', async () => {

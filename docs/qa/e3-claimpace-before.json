@@ -1,0 +1,41 @@
+{
+  "base": "https://inout-kappa.vercel.app",
+  "takeSec": 40,
+  "pressAfterMs": 2500,
+  "lanes": [
+    {
+      "lane": "hand",
+      "hand": true,
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=1&bgrender=1",
+      "build": "index-BgpNt13-.js",
+      "sizeProbeDone": true,
+      "jobStarted": true,
+      "ms": 65624,
+      "moves": 656,
+      "sawProgress": true,
+      "timedOut": false,
+      "said": [
+        "info: [compose] background work -> trickle (20% duty) — a hand is on the editor",
+        "info: [compose] export served a render that was already made (F16)"
+      ],
+      "restedLine": null
+    },
+    {
+      "lane": "still",
+      "hand": false,
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=1&bgrender=1",
+      "build": "index-BgpNt13-.js",
+      "sizeProbeDone": true,
+      "jobStarted": true,
+      "ms": 23146,
+      "moves": 0,
+      "sawProgress": true,
+      "timedOut": false,
+      "said": [
+        "info: [compose] export served a render that was already made (F16)"
+      ],
+      "restedLine": null
+    }
+  ],
+  "verdict": "a claimed render: press -> file 23146 ms with the hand off the editor, 65624 ms with a pointer moving over it (2.84x, +42478 ms) — same take, same edit, same press moment"
+}
