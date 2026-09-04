@@ -1,0 +1,67 @@
+{
+  "base": "https://inout-kappa.vercel.app",
+  "takeSec": 40,
+  "lanes": [
+    {
+      "lane": "job",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=1&bgrender=1",
+      "build": "index-n4fdq2NH.js",
+      "stopToEditorMs": 518,
+      "prerenderStarted": true,
+      "artLines": [
+        "info: [timeline] filmstrip camera: 11/11 frames in 338 ms",
+        "info: [timeline] filmstrip screen: 11/11 frames in 203 ms",
+        "info: [timeline] waveform mic: 432/432 columns in 69 ms, peak 0.162",
+        "info: [timeline] waveform system-audio: 431/431 columns in 66 ms, peak 0.102"
+      ],
+      "artCount": 4,
+      "artDoneMs": 812,
+      "artWallMs": 676,
+      "editorCard": {
+        "recordingId": "rec_ko3or6ik8c2l",
+        "verdict": "green",
+        "line": "editor · rec_ko3or6ik8c2l · first 14.9s · GREEN — 1 of 1 dimensions measured and inside band",
+        "dimensions": [
+          {
+            "id": "lateness",
+            "status": "pass",
+            "detail": "worst second at 0.0s: 10.8 ms late, 37.6 ms over 59 samples · p50 0.5 · p95 1 · max 10.8 ms at 0.4s · 0 of 934 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s"
+          }
+        ]
+      },
+      "editorVerdict": "green: pass — worst second at 0.0s: 10.8 ms late, 37.6 ms over 59 samples · p50 0.5 · p95 1 · max 10.8 ms at 0.4s · 0 of 934 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s",
+      "prerenderReadyLine": "info: [compose] pre-render ready after 9.3s — 6.7 MB waiting before it was asked for (F16)",
+      "prerenderReadySec": 9.3
+    },
+    {
+      "lane": "solo",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&qstep=1080p&screensize=1920x1080&prerender=0&bgrender=0",
+      "build": "index-n4fdq2NH.js",
+      "stopToEditorMs": 521,
+      "prerenderStarted": false,
+      "artLines": [
+        "info: [timeline] filmstrip camera: 11/11 frames in 357 ms",
+        "info: [timeline] filmstrip screen: 11/11 frames in 170 ms",
+        "info: [timeline] waveform system-audio: 432/432 columns in 66 ms, peak 0.102",
+        "info: [timeline] waveform mic: 432/432 columns in 64 ms, peak 0.157"
+      ],
+      "artCount": 4,
+      "artDoneMs": 604,
+      "artWallMs": 657,
+      "editorCard": {
+        "recordingId": "rec_jhluxcfhaii8",
+        "verdict": "green",
+        "line": "editor · rec_jhluxcfhaii8 · first 14.9s · GREEN — 1 of 1 dimensions measured and inside band",
+        "dimensions": [
+          {
+            "id": "lateness",
+            "status": "pass",
+            "detail": "worst second at 0.0s: 10.3 ms late, 17.3 ms over 61 samples · p50 0.5 · p95 1 · max 10.3 ms at 0.0s · 0 of 936 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s"
+          }
+        ]
+      },
+      "editorVerdict": "green: pass — worst second at 0.0s: 10.3 ms late, 17.3 ms over 61 samples · p50 0.5 · p95 1 · max 10.3 ms at 0.0s · 0 of 936 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s"
+    }
+  ],
+  "verdict": "lane art lands 604 ms after the editor opens with nothing else running, 812 ms beside the at-stop pre-render (decode 657 -> 676 ms); editor card green: pass — worst second at 0.0s: 10.3 ms late, 17.3 ms over 61 samples · p50 0.5 · p95 1 · max 10.3 ms at 0.0s · 0 of 936 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s -> green: pass — worst second at 0.0s: 10.8 ms late, 37.6 ms over 59 samples · p50 0.5 · p95 1 · max 10.8 ms at 0.4s · 0 of 934 samples over one frame (16.7 ms) · sampled every 16 ms by worker-beat, document hidden 0.0% of 14.9s"
+}

@@ -1396,3 +1396,61 @@ WHAT IT TAKES AWAY: an unedited take with a camera is no longer a packet copy. I
 before he asks for it, and on the measurement above that is faster than the copy was — but it is a
 render, so it costs a machine that is doing something else more than a copy did, and a take he never
 exports had work done for it. The pre-made file is J5's, so everything J5 gives up is given up here too.
+
+2026-09-04 E3 — DEADLINE-PACED BACKGROUND WORK. Idea 21 asked for "prerender/uploads/filmstrips at
+the rate their deadline needs". Two of the three had a real cost, both were MEASURED ON PROD BEFORE
+ANYTHING WAS BUILT, and the third turned out to have no work in it at all.
+(1) THE CLAIMED PRE-RENDER KEPT THE BRAKE. `takePrerender` retires a running job to the export a
+person is waiting for; `renderExport` is handed its pace source once at start and nothing revoked it.
+The geometry made it certain rather than unlucky — the Export button lives inside the editor element
+carrying `onPointerDownCapture={noteEditingActivity}` — so the press that CLAIMED the job was itself
+the event that threw it to `trickle` (20 % duty), renewed by every pointer move while the person
+watched the dock. Joining a pre-render could therefore finish LATER than having none, against F16's
+standing promise, in Robert's words (2026-09-01, DECISIONS (3)), that a pre-render "may only ever
+SAVE time". PROD, ONE MACHINE, SAME TAKE AND SAME PRESS MOMENT (`scripts/e3-claimpace.mjs`):
+press -> file 23,146 ms with the hand off the editor and 65,624 ms with a pointer moving over it
+(2.84x) BEFORE; 6,572 ms and 9,205 ms AFTER — 65.6 s -> 9.2 s, and the after-run was on a BUSIER
+machine (load average 11-15 against 6-8).
+FIX: the pace is per JOB (`createJobPace()` in core/backgroundWork.ts), carrying a deadline that is
+`background` until `takePrerender` calls `claim()` and `now` for ever after. One-way on purpose: a
+claimed job is a user-visible export, and a way back would be a way to re-brake a render somebody is
+watching. The claim reaches the render as a `pace` message and paceGate's `wake` cuts a sleeping nap
+short, so the brake comes off within a message rather than at the end of a 400 ms rest.
+(2) THE EDITOR'S OWN WORK RACED IT, AND G7 NAMED THE WRONG SUSPECT FIRST. The editor-ahead window
+closed two frames after the PREVIEW painted, so everything the editor built after that fought the
+at-stop pre-render for the same media engine. The lane art was the visible half: the timeline's
+filmstrips and waveforms landed 628 ms after the editor opened with nothing else running and
+4,133 ms beside the pre-render (654 ms of decode against 3,405). Holding the render behind it took
+that to 607-812 ms against a 604 ms control — the gap went from 3,505 ms to single digits.
+BUT THE EDITOR CARD, WHICH IS THE GATE'S OWN INSTRUMENT, STILL READ RED: worst second 51 ms at
+10.0s with the pre-render running against 7 ms with `?prerender=0`. Ten to eleven seconds is the
+SIZE PROBE, which encodes 300 real frames on the main thread to price the export steps. It holds the
+window too now, and the card reads GREEN at 10.8 ms against a 10.3 ms control, 0 of 934 samples over
+one frame. The window is refcounted (`holdEditorAhead(what)`), still bounded by
+EDITOR_OPENING_MAX_MS, and it closes on the LAST holder.
+WHAT IT COSTS: the pre-render, and only the pre-render. It trickles through the editor's first
+seconds instead of running flat out, so on that 40 s take it was ready 9.3 s after stop instead of
+about 3. That is F16's own trade in F16's own direction — the person is looking at the editor, the
+pre-render has until the press, and the press is no longer braked at all, so the file can never
+arrive later than it would have with no pre-render.
+(3) NOTHING FOR THE UPLOAD, and this is a refusal with a reason rather than an omission: it is one
+opaque `supabase.storage.upload()` of a finished file — no chunking, no progress events, it never
+touches the media engine, and it is user-initiated, so its deadline is already `now`.
+NO NEW SWITCH: `?bgpace=0` still turns the whole brake off and is the positive control; with it off
+there is no brake for a claim to lift. U4's rule is that the switch count only goes down.
+GATES: typecheck green, `npm test` 1243/1243 (6 new — the claim, the two-holder window, that a take
+still outranks both, and that a disposed job stops hearing the broker). `npm run oracle` (v2) PASS
+1/1. `oracle --engine=v1` reads RED on export throughput AND SO DOES HEAD RUN COLD BESIDE IT (branch
+0.79x/0.81x against HEAD 0.75x/0.75x, both INCONCLUSIVE, machine at load mean 49-63 %) — and E3
+cannot reach that cell at all: the oracle drives `experimental.html`, which mounts no editor and
+starts no pre-render.
+`npm run oracle:load` PASS, and it took four runs to say anything, which is the honest part. It first
+died with no report at all, then returned its own "SOURCE-STARVED ... this run says nothing about the
+engine" at load average 31, then came back composite-FAIL — and a control worktree at the pre-E3
+commit PASSED. That control was NOT a discriminator: its source ran at 40.8/49.9 fps against the
+branch run's 34.3/30.6, i.e. a different machine. Re-run BACK TO BACK with it the branch is PASS —
+composite tail 294 ms at a 42.5 fps source (the other composite cell watchdog-aborted, which the rig
+reports rather than counts), raw tail 27/31 ms and 30.1/30.2 fps against a 30 fps source, against the
+control's composite 88/-2 ms and raw 57/32 ms. Two adjacent runs, both PASS.
+Evidence: docs/qa/e3-claimpace-{before,after}.json, docs/qa/e3-laneart-{before,after}.json; rigs
+`scripts/e3-claimpace.mjs`, `scripts/e3-laneart.mjs`.
