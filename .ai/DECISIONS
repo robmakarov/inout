@@ -1594,3 +1594,66 @@ which is what made it a five-minute fix instead of a silent wrong file.
 GATES: oracle PASS (sync 42.1/57.7 ms, instant and smartcut still taken on a default export) ·
 fidelity PASS (render toneErr 0.04 dB, instant 6.05 dB, separation 55.9/67.9 dB) · typecheck green ·
 1259 tests, 10 new. Evidence docs/qa/o10b-multitrack.json; files in ~/Downloads/o10b-*.mp4.
+
+session 2026-09-05 — OVERNIGHT ("go overnight, tasks from roadmap that you can do without me one by
+one, dont stop"). TWO TASKS CLOSED AND FIVE DEFECTS FIXED; every default unmoved.
+
+U4 THE SWITCH MESS. There were **50 switches, not the 37 anyone had counted** — `scripts/switch-census.mjs`
+walks src/app and src/core and refuses to ignore a read whose parameter name is a variable, which is
+how four of them (`screensize`, `camsize`, `screenfps`, `camfps`) had stayed written down NOWHERE.
+`src/core/switches.ts` is now the one home; the `/?test` panel and docs/FLAGS.md's index are GENERATED
+from it, so neither can name fewer than there are. The state line is ALWAYS on the capture screen —
+"default" or "N changed" — and "changed" means SET, never "differs from a constant", because three
+defaults are derived from the quality slider and a constant would have lied the moment he moved it.
+Reset clears storage AND strips the URL. THE COUNT ONLY GOES DOWN: `scripts/switch-gate.mjs` runs in
+build-gate.sh and refuses a push that adds a switch or raises the ceiling (proven to refuse on the real
+registry, not only on fixtures). TWO DEFECTS FELL OUT OF BUILDING THE GATE: `?singlegen=capture` was a
+panel position that could never be reached (J6 deleted the rung, the type still offered it), and the
+maxladder row read ON while the switch was set to off. THE CULL: 18 harness · 19 fallback · 4 product ·
+**9 ANSWERED AND ROBERT'S, one word each — `nativeres` `sourceframe` `maxladder` `floor` `floorres`
+`audiotracks` `loudness` `prerender` `colour`**. "Under 10" is not reachable without deleting runtime
+fallbacks or harness knobs, and neither is anyone's to delete. GATES: oracle PASS (sync 58.2/78.8 ms,
+inst=instant, trim=smartcut), typecheck, 1340 tests. **U4 was on the "do not take without Robert" line
+and was taken on his overnight instruction, which is newer; the one thing he can SEE is that state
+line, and it is his to keep or send back behind `/?test`.**
+
+O10c THE NOISE GATE, WIRED AND OFF. The previous session backed a first wiring out because the gate
+holds 768 samples (16 ms) and writing its output at the chunk's own position shifts the soundtrack
+that much late. Every sample is written at its OWN absolute position instead: `oracle
+--query=noisegate=on` reads **sync 42.1/57.0 ms against a 65.7/78.0 ms control**. TWO DEFECTS, BOTH
+FOUND BY AN INSTRUMENT AND NOT BY READING: (1) `StreamingGate.flush()` DROPPED the take's last samples
+(192 on a 0.5 s signal) — a truncation is a length error and therefore a sync error; (2) **a sustained
+tone was gated as a noise bed** — `oracle-fidelity --query=noisegate=on` came back RED on both takes at
+**5.93 dB of tone error**, because a held sine reads `steady = 1.000` and its bin's floor sits 76.1 dB
+above the median floor across bins, so it was gated against its own level. Stationarity alone cannot
+say "bed"; a bin is now a bed only within **40 dB** of the take's own median floor (generous for HUM,
+which is narrowband, stationary and genuinely a bed). AFTER: render toneErr **0.03 dB = the control**,
+and a take through the real export worker pulls **0 of 0 bins** where it pulled 16,466 of 16,828.
+The copying paths decline by name (third application of the `?cq=` lesson). NOT MEASURED AND SAID
+RATHER THAN GLOSSED: speech through the PRODUCT — no rig feeds speech into a take and the synthetic
+source is a tone — and the A/B files for his ear. The default does not move.
+
+FOUR MORE DEFECTS, from BACKLOG's own Inbox and from reviewing the night's own work:
+· **Every take now says which build made it** (`Recording.buildId`, in the card's headline). A long
+  take is ALWAYS made on an old build — the tab must be open before the take starts and the service
+  worker serves what it cached — and Robert's 71.7-min take ran a build that predated J1 by seven
+  minutes while a session went looking for a bug in J1.
+· **Audio that dies in the MIDDLE can no longer pass the card.** That take lost its tab audio at
+  52.5 min, carried a `silentTailMs` of 1840 ms because the open run restarted, and was graded PASS
+  while a quarter of it was digital zeros. The take now carries `silentTotalMs` — every zero after the
+  channel was first HEARD — and the dimension convicts on it.
+· **The instant path asks the geometry question its own contract always stated.** `allowPacketCopy`
+  compared the step's NAME to '1080p' at three sites while `defaultTierForTake` returns the step the
+  take was RECORDED at; so an unedited 2560x1662 export re-rendered ("i moved nothing in 5 minutes
+  video and nothing was instant stil"). Costs nothing on the shipped rung since J6 leaves no composite
+  to fence, and it still bites with `?glue=record`.
+· **The cached audio artifact is keyed on the noise gate** — caught reviewing O10c before pushing.
+  `RenderFlagPrint` had it and `audioDescriptorOf`, which lists its flags one at a time, did not: a
+  gated export would have been handed the UNGATED audio out of the cache. The pre-render key's flag
+  test now checks its own list against `currentRenderFlags()`, because it had already gone stale twice.
+
+MEASUREMENT: one ≥60-min `--real` max60 soak was run overnight on prod, and the `--tab` lane — the only
+one that can ever be green on `channels`, because macOS gives Chrome no system audio off a whole-screen
+capture — was BUILT (it opens a painting, sounding tab, sizes the window to the display and answers the
+picker by title). A weakness the `--real` run measured and the tab lane fixes: a static screen falls to
+1.5 MB/min, so an hour of it is an honest memory soak and says nothing about max60 throughput.
