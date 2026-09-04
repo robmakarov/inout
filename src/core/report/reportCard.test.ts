@@ -625,3 +625,59 @@ describe('the picture line names what made the composite', () => {
     expect(picture(fiftyMinuteTake())).not.toContain('composed by')
   })
 })
+
+describe('audio that dies in the MIDDLE of a take is convicted', () => {
+  /**
+   * THE CASE THIS WAS WRITTEN FOR, and the case it used to pass. Robert's
+   * 71.7-minute take (`rec_yx4mi1or851p`, 2026-09-04) lost its tab audio at
+   * 52.5 min and never got it back; its `silentTailMs` read 1840 ms, because a
+   * revive delivered one batch near the end and the open run started again from
+   * zero. `audio-continuity` graded it PASS at "0.0%".
+   */
+  const channel = (diagnostics: Record<string, number>) => ({
+    id: 'ch_tab',
+    kind: 'sysaudio' as const,
+    media: 'audio' as const,
+    mimeType: 'audio/webm',
+    blobKey: 'k',
+    startOffsetMs: 0,
+    durationMs: 4_300_000,
+    silentTailMs: diagnostics.silentTailMs,
+    diagnostics,
+  })
+
+  const take = (diagnostics: Record<string, number>) =>
+    buildReportCard({
+      id: 'rec_yx4mi1or851p',
+      createdAt: 1,
+      durationMs: 4_300_000,
+      channels: [channel(diagnostics)],
+    } as never)
+
+  const continuity = (card: ReturnType<typeof buildReportCard>) =>
+    card.dimensions.find((d) => d.id === 'audio-continuity')!
+
+  it('FAILS a channel silent for a quarter of the take with a tiny tail', () => {
+    const d = continuity(take({ silentTailMs: 1_840, silentTotalMs: 1_150_000 }))
+    expect(d.status).toBe('fail')
+    expect(d.headline).toMatch(/spread through the take, not only at the end/)
+    expect(d.headline).toMatch(/unbroken tail was just/)
+  })
+
+  it('still passes a healthy channel', () => {
+    expect(continuity(take({ silentTailMs: 120, silentTotalMs: 400 })).status).toBe('pass')
+  })
+
+  it('reads the tail exactly as before on a take made without the new counter', () => {
+    // Absent silentTotalMs: the old arithmetic, so an old take is graded the
+    // way it was graded when it was made.
+    expect(continuity(take({ silentTailMs: 1_840 })).status).toBe('pass')
+    expect(continuity(take({ silentTailMs: 2_000_000 })).status).toBe('fail')
+  })
+
+  it('notes scattered silence even when it is under the band', () => {
+    const d = continuity(take({ silentTailMs: 100, silentTotalMs: 30_000 }))
+    expect(d.status).toBe('pass')
+    expect(d.detail).toMatch(/silent in total/)
+  })
+})

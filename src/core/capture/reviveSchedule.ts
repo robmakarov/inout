@@ -59,6 +59,22 @@ export class ReviveSchedule {
   private runStart: number | null = null
   private due: number
   private attemptsMade = 0
+  /**
+   * TOTAL pure-digital silence after the channel was first heard, frames —
+   * NOT the open run.
+   *
+   * Robert's 71.7-minute take (`rec_yx4mi1or851p`, 2026-09-04) lost its tab
+   * audio at 52.5 min and never got it back, and the card graded
+   * `audio-continuity` PASS on "silent tail 1840ms (0.0%)": the tail counter
+   * reads the OPEN run, and a run that is interrupted — by a revive that
+   * delivered one batch, by a moment of noise — starts again from zero. Zeros
+   * in the MIDDLE of a take were invisible to every counter this take carried.
+   */
+  private silentTotal = 0
+  /** Has this channel ever carried signal? Silence BEFORE the first sound is a
+   *  channel that never arrived, which is `Recording.missing`'s subject and not
+   *  this one — counting it here would convict every take of a muted mic. */
+  private sawSignal = false
 
   constructor(opts: { sampleRate: number; baseSec?: number; ceilingSec?: number }) {
     const rate = opts.sampleRate
@@ -79,6 +95,16 @@ export class ReviveSchedule {
   }
 
   /**
+   * Signal actually arrived in a batch — as opposed to `reset()`, which the
+   * unmute path also calls to give a recovered track its ladder back. Only
+   * this one may claim the channel has been HEARD.
+   */
+  noteSignal(): void {
+    this.sawSignal = true
+    this.reset()
+  }
+
+  /**
    * One batch of pure digital silence. `framesWritten` is where its FIRST
    * sample sits on the channel timeline, `frames` how long it is. True means an
    * attempt is due for this batch — including an attempt the caller then
@@ -86,6 +112,7 @@ export class ReviveSchedule {
    * still a look at the channel and must not be free.
    */
   silentBatch(framesWritten: number, frames: number): boolean {
+    if (this.sawSignal) this.silentTotal += frames
     this.runStart ??= framesWritten
     if (framesWritten + frames - this.runStart < this.due) return false
     this.attemptsMade++
@@ -101,6 +128,17 @@ export class ReviveSchedule {
   /** Where the open silent run began, or null when the input has signal in it. */
   get runStartFrame(): number | null {
     return this.runStart
+  }
+
+  /** Every frame of silence since the channel was first heard — the number the
+   *  open-run tail cannot see. 0 on a channel that never carried sound. */
+  get silentFramesTotal(): number {
+    return this.silentTotal
+  }
+
+  /** Whether this channel ever carried signal at all. */
+  get heardSignal(): boolean {
+    return this.sawSignal
   }
 
   /** Length of the open silent run at a timeline position; 0 when there is none. */

@@ -229,6 +229,9 @@ export interface MeasuredAudioHandle {
      *  ended — the witness for "tab audio dies after a while": a muted or dead
      *  source records exact zeros no listener can tell from quiet. */
     silentTailMs: number
+    /** Every millisecond of pure silence AFTER this channel was first heard —
+     *  the number the open-run tail above cannot see. */
+    silentTotalMs: number
     /** The same witnesses in persistable form — session stores them on the
      *  channel so the take carries its own evidence (the console dies with the tab). */
     diagnostics: import('@core/types').ChannelDiagnostics
@@ -899,7 +902,10 @@ export async function startMeasuredAudioCapture(opts: {
           noteEvent('revive-recovered')
         }
         lastReviveFrame = null
-        rev.reset()
+        // noteSignal, not reset: this branch is SIGNAL arriving, and only
+        // signal may mark the channel as having been heard. The unmute handler
+        // calls reset() for the ladder alone (reviveSchedule.ts).
+        rev.noteSignal()
         reviveSkipLogged = false
       } else {
         // THE BACKOFF ADVANCES ON EVERY CHECK, INCLUDING A SKIP — and it has
@@ -1290,6 +1296,22 @@ export async function startMeasuredAudioCapture(opts: {
         silentRunStartFrame !== null
           ? ((framesWritten - silentRunStartFrame) / sampleRate) * 1000
           : 0
+      /**
+       * EVERY zero after the channel was first heard, not just the open run.
+       * A channel that dies at 52 minutes and is briefly revived reads a tail
+       * of a second or two while nineteen minutes of the take are silent — the
+       * exact shape of Robert's `rec_yx4mi1or851p`, which the card passed.
+       */
+      const silentTotalMs = revive
+        ? (revive.silentFramesTotal / sampleRate) * 1000
+        : 0
+      if (silentTotalMs > silentTailMs + 10_000) {
+        console.warn(
+          `[capture] ${label} audio was silent for ${(silentTotalMs / 1000).toFixed(1)}s IN TOTAL ` +
+            `while its unbroken tail was only ${(silentTailMs / 1000).toFixed(1)}s — the zeros are in ` +
+            `the MIDDLE of this channel, which is what a revive that delivered one batch looks like.`,
+        )
+      }
       if (silentTailMs > 10_000) {
         console.warn(
           `[capture] ${label} audio input was PURE SILENCE for the final ${(silentTailMs / 1000).toFixed(1)}s — ` +
@@ -1315,6 +1337,7 @@ export async function startMeasuredAudioCapture(opts: {
         paddedMs,
         trimmedMs,
         silentTailMs,
+        silentTotalMs,
         diagnostics: {
           // S1: WRITTEN EVEN WHEN THEY ARE ZERO. A channel that carries no
           // counter is indistinguishable from one nobody counted — the same
@@ -1325,6 +1348,7 @@ export async function startMeasuredAudioCapture(opts: {
           paddedMs: Math.round(paddedMs),
           trimmedMs: Math.round(trimmedMs),
           silentTailMs: Math.round(silentTailMs),
+        ...(revive?.heardSignal ? { silentTotalMs: Math.round(silentTotalMs) } : null),
           revivals,
           // B12: which of the three ways audio time goes missing this take hit.
           // Zeros are the finding on a healthy take, so they are written.

@@ -376,16 +376,45 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
         const share = c.durationMs > 0 ? tail / c.durationMs : 0
         const muted = (c.diagnostics?.events ?? []).some((e) => e.type === 'mute')
         const from = Math.max(0, c.durationMs - tail)
-        if (tail >= SILENT_TAIL_FAIL_MS && share >= SILENT_TAIL_FAIL_RATIO) {
+        /**
+         * SILENCE IN THE MIDDLE COUNTS TOO — and until 2026-09-05 it did not.
+         *
+         * This dimension read the open silent RUN, so a channel whose zeros
+         * were interrupted once — by a revive that delivered a single batch,
+         * by a moment of noise — reported a tail of a second or two however
+         * much of the take was silent. Robert's 71.7-minute take
+         * (`rec_yx4mi1or851p`) lost its tab audio at 52.5 min, never got it
+         * back, carried `silentTailMs` of 1840 ms, and this dimension graded it
+         * PASS at "0.0%". A gate that cannot catch the case it was written for
+         * is not a gate.
+         *
+         * `silentTotalMs` is every zero after the channel was first HEARD, so
+         * silence before any sound (a channel that never arrived, which is
+         * `Recording.missing`'s subject) still convicts nobody. Absent on takes
+         * made before the counter existed, where this reads the tail exactly as
+         * it used to.
+         */
+        const total = Math.max(tail, c.diagnostics?.silentTotalMs ?? 0)
+        const totalShare = c.durationMs > 0 ? total / c.durationMs : 0
+        const scattered = total > tail + SILENT_TAIL_FAIL_MS
+        if (total >= SILENT_TAIL_FAIL_MS && totalShare >= SILENT_TAIL_FAIL_RATIO) {
           bad.push(c.kind)
           lost.push(
-            `${LABEL[c.kind]} went to digital zeros ${dur(from)} in and never came back — ` +
-              `${dur(tail)} of ${dur(c.durationMs)} (${pct(share)})` +
-              (muted ? ', and the source muted itself' : ''),
+            scattered
+              ? `${LABEL[c.kind]} was digital zeros for ${dur(total)} of ${dur(c.durationMs)} ` +
+                `(${pct(totalShare)}) — spread through the take, not only at the end ` +
+                `(its unbroken tail was just ${dur(tail)})` +
+                (muted ? ', and the source muted itself' : '')
+              : `${LABEL[c.kind]} went to digital zeros ${dur(from)} in and never came back — ` +
+                `${dur(total)} of ${dur(c.durationMs)} (${pct(totalShare)})` +
+                (muted ? ', and the source muted itself' : ''),
           )
           notes.push(lost[lost.length - 1])
         } else {
-          notes.push(`${LABEL[c.kind]} silent tail ${Math.round(tail)}ms (${pct(share)})`)
+          notes.push(
+            `${LABEL[c.kind]} silent tail ${Math.round(tail)}ms (${pct(share)})` +
+              (scattered ? `, ${dur(total)} silent in total` : ''),
+          )
         }
       }
       dims.push({

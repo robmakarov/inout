@@ -45,6 +45,19 @@ export interface ChannelDiagnostics {
   /** Input was pure digital silence for this long when the segment ended, ms. */
   silentTailMs?: number
   /**
+   * EVERY millisecond of pure digital silence AFTER this channel was first
+   * heard — not the open run at the end.
+   *
+   * `silentTailMs` reads the OPEN silent run, and a run interrupted by a single
+   * batch of noise starts again from zero. Robert's 71.7-minute take lost its
+   * tab audio at 52.5 min, never got it back, and carried `silentTailMs` of
+   * 1840 ms — so the card graded `audio-continuity` PASS on a take that was
+   * silent for a quarter of its length. Absent on a channel that never carried
+   * sound at all (that is `Recording.missing`'s subject) and on every take made
+   * before this counter existed.
+   */
+  silentTotalMs?: number
+  /**
    * B12 — AUDIO THE PLATFORM CAPTURED AND THIS PAGE NEVER RECEIVED, ms.
    *
    * Read off the tap's own chunk timestamps: `MediaStreamTrackProcessor` drops
