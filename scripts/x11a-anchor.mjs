@@ -33,10 +33,11 @@
  *   2. THE ARMS INTERLEAVED, alternating order per rep, so a machine that
  *      drifts over the run cannot be read as an arm difference. B12's
  *      `?audiobuf=0` A/B is the shape.
- *   3. THE SOURCE'S OWN STATE ON EVERY CELL. Cells come up with the synthetic
- *      AudioContext either fresh or long-running (`ctx=` in the product's own
- *      first-sample line) and the anchor readings tracked that split. It is
- *      printed per cell and the arms are checked for balance across it.
+ *   3. THE SOURCE'S OWN STATE ON EVERY CELL. Cells come up with the audio clock
+ *      either fresh or long-running (`ctx=` in the product's own first-sample
+ *      line) and the anchor tracks that split by ~110 ms. It cannot be pinned
+ *      from the rig (see below), so it is printed on every line and beaten by
+ *      pairing both arms inside one browser process.
  *
  *   node scripts/x11a-anchor.mjs --url=http://localhost:4173/ --reps=6
  *   node scripts/x11a-anchor.mjs --reps=3 --take=12        # a fast look
@@ -76,22 +77,28 @@ const TOL_MS = Number(arg('tol', '5'))
 const BAND = Number(arg('band', String(QUIET_BUSY)))
 const MIN_REPS = Number(arg('minReps', '3'))
 const OUT = arg('out', join(tmpdir(), `x11a-anchor-${Date.now()}.json`))
-const ARMS = arg('arms', 'main,worker').split(',')
+const THREADS = arg('arms', 'main,worker').split(',')
 /**
- * PIN THE SOURCE STATE — the wip note's requirement 3, and the first thing this
- * rig measured. A cell comes up with the renderer's audio clock either already
- * running or starting at the press, which the product's own first-sample line
- * reports as `ctx=`: an unpinned pair read ctx 10.338s against 0.003s and
- * anchors 73.4 ms against 40.2 ms — a source-state difference SIX TIMES the
- * arm difference under test, and the reason the earlier re-measure could not be
- * believed.
- *
- * `warm` opens a silent AudioContext of the rig's own right after load, so the
- * clock is running before the press in EVERY cell; `off` takes whatever the
- * machine gives and reports it. The pin is a separate context from the take's,
- * it runs in both arms identically, and Chrome is launched `--mute-audio`.
+ * THE CONTROL IS THE SAME ARM TWICE. `--arms=main,main` runs two main-thread
+ * cells per rep and pairs them exactly as a real A/B is paired, so the paired
+ * Δ it prints is the rig's own noise floor on this machine — the number any
+ * arm difference has to beat before it is a difference at all.
  */
-const PIN = arg('pin', 'warm')
+const CONTROL = THREADS[0] === THREADS[1]
+const ARMS = CONTROL ? [`${THREADS[0]}#1`, `${THREADS[1]}#2`] : THREADS
+/**
+ * THE SOURCE'S OWN AUDIO CLOCK IS NOT PINNABLE FROM HERE, and that was worth
+ * one attempt to establish. A cell comes up with the renderer's audio clock
+ * either fresh (`ctx=0.00x s` in the product's first-sample line) or already
+ * running (`ctx=12-14 s`, i.e. since page load), and the anchor tracks the
+ * split hard: fresh cells read a median ~36 ms, warm cells ~148 ms. Opening a
+ * silent AudioContext of the rig's own right after load — the obvious pin, and
+ * `--autoplay-policy=no-user-gesture-required` is already on every rig Chrome —
+ * does NOT decide it: with the pin running and 8.3 s old, cells still came up
+ * on both sides. So the state is REPORTED per cell (`ctx` on every line) and
+ * beaten by pairing instead, and the lever is gone rather than left lying about
+ * looking like a control.
+ */
 
 const START_BTN = `document.querySelector('button[aria-label="Start recording"]')`
 const STOP_BTN = `document.querySelector('button[aria-label="Stop recording"]')`
@@ -187,21 +194,6 @@ const CLEAR_STORE = `(async () => {
   return JSON.stringify(out)
 })()`
 
-/** A silent context of the rig's own, so the renderer's audio clock is already
- *  running when the take arms. `--autoplay-policy=no-user-gesture-required` is
- *  already on every rig Chrome (lib/chrome.mjs), so it starts without a click. */
-const PIN_WARM = `
-(() => {
-  if (window.__x11aPin) return 'already'
-  const ctx = new AudioContext({ sampleRate: 48000 })
-  const osc = new OscillatorNode(ctx, { frequency: 1 })
-  const g = new GainNode(ctx, { gain: 0.00001 })
-  osc.connect(g).connect(ctx.destination)
-  osc.start()
-  window.__x11aPin = ctx
-  return ctx.state
-})()`
-const PIN_AGE = `(() => (window.__x11aPin ? window.__x11aPin.currentTime : null))()`
 
 async function waitFor(s, expr, budgetMs, label) {
   const deadline = Date.now() + budgetMs
@@ -232,7 +224,7 @@ function readSourceState(lines) {
  * The page is reloaded onto the arm's own URL so each take is still the FIRST
  * take of a fresh page, which is the state every other rig measures.
  */
-async function cell(chrome, arm, rep, position) {
+async function cell(chrome, arm, rep, position, tag = arm) {
   const quiet = await waitForQuiet({ band: BAND, label: `x11a-anchor ${arm}` })
   const load = startLoadSampler()
   const goto = async (url) => {
@@ -247,14 +239,7 @@ async function cell(chrome, arm, rep, position) {
     const visible = await chrome.evaluate('document.visibilityState')
     if (visible !== 'visible') throw new Error(`the page is ${visible}`)
     await waitFor(chrome, `!!${START_BTN}`, 90_000, 'the record button')
-    if (PIN === 'warm') {
-      const state = await chrome.evaluate(PIN_WARM, 30_000)
-      // A pin that never left `suspended` would be no pin at all, and a cell
-      // that silently ran unpinned is exactly the confound this removes.
-      await waitFor(chrome, `(${PIN_AGE}) > 0.05`, 15_000, `the pinned audio clock (state=${state})`)
-    }
     await sleep(SETTLE_MS)
-    const pinAgeS = PIN === 'warm' ? await chrome.evaluate(PIN_AGE, 30_000) : null
     const before = chrome.consoleLines.length
 
     const startWall = await chrome.evaluate(
@@ -283,14 +268,13 @@ async function cell(chrome, arm, rep, position) {
     if (readers.length && !readers.every((r) => r === arm))
       throw new Error(`asked for reader=${arm}, the take used ${readers.join('+')}`)
     return {
-      arm,
+      arm: tag,
+      thread: arm,
       rep,
       position,
       ok: true,
       quietBefore: Math.round(quiet.busy * 1000) / 1000,
       cleared: JSON.parse(cleared ?? 'null'),
-      pin: PIN,
-      pinAgeS: pinAgeS === null ? null : Math.round(pinAgeS * 1000) / 1000,
       load: load.stop(),
       wallMs: stopWall - startWall,
       takeId: take.id,
@@ -302,7 +286,7 @@ async function cell(chrome, arm, rep, position) {
       anchorLines: lines.filter((l) => /anchor|reader=/.test(l)).slice(-8),
     }
   } catch (err) {
-    return { arm, rep, position, ok: false, error: String(err.message ?? err), load: load.stop() }
+    return { arm: tag, thread: arm, rep, position, ok: false, error: String(err.message ?? err), load: load.stop() }
   }
 }
 
@@ -342,7 +326,7 @@ async function main() {
   const cells = []
   console.error(
     `x11a-anchor: ${REPS} reps × ${ARMS.join('/')} paired in one Chrome · ${TAKE_SEC}s takes · ` +
-      `${URL_BASE} · pin ${PIN} · tol ${TOL_MS}ms`,
+      `${URL_BASE} · tol ${TOL_MS}ms`,
   )
   for (let rep = 1; rep <= REPS; rep++) {
     // ALTERNATE THE ORDER INSIDE THE PAIR. The second take in a browser process
@@ -350,14 +334,17 @@ async function main() {
     // that has run), so the order is swapped every rep and the position is
     // carried on every cell — a difference that is really about position then
     // cancels in the paired mean instead of being read as an arm.
-    const order = rep % 2 === 1 ? ARMS : [...ARMS].reverse()
+    // A control's two cells are the same thread, so there is nothing to
+    // alternate — the labels stay with the slot and the order stays fixed.
+    const pairs = ARMS.map((tag, i) => ({ tag, thread: THREADS[i] }))
+    const order = CONTROL || rep % 2 === 1 ? pairs : [...pairs].reverse()
     const profile = mkdtempSync(join(tmpdir(), `inout-x11a-${process.pid}-${rep}-`))
     let chrome = null
     try {
       chrome = await launchChromeRetrying({ bin, profile, url: 'about:blank', headed: true })
       await sleep(1500)
-      for (const [i, arm] of order.entries()) {
-        const c = await cell(chrome, arm, rep, i + 1)
+      for (const [i, slot] of order.entries()) {
+        const c = await cell(chrome, slot.thread, rep, i + 1, slot.tag)
         cells.push(c)
         console.error(`x11a-anchor: ${cellLine(c)}`)
       }
@@ -423,7 +410,6 @@ async function main() {
     takeSec: TAKE_SEC,
     tolMs: TOL_MS,
     band: BAND,
-    pin: PIN,
     arms: ARMS,
     cells,
     summary,
@@ -438,11 +424,11 @@ async function main() {
     )
     console.error(`x11a-anchor: ${row.kind} anchor — ${parts.join(' vs ')}`)
     const hand = good
-      .filter((c) => c.arm === 'worker')
+      .filter((c) => c.thread === 'worker')
       .map((c) => c.channels.find((ch) => ch.kind === row.kind)?.tapHandoffMs)
       .filter((x) => typeof x === 'number')
     const handP95 = good
-      .filter((c) => c.arm === 'worker')
+      .filter((c) => c.thread === 'worker')
       .map((c) => c.channels.find((ch) => ch.kind === row.kind)?.tapHandoffP95Ms)
       .filter((x) => typeof x === 'number')
     if (hand.length)
@@ -467,6 +453,13 @@ async function main() {
         'The wip note is explicit that an anchor read off a loaded machine is not evidence.',
     )
     process.exit(2)
+  }
+  if (CONTROL) {
+    console.error(
+      `x11a-anchor: CONTROL RUN (${THREADS[0]} against itself) — the Δ above is this machine's own ` +
+        'noise floor on this measurement, not an arm difference. No verdict is drawn from it.',
+    )
+    return
   }
   const late = summary.filter((r) => r.deltaMs !== null && Math.abs(r.deltaMs) > TOL_MS)
   if (late.length) {
