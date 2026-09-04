@@ -102,21 +102,45 @@ async function lane(name, query, out) {
       .reduce((a, b) => a + b, 0)
 
     // G7's editor card samples the editor's own first 15 s and stops itself.
-    for (let i = 0; i < 40; i++) {
+    // TWO TRAPS, both paid for once: `__inoutEditorReport` is ASYNC (main.tsx),
+    // so stringifying the promise reads back `{}`; and it answers with a CARD
+    // that says `unmeasured` long before the window closes, so breaking on the
+    // first truthy answer records the sampler still running rather than what it
+    // found. Wait for a dimension that is not `unmeasured`.
+    for (let i = 0; i < 30; i++) {
       const card = await chrome.evaluate(
-        // `__inoutEditorReport` is ASYNC (main.tsx). Stringifying the promise
-        // instead of its answer reads back `{}`, which is truthy and has no
-        // dimensions — a card that says "no card".
         `(async () => { try { const c = await globalThis.__inoutEditorReport?.(); return c ? JSON.stringify(c) : null } catch { return null } })()`,
       )
       if (card) {
-        rec.editorCard = JSON.parse(card)
-        break
+        const parsed = JSON.parse(card)
+        rec.editorCard = parsed
+        if (parsed?.dimensions?.some((d) => d.status && d.status !== 'unmeasured')) break
       }
       await sleep(1000)
     }
     const dim = rec.editorCard?.dimensions?.[0]
     rec.editorVerdict = dim ? `${rec.editorCard.verdict}: ${dim.status} — ${dim.detail}` : 'no card'
+
+    /**
+     * F16's OWN GATE, unmoved: holding the render behind the editor's picture
+     * only ever costs the pre-render TIME, and the pre-render's whole contract
+     * is that it may only SAVE it. So say what it cost — the app prints
+     * "pre-render ready after Ns" when the file is waiting.
+     */
+    for (let i = 0; i < 60; i++) {
+      const line = chrome.consoleLines.find((l) => l.includes('pre-render ready after'))
+      if (line) {
+        rec.prerenderReadyLine = line
+        rec.prerenderReadySec = Number(/ready after ([\d.]+)s/.exec(line)?.[1] ?? 0)
+        break
+      }
+      if (chrome.consoleLines.some((l) => l.includes('pre-render did not finish'))) {
+        rec.prerenderReadyLine = 'did not finish'
+        break
+      }
+      if (!rec.prerenderStarted) break
+      await sleep(1000)
+    }
   } finally {
     await quitChrome(chrome).catch(() => undefined)
     rmSync(profile, { recursive: true, force: true })
@@ -124,7 +148,7 @@ async function lane(name, query, out) {
   out.lanes.push(rec)
   console.error(
     `e3-laneart: ${name} — art ${rec.artCount} lanes, done ${rec.artDoneMs} ms after the editor opened ` +
-      `(${rec.artWallMs} ms of decode); ${rec.editorVerdict}`,
+      `(${rec.artWallMs} ms of decode); pre-render ready ${rec.prerenderReadySec ?? 'n/a'}s; ${rec.editorVerdict}`,
   )
   return rec
 }

@@ -9,6 +9,7 @@ import {
   tiersForTake,
 } from '@core/compose/quality'
 import type { EditState, Recording } from '@core/types'
+import { holdEditorAhead } from '@core/backgroundWork'
 import type { SizeEstimate } from '@core/compose/quality'
 import { humanBytes } from '@app/lib/format'
 import { sizeConfidence, sizeNotice, type ProbeState } from '@app/lib/sizeConfidence'
@@ -102,6 +103,20 @@ export function QualityBar({
     let alive = true
     setMeasured(null)
     setProbe('running')
+    /**
+     * E3 — THE PROBE HOLDS THE BACKGROUND RENDER BEHIND IT WHILE IT RUNS.
+     *
+     * It decodes and encodes 300 real frames on this thread to price the steps,
+     * about 11 s after the editor opens, and it is the last thing standing
+     * between the person and a number the panel has promised them
+     * ("measuring…"). At the end of a take whose export must render, the at-stop
+     * pre-render is on the same media engine by then. MEASURED on prod with
+     * G7's editor card (`scripts/e3-laneart.mjs`): the editor's first 15 s read
+     * GREEN at a worst second of 7 ms with `?prerender=0` and RED at 51 ms with
+     * the pre-render running, and the worst second landed at 10-11 s — the
+     * probe's own window, not the lane art's.
+     */
+    const release = holdEditorAhead('the export size probe')
     // Dynamic, so the probe's decoder + encoder code is not in the bundle this
     // needs to render (O7's first-paint rule, one level down).
     void (async () => {
@@ -129,10 +144,14 @@ export function QualityBar({
       } catch {
         if (alive) setProbe('unavailable')
       }
-    })()
+    })().finally(release)
     return () => {
       alive = false
       abort.abort()
+      // A probe that is still inside an encode it cannot interrupt must not
+      // leave the render held down after the panel has gone. Releasing twice
+      // is a no-op.
+      release()
     }
   }, [recording, outputDurationMs])
 

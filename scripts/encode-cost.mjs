@@ -40,6 +40,30 @@
  *     level resolved                avc1.640033 (High@5.1)
  *     --parallel=1,2,3,4,6          43.4 · 77.2 · 77.8 · 77.8 · 77.4 aggregate
  *
+ * AND WHAT IT MEASURES NOW THE PAINTING IS OUT OF THE LOOP (2026-09-04, same
+ * size, same 240 frames, RING pre-painted frames — see the note above run()).
+ * Every single-lane number above was partly the rig's own 2D drawing; these are
+ * the encoder:
+ *
+ *     bitrate 8 Mbps prefer-hardware   78.9 fps · 12.68 ms/frame · 24.7 kB
+ *     quantizer qp20 (what ships)      74.1 fps · 13.49 ms/frame · 16.5 kB
+ *     HEVC bitrate 8 Mbps  hardware    71.0 fps · 14.09 ms/frame · 22.5 kB
+ *     HEVC quantizer qp20  hardware    67.1 fps · 14.91 ms/frame · 16.7 kB
+ *     queue 16 instead of 4            no move (91 % wait instead of 96 %)
+ *
+ * THREE THINGS THAT ANSWER "MAKE THE RENDER 4x FASTER" (Robert 2026-09-04):
+ * (1) the shipped config is 74.1 fps x 5.94 Mpx = 440 Mpx/s, and a max take
+ * asks 3024x1964x60 = 356 Mpx/s of OUTPUT — so max60 can never be much better
+ * than realtime on this machine, whatever the schedule. (2) qp20 costs 6 % over
+ * a bitrate target here, not the 57 % the end-to-end wall shows: that 57 % is
+ * bytes through the muxer, not the encoder. (3) HEVC IS 10 % SLOWER, so O11d's
+ * codec ladder is not a speed lever on this hardware — and Chrome ignores the
+ * per-frame `quantizer` for HEVC (qp20 and qp24 return the same 16.7 kB), so a
+ * quality-matched HEVC cell needs the bitrate rung. vp9 and av1 answer
+ * prefer-hardware=no at every size, so AVC and HEVC are the whole choice.
+ *
+ * THE PARALLEL NUMBERS ABOVE STILL PREDATE THE RING and were not re-run.
+ *
  * THESE NUMBERS ARE AN UPPER BOUND ON A SYNTHETIC FRAME. THEY ARE NOT A RENDER
  * PREDICTION, and R1 paid a session to learn it: the clean 1.78x knee at two
  * sessions above is worth 1.04-1.07x on a 240 s take through the production
@@ -110,6 +134,23 @@ const SWEEP = [
     config: { bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' },
     opts: { qp: 20, queue: 16 },
   },
+  // O11d's rung, asked of the SAME engine on the same frames. HEVC is the only
+  // other codec this machine will encode in hardware (vp9 and av1 answer
+  // prefer-hardware=no at every size), so it is the whole of "cheaper frames".
+  {
+    label: 'HEVC quantizer qp20, prefer-hardware',
+    config: { family: 'hevc', bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' },
+    opts: { qp: 20 },
+  },
+  {
+    label: 'HEVC quantizer qp24, prefer-hardware',
+    config: { family: 'hevc', bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' },
+    opts: { qp: 24 },
+  },
+  {
+    label: 'HEVC bitrate 8Mbps, prefer-hardware',
+    config: { family: 'hevc', bitrate: 8e6, hardwareAcceleration: 'prefer-hardware' },
+  },
 ]
 /** What the export actually configures, and so the only honest parallel cell. */
 const SHIPPED = SWEEP.find((c) => c.label.includes('what ships'))
@@ -153,13 +194,36 @@ const LEVELS = [
   { code: '3E', maxFS: 139264 },  // 6.2
 ];
 
+// H.265 levels, as (string, MaxLumaPs in samples). Same rule as above: never
+// ask about a rung that cannot hold the frame. Main profile, main tier.
+const HEVC_LEVELS = [
+  { code: 'L120', maxPx: 2228224 },   // 4.0
+  { code: 'L123', maxPx: 2228224 },   // 4.1
+  { code: 'L150', maxPx: 8912896 },   // 5.0  — 3024x1964 is 5,939,136
+  { code: 'L153', maxPx: 8912896 },   // 5.1
+  { code: 'L156', maxPx: 8912896 },   // 5.2
+  { code: 'L180', maxPx: 35651584 },  // 6.0
+];
+
 async function resolveCodec(config) {
+  const { family, ...rest } = config;
+  if (family === 'hevc') {
+    const px = config.width * config.height;
+    for (const l of HEVC_LEVELS.filter((l) => l.maxPx >= px)) {
+      const codec = 'hvc1.1.6.' + l.code + '.B0';
+      try {
+        const s = await VideoEncoder.isConfigSupported({ ...rest, codec });
+        if (s && s.supported === true) return codec;
+      } catch (e) { /* a level this build does not know */ }
+    }
+    return null;
+  }
   const mbs = Math.ceil(config.width / 16) * Math.ceil(config.height / 16);
   const ladder = LEVELS.filter((l) => l.maxFS >= mbs);
   for (const l of ladder) {
     const codec = 'avc1.6400' + l.code;
     try {
-      const s = await VideoEncoder.isConfigSupported({ ...config, codec });
+      const s = await VideoEncoder.isConfigSupported({ ...rest, codec });
       if (s && s.supported === true) return codec;
     } catch (e) { /* a level this build does not know */ }
   }
@@ -182,6 +246,19 @@ function painter(canvas, ctx, width, height) {
   };
 }
 
+/**
+ * THE FRAMES ARE PAINTED ONCE, BEFORE THE CLOCK STARTS (2026-09-04).
+ *
+ * The loop used to paint every frame it encoded — a gradient plus 300 rects at
+ * the cell's own size — which at 3024x1964 is ~6 Mpx of 2D drawing per frame on
+ * the same GPU as the encoder. That is what made this rig read 43 fps where the
+ * production render sustains 84-99, and it is why R1's header says a cell here
+ * can be measuring its own painting. So the painting moved OUT: RING distinct
+ * frames are drawn up front and the measured loop only clones one and hands it
+ * over. What is timed is the encoder and nothing else.
+ */
+const RING = 12;
+
 /** Configure + warm. The first frames pay session setup no later frame pays. */
 async function prepare(cell, width, height) {
   const canvas = new OffscreenCanvas(width, height);
@@ -191,8 +268,15 @@ async function prepare(cell, width, height) {
   const queue = (cell.opts && cell.opts.queue) ?? 4;
   const seed = { codec: 'avc1.640028', width, height, framerate: 30, ...cell.config };
   const codec = await resolveCodec(seed);
-  if (!codec) return { error: 'unsupported at every AVC level' };
-  const config = { ...seed, codec };
+  if (!codec) return { error: 'unsupported at every level' };
+  const { family, ...rest } = seed;
+  const config = { ...rest, codec };
+  // The ring: RING distinct pictures, drawn before anything is timed.
+  const ring = [];
+  for (let i = 0; i < RING; i++) {
+    paint(i);
+    ring.push(new VideoFrame(canvas, { timestamp: (i * 1e6) / 30 }));
+  }
   const box = { out: 0, bytes: 0, err: null };
   const enc = new VideoEncoder({
     output: (c) => { box.out++; box.bytes += c.byteLength; },
@@ -200,25 +284,24 @@ async function prepare(cell, width, height) {
   });
   try { enc.configure(config); } catch (e) { return { error: 'configure threw: ' + e.message }; }
   for (let i = 0; i < 6; i++) {
-    paint(i);
-    const f = new VideoFrame(canvas, { timestamp: (i * 1e6) / 30 });
+    const f = ring[i % RING].clone();
     enc.encode(f, qp === undefined ? undefined : { quantizer: qp });
     f.close();
   }
   await enc.flush();
   if (box.err) return { error: box.err };
-  return { enc, box, paint, canvas, codec, qp, queue, label: cell.label };
+  return { enc, box, ring, codec, qp, queue, label: cell.label };
 }
 
 /** The measured loop: the same shape render.ts drives through mediabunny. */
 async function run(st, frames) {
-  const { enc, box, paint, canvas, qp, queue } = st;
+  const { enc, box, ring, qp, queue } = st;
   box.out = 0; box.bytes = 0;
   let waited = 0;
   const t0 = performance.now();
   for (let i = 0; i < frames; i++) {
-    paint(i);
-    const f = new VideoFrame(canvas, { timestamp: ((i + 6) * 1e6) / 30 });
+    // Same picture, its own instant: a repeated timestamp is not a stream.
+    const f = new VideoFrame(ring[i % RING], { timestamp: ((i + 6) * 1e6) / 30 });
     enc.encode(f, qp === undefined ? undefined : { quantizer: qp });
     f.close();
     // What render.ts does through mediabunny: hold the queue to a small depth,
