@@ -92,6 +92,8 @@ export interface RenderFlagPrint {
    * that has not happened yet. The version bump belongs to the DEFAULT FLIP.
    */
   ss: number
+  /** O9(b)'s `?colour=all` — 4:4:4 changes every byte of every chunk. */
+  fullColour: boolean
 }
 
 export interface ChunkPlanInput {
@@ -336,6 +338,7 @@ function settingsPrint(s: ExportSettings, flags: RenderFlagPrint): (string | num
     flags.cq,
     flags.sourceFrame,
     flags.ss,
+    flags.fullColour,
   ]
 }
 

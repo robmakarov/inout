@@ -687,6 +687,23 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o9draw',
+    title: 'O9(a) — what does the export DRAW cost the colour, and does drawing bigger get it back?',
+    detail:
+      'X15(c) measures the shipped chain but its synthetic screen is 1920x1080 delivered at 1920x1080, so its export draw is 1:1 and has nothing to supersample. This rig isolates the other loss: a source BIGGER than the file, which is the shipped default (?nativeres=1 records 3024x1964 and the default export delivers 1080p). Every row runs the PRODUCT\u2019s own drawVideoFrame through supersampleDraw, fed a real VideoSample, and reports three numbers on one frame \u2014 the composition with NO ENCODER (the draw\u2019s own loss, the only part (a) can address), the same frame through the shipped hardware AVC 4:2:0 rung, and the same frame through AV1 4:4:4 (the ceiling, O9(b)). The free lever \u2014 imageSmoothingQuality high at 1x \u2014 is a row of its own, because supersampling has to beat it to be worth 4x the draw.',
+    run: async (args) => {
+      const { runDrawCeiling } = await import('../perf/drawCeiling')
+      return runDrawCeiling({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceScales: Array.isArray(args?.sourceScales)
+          ? (args.sourceScales as number[])
+          : undefined,
+        drawFactors: Array.isArray(args?.drawFactors) ? (args.drawFactors as number[]) : undefined,
+        av1: typeof args?.av1 === 'boolean' ? args.av1 : undefined,
+      })
+    },
+  },
+  {
     id: 'x15c',
     title: 'X15(c) — does adding one trim change how a take’s TEXT looks? (BACKLOG P1)',
     detail:

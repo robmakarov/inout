@@ -77,6 +77,7 @@ import { constantQualityQp } from './constantQuality'
 import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
 import { supersampleActive } from './supersample'
+import { fullColourActive } from './fullColour'
 import { exportFileName } from './fileName'
 import { createExportScratch, type ExportScratch } from './scratch'
 import {
@@ -143,6 +144,7 @@ export function currentRenderFlags(): RenderFlagPrint {
     loudness: loudnessMode(),
     sourceFrame: sourceFrameEnabled(),
     ss: supersampleActive(),
+    fullColour: fullColourActive(),
   }
 }
 

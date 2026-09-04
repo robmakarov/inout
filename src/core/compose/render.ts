@@ -101,6 +101,7 @@ import { DEFAULT_TARGET_LUFS, gainForTargetLufs } from './lufs'
 import { loudnessMode } from './loudnessMode'
 import { drawVideoFrame, type FrameCanvas } from './layout'
 import { supersampleDraw } from './supersample'
+import { fullColourActive, fullColourCodec, noteFullColourDeclined } from './fullColour'
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
@@ -527,6 +528,35 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       console.info('[compose] constant quality asked for but unsupported here — bitrate target kept')
     }
 
+    /**
+     * O9(b) — KEEP EVERY COLOUR. Resolved here, beside constant quality, for
+     * the same reason: the certification has to be able to say which way the
+     * file was actually made. Probed on THIS frame size and PINNED; a machine
+     * that cannot encode it takes today's rung with nothing else changed, and
+     * the decline goes through the door rather than into silence.
+     *
+     * The two do not collide: `constantQualityCodec` returns null for anything
+     * that is not avc, so a 4:4:4 export never carries a cq string.
+     */
+    const want444 = wantVideo && fullColourActive()
+    const codec444 = want444 ? await fullColourCodec(width, height, videoBitrate) : null
+    if (want444 && !codec444) {
+      noteFullColourDeclined('no AV1 4:4:4 encoder config at this frame size', {
+        width,
+        height,
+        bitrate: videoBitrate,
+      })
+      console.info(
+        `[compose] O9(b) full colour asked for but this machine has no 4:4:4 encoder at ${width}x${height} — ${target.rung} kept`,
+      )
+    } else if (codec444) {
+      console.info(
+        `[compose] O9(b) FULL COLOUR: ${codec444} (4:4:4, software) replaces ${target.rung} — every pixel keeps its own colour, and the file is bigger and slower to make`,
+      )
+    }
+    const effectiveVideoCodec = codec444 ? ('av1' as const) : target.videoCodec
+    const effectiveRung = codec444 ? `${target.rung}→av1-444-sw` : target.rung
+
     // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
     // the fallback for platforms where the scratch can't be opened.
     // J1: the caller's sink wins — a chunk file, or the audio artifact. Nobody
@@ -556,10 +586,10 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           cuts: Math.max(0, keptSegments(edit).length - 1),
           codec: {
             container: target.mimeType,
-            video: target.videoCodec,
+            video: effectiveVideoCodec,
             audio: needAudio ? target.audioCodec : undefined,
             gopSec,
-            rung: target.rung,
+            rung: effectiveRung,
             qp: qp ?? undefined,
           },
         }),
@@ -569,7 +599,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // addition per packet and turns "where do the bytes go" into a number.
     const bits = new BitsAudit(videoBitrate, gopSec)
     const videoSource = wantVideo ? new CanvasSource(canvas, {
-      codec: target.videoCodec,
+      codec: effectiveVideoCodec,
       bitrate: videoBitrate,
       keyFrameInterval: gopSec,
       ...target.encoderOptions,
@@ -578,6 +608,12 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // hardware that supports it.
       ...(qp !== null && cqCodec
         ? { fullCodecString: cqCodec, onEncoderConfig: markConstantQuality(qp) }
+        : {}),
+      // AFTER the spread of `target.encoderOptions`, which asks for hardware:
+      // there is no hardware AV1 4:4:4 encoder anywhere, so the preference has
+      // to be overridden or the config is refused on a machine that can do it.
+      ...(codec444
+        ? { fullCodecString: codec444, hardwareAcceleration: 'prefer-software' as const }
         : {}),
       onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
     }) : null

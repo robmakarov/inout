@@ -16,6 +16,7 @@ import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resoluti
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { setSupersampleFactor, supersampleFactor } from '@core/compose/supersample'
+import { fullColourEnabled, setFullColourEnabled } from '@core/compose/fullColour'
 import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
 import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
@@ -178,6 +179,18 @@ export function TestPanel() {
           redraw()
         }}
       />
+      {/* O9(b). SIZE-CODEC: the codec is never a user word, so the row says what
+          he GETS. Opt-in and staying opt-in — the file is blind-shared and no
+          probe can ask a recipient what they can play. */}
+      <Toggle
+        label="Keep every colour"
+        hint="Off. Normally a video stores one colour for every block of four pixels, which is why thin coloured text goes muddy and edges fringe. On, every pixel keeps its own colour: measured 78% → 99% of the green on a code page, and the fringe halves. Costs about a tenth more file, makes the export much slower because your processor does it instead of the video chip, and the file is for a machine you know — not every player opens it. Turning it on also means an untrimmed take is re-made instead of copied, so exporting stops being instant."
+        on={fullColourEnabled()}
+        set={(v) => {
+          setFullColourEnabled(v)
+          redraw()
+        }}
+      />
       {/* O9(a). The switch is on the NEW thing because the picture it makes is
           not the picture every take before it made, and a picture change is
           Robert's call (.ai/TASKS O9: "his yes before any default moves"). */}
@@ -217,6 +230,7 @@ export function TestPanel() {
           setSingleGenRung(null)
           setChunkedRenderEnabled(null)
           setSupersampleFactor(null)
+          setFullColourEnabled(null)
           redraw()
         }}
       >

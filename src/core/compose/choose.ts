@@ -37,6 +37,7 @@ import { exportRecording } from './pipeline'
 import { prerenderKey, takePrerender } from './prerender'
 import { exportSmartCut, isPixelDefaultEdit } from './smartCut'
 import { smartCutEnabled } from './smartCutFlag'
+import { fullColourActive } from './fullColour'
 
 export type ExportPath = 'instant' | 'smartcut' | 'render'
 
@@ -125,7 +126,24 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   // O3c: consulted on EVERY tier — the composite is fenced by allowPacketCopy,
   // a matching raw channel is not.
   const copy = chooseCopySource(recording, settings, { allowComposite: allowPacketCopy })
-  const source = copy.source
+  /**
+   * O9(b). A COPY CANNOT CHANGE THE COLOUR OF WHAT IT COPIES. The instant path
+   * hands back the recorded packets and smart cut re-encodes only the cut
+   * boundaries, so a take exported through either is 4:2:0 whatever the switch
+   * says — and a switch that silently does nothing is the defect this project
+   * has already paid for twice (`?cq=`, `?sourceframe=`). When full colour is
+   * asked for, the copying paths DECLINE BY NAME and the render runs.
+   *
+   * Nothing moves for anyone who did not ask: the flag is off by default, so
+   * `source` is exactly what it was and both fast paths are untouched.
+   */
+  const fullColour = fullColourActive()
+  const source = fullColour ? null : copy.source
+  if (fullColour && copy.source) {
+    const why = 'every colour asked for: a packet copy cannot change 4:2:0 into 4:4:4'
+    declined.push({ path: 'instant', reason: why })
+    declined.push({ path: 'smartcut', reason: why })
+  }
 
   if (source) {
     if (isDefaultEdit(recording, edit)) {
@@ -167,7 +185,9 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
     } else {
       declined.push({ path: 'smartcut', reason: 'disabled by flag' })
     }
-  } else {
+  } else if (!fullColour) {
+    // Full colour has already said why, by name, above — saying "nothing to
+    // copy" on top of it would report a second, wrong reason for one decision.
     const why = allowPacketCopy
       ? copy.declined.map((d) => `${d.origin}: ${d.reason}`).join('; ') || 'nothing to copy'
       : 'not the default output geometry'
