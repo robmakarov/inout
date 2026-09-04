@@ -1,4 +1,99 @@
 # FLAGS — every switch in INOUT and its current default
+
+<!-- BEGIN GENERATED INDEX — node scripts/flags-doc.mjs; do not edit by hand -->
+
+**50 switches.** This table is written from `src/core/switches.ts` and is the
+whole list: the panel at `/?test` renders the same registry, and `switches.test.ts` walks the
+source so a switch cannot exist without a row here. Precedence is URL > sticky > default. The
+measured detail for each one is below, written by whoever measured it.
+
+VERDICT is U4 part 3, the census executed: **fallback** = the frozen rule keeps it (it is the
+runtime path we fall back to) · **harness** = an agent needs it to make something fail on
+purpose, never a product decision · **product** = it IS a product control and the parameter is
+how a rig sets it · **answered** = the question it existed to answer has an answer, and it can
+go the day Robert says which way. Only the `answered` rows are his to rule on.
+
+### Recording
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?nativeres=` — Record at the screen’s size | 1 \| 0 | `inout.capture.nativeres` | on | answered | Leave on. Off records 1080p whatever your screen is — and makes “Go past 1440p” do nothing. |
+| `?sourceres=` — Go past 1440p | 1 \| 0 | `inout.frame.sourceres` | derived | product | Follows the quality slider (on at max) unless you set it. Needs “Record at the screen’s size”. |
+| `?sourcefps=` — 60 fps | 1 \| 0 | `inout.frame.rate` | derived | product | Follows the quality slider (on at max) unless you set it. Set it to record 60 at a lower step. |
+| `?quality=` — Quality mode | auto \| max | `inout.capture.quality` | derived | product | Follows the slider unless you set it. max: nothing steps down and nothing is refused. auto: the rate gives under load and comes back. |
+| `?qstep=` — Quality step | 540p \| 720p \| 1080p \| 1440p \| max | `inout.quality.step` | 1080p | product | The slider on the capture screen. Set it here to start a take at a step without touching the slider. |
+| `?maxladder=` — Rate ladder inside max | 1 \| 0 | `inout.capture.maxladder` | off | answered | Off by design. On, max trades rate for smoothness instead of dropping frames. Only does anything in max. |
+| `?resstep=` — Let the ladder drop resolution | 1 \| 0 | `inout.capture.resstep` | off | fallback | Off: the ladder only gives rate. On to reproduce the 2026-08-29 freeze, where a resolution step made the encoder upscale. |
+| `?pressure=` — Step down BEFORE frames are lost | 1 \| 0 | `inout.capture.pressure` | on | fallback | On. Turn off to get the old ladder, which only reacted after delivery had already collapsed. |
+| `?floor=` — Emergency floor | 1 \| 0 | `inout.capture.floor` | off | answered | Off. On, a take under extreme load sheds channels to keep writing rather than stopping. |
+| `?floorres=` — Emergency floor may drop resolution too | 1 \| 0 | `inout.capture.floorres` | off | answered | Off. Needs the emergency floor on. Adds a resolution rung to what the floor is allowed to sacrifice. |
+| `?crashfloor=` — The first second survives a crash | 1 \| 0 | `inout.capture.crashfloor` | on | fallback | On. Off restores the old behaviour, where a crash in the first seconds lost the whole take. |
+| `?burst=` — Absorb a burst instead of dropping it | 1 \| 0 | `inout.capture.burst` | on | fallback | On. Off drops frames the moment the encoder is behind, which is what the product did before B10. |
+| `?encoderbudget=` — Refuse a plan this machine has already collapsed under | 1 \| 0 | `inout.capture.encoderbudget` | on | fallback | On. Off lets a take ask for more encoders than the machine has ever sustained — how the freeze is reproduced. |
+| `?panel=` — The on-top recorder window | 1 \| 0 | link only | on | fallback | On where the browser supports it. `?panel=0` records without the floating window. |
+| `?bgpace=` — Background work gives way to the take | 1 \| 0 | `inout.compose.bgpace` | on | fallback | On. Off lets renders and uploads run at full speed during a recording — use it to see what that costs. |
+| `?lateness=` — Measure main-thread lateness | 1 \| 0 | link only | on | harness | On. `?lateness=0` switches the sampler off when you are measuring the cost of measuring. |
+| `?latebeat=` — Lateness sample period, ms | <number> | link only | derived | harness | Between 4 and 1000. Only for measuring the sampler’s own cost curve (16 vs 32 vs 64 ms). |
+
+### Picture
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?sourceframe=` — The output takes the take’s own shape | 1 \| 0 | `inout.frame.source` | on | answered | On: a phone take stays portrait and there are no bars in the file. Off puts the 16:9 frame back. |
+
+### Engine
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?engine=` — Composite engine | v1 \| v2 | `inout.capture.engine` | v2 | fallback | v2 is the engine. v1 is the untouched floor kept as the runtime fallback — set it to compare a take against what shipped before. |
+| `?painter=` — Who paints the composite | webgpu \| webgl2 \| 2d | `inout.capture.painter` | webgpu | fallback | webgpu unless the machine refuses it. Force webgl2 or 2d to see the cost of the rung below. |
+| `?intake=` — Where frames come in | auto \| main \| worker \| element | `inout.capture.intake` | auto | fallback | auto probes and picks. Name one to test a rung — `element` is seconds late to its first picture on Chromium (P9). |
+| `?rawcodec=` — How the raw channels are encoded | webcodecs \| mediarecorder | `inout.capture.rawcodec` | webcodecs | fallback | webcodecs. mediarecorder is the pre-O5a path, kept to compare a suspect file against it. |
+| `?glue=` — How segments are joined | paint \| record | `inout.compose.glue` | paint | fallback | paint. record is the older rung — set it when a joined take looks wrong and you need to know which side did it. |
+| `?singlegen=` — One generation, not two | off \| export | `inout.compose.singlegen` | export | fallback | export: the file is made once at export, which is the default. off is the old two-generation path — set it to compare. |
+
+### Sound
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?audiotap=` — How audio is read off a device | track \| worklet | `inout.capture.audiotap` | track | fallback | track. worklet is the old AudioContext path — set it if a device delivers nothing through the track reader. |
+| `?audiotapthread=` — Where the audio reader runs | worker \| main | `inout.capture.audioTapThread` | worker | fallback | worker, off the main thread (X11a). main is every take before it — set it to measure what the move bought. |
+| `?audiobuf=` — Audio read-ahead, ms | <number> | link only | 4000 | harness | 4000. `?audiobuf=0` restores the platform default, which is what dropped audio under load before B12. |
+| `?resamp=` — Band-limited resampling | 1 \| 0 | `inout.export.resamp` | on | fallback | On. Off uses the cheap resampler — audible as aliasing on tones, which is how the difference is proved. |
+| `?audiotracks=` — Mic and computer sound in the file | flat \| separate | `inout.compose.audiotracks` | flat | answered | flat: one mixed track, exactly as today. separate keeps them apart so a player can mute one (O10b). |
+| `?loudness=` — How loud the export is | p90 \| r128 | `inout.export.loudness` | p90 | answered | p90 is today’s behaviour. r128 is the broadcast standard and is INERT until Robert allows attenuation (O10a). |
+
+### Export
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?chunked=` — The render remembers what it already made | 1 \| 0 | `inout.compose.chunked` | on | fallback | On. Off renders the whole take again for every edit — 165 s where the remembered path takes 2 s (J1). |
+| `?bgrender=` — Render an edit while you keep editing | 1 \| 0 | `inout.compose.bgrender` | on | fallback | On. Off waits for the export press before touching the encoder. |
+| `?prerender=` — Make the file before the press where it is free | 1 \| 0 | `inout.export.prerender` | on | answered | On. Off leaves your machine alone while you edit and pays the whole render at the press. |
+| `?smartcut=` — Cut without re-encoding what was not cut | 1 \| 0 | `inout.compose.smartcut` | on | fallback | On. Off re-encodes the whole take for a trim — set it when a cut looks wrong and you need the slow, safe path. |
+| `?colour=` — Full colour | 420 \| all | `inout.compose.fullcolour` | 420 | answered | 420 is today. `all` keeps 99.3 % of the colour for 1.11× the bytes — BUILT, waiting on Robert’s eye (O9). |
+| `?cq=` — Fixed quality instead of a bitrate | <number> | `inout.export.cq` | off | harness | off. A number 10-40 asks the encoder for that quality and lets the size land where it lands (20 is the default when on). |
+| `?gop=` — Seconds between keyframes | 1 \| 2.5 \| 5 | `inout.gopSec` | 2.5 | harness | 2.5. Smaller cuts more precisely and costs size; larger is smaller and coarser at the cut. |
+
+### Harness
+
+| Switch | Values | Sticky key | Default | Verdict | What to do with it |
+|---|---|---|---|---|---|
+| `?synthetic=` — Fake devices, no permission prompt | (present) | link only | off | harness | Agents only: `?synthetic=1` records painted screen/camera and a tone, so an e2e run needs no camera and no click. |
+| `?dead=` — A source that never delivers a frame | <list> | link only | none | harness | Agents only, with `?synthetic=1`: `?dead=screen` proves the take survives a source that hands over nothing. |
+| `?die=` — A source that stops mid-take | <list> | link only | none | harness | Agents only: `?die=camera:8000` ends that channel 8 s in and proves the rest of the take keeps writing. |
+| `?slow=` — A device that takes its time to arrive | <list> | link only | none | harness | Agents only: `?slow=mic:6000` delays that channel — measured on prod, 183 ms arm becomes 6079 ms. |
+| `?quiet=` — A synthetic channel with silence in it | <list> | link only | none | harness | Agents only: makes a channel deliver silence, which is how the “audio is missing” report is reproduced. |
+| `?camlies=` — A camera that reports a size it does not deliver | 1 \| 0 | link only | off | harness | Agents only: `?camlies=1` makes the fake camera lie about its resolution, the shape of a real device defect. |
+| `?killenc=` — The encoder fails on purpose | <list> | link only | none | harness | Agents only: `?killenc=screen:6000` fails that encoder 6 s in — the containment test (H1). |
+| `?killworker=` — The encoding worker dies on purpose | <list> | link only | none | harness | Agents only: `?killworker=screen:6000` kills the worker, which fails harder than the encoder does. |
+| `?slowstop=` — A channel that will not stop promptly | <list> | link only | none | harness | Agents only: `?slowstop=screen:9000` holds the stop reply back and proves stopping does not hang (H5). |
+| `?screensize=` — Fake screen size | <text> | link only | the rig default | harness | Agents only, with `?synthetic=1`: `?screensize=3024x1964` reproduces a portrait or 4K take from a link. |
+| `?camsize=` — Fake camera size | <text> | link only | the rig default | harness | Agents only: `?camsize=1280x720`, the camera half of `?screensize=`. |
+| `?screenfps=` — Fake screen rate | <number> | link only | the rig default | harness | Agents only: `?screenfps=60`, 1-120. A synthetic take is painted, so this is a request, not a promise. |
+| `?camfps=` — Fake camera rate | <number> | link only | the rig default | harness | Agents only: `?camfps=30`, the camera half of `?screenfps=`. |
+
+<!-- END GENERATED INDEX -->
 Purpose: the current default of every URL flag / sticky setting and its measured effect. If a default moves, rewrite the row.
 - This load only: append to the URL — `https://inout-kappa.vercel.app/?nativeres=1`.
 - Sticky until changed: console `localStorage.setItem('inout.capture.nativeres', '1')` then reload.

@@ -1,302 +1,79 @@
 import { useState } from 'react'
-import { sourceFrameEnabled, sourceResEnabled, setSourceFrame, setSourceRes } from '@core/frame'
-import { setSourceRate, sourceRateEnabled } from '@core/rate'
-import { setGlueRung, glueRung, type GlueRung } from '@core/glue'
-import { setSingleGenRung, singleGenRung, type SingleGenRung } from '@core/singleGen'
 import {
-  captureQualityMode,
-  rateLadderAllowed,
-  setCaptureQualityMode,
-  setMaxLadder,
-  type CaptureQualityMode,
-} from '@core/capture/captureQuality'
-import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
-import { painterChoice, setPainterChoice, type PainterChoice } from '@core/capture/painterChoice'
-import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/frameIntake'
-import { audioTapThreadChoice, setAudioTapThread } from '@core/capture/audioTap'
-import { audioTrackMode, setAudioTrackMode } from '@core/compose/audioTracks'
-import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
-import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
-import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
-import { editRenderEnabled, setEditRenderEnabled } from '@core/compose/editRenderFlag'
-import { keyframeIntervalSec, setKeyframeInterval } from '@core/compose/keyframeInterval'
-import { fullColourEnabled, setFullColourEnabled } from '@core/compose/fullColour'
-import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
-import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
+  SWITCHES,
+  SWITCH_GROUPS,
+  readAllSwitches,
+  readSwitch,
+  resetAllSwitches,
+  switchById,
+  switchStateLine,
+  writeSwitchStorage,
+  type SwitchGroup,
+  type SwitchReading,
+  type SwitchSpec,
+} from '@core/switches'
+import { liveValue } from '@app/lib/switchBindings'
+import { urlWithoutTestParam } from '@app/lib/testPanel'
 
 /**
- * EVERY SWITCH WE HAVE BEEN TESTING, IN ONE PLACE — Robert, 2026-08-30: "i m
- * tired of your links with parametres, make me one link /?text with panel of
- * settings we testing all the time".
+ * EVERY SWITCH WE HAVE, IN ONE PLACE — Robert, 2026-08-30: "i m tired of your
+ * links with parametres, make me one link /?text with panel of settings we
+ * testing all the time"; and 2026-09-03, when a dozen of fifty were showing:
+ * "make priority task to clean up test switches mess".
  *
- * The flags always persisted; what was missing was somewhere to press them, so
- * each round ended with another URL for him to keep or lose. Everything here
- * writes the same storage the flags already read, so the panel and a link are
- * the same mechanism — and a link still wins for the load it is on, which is
- * why the panel says so when one is present rather than showing a value that
- * is not in force.
+ * THIS PANEL NO LONGER HAS A LIST OF ITS OWN. It renders `SWITCHES` from
+ * `@core/switches`, so a switch that exists in the code and not in the panel is
+ * impossible by construction — and `switches.test.ts` walks the source to prove
+ * the registry itself is complete. Before U4 the list was hand-kept here, which
+ * is why thirty-odd switches had no row and four (`screensize`, `camsize`,
+ * `screenfps`, `camfps`) were not written down anywhere at all.
  *
- * Changes apply to THE NEXT TAKE, not this one: every flag is read when a take
- * arms. Nothing here needs a reload.
+ * Changed switches are pinned to the top, because the question this panel is
+ * asked is never "what exists" — it is "what did I press".
+ *
+ * Changes apply to THE NEXT TAKE: every switch is read when a take arms.
+ * Nothing here needs a reload.
  */
-type GopChoice = '1' | '2.5' | '5'
-
 export function TestPanel() {
   const [, bump] = useState(0)
   const redraw = (): void => bump((n) => n + 1)
-  const overrides = urlOverrides()
+  const all = readAllSwitches()
+  const changed = all.filter((r) => (r.spec.product ? r.source === 'url' : r.source !== 'default'))
+  const urlSet = all.filter((r) => r.source === 'url')
 
   return (
     <div className="tp">
-      <div className="tp__title">Test settings</div>
-      {overrides.length > 0 && (
+      <div className="tp__title">Test settings · {switchStateLine()}</div>
+      {urlSet.length > 0 && (
         <div className="tp__warn">
-          The address bar is overriding {overrides.join(', ')} for this load — these switches
-          won’t take effect until you open the plain <code>/?test</code> link.
+          The address bar is overriding {urlSet.map((r) => r.spec.id).join(', ')} for this load —
+          those switches won’t follow the panel until you open the plain <code>/?test</code> link.
         </div>
       )}
 
-      <Toggle
-        label="Record at the screen’s size"
-        hint="On by default. Off records 1080p whatever your screen is — and makes “Go past 1440p” do nothing."
-        on={nativeResEnabled()}
-        set={(v) => {
-          setNativeRes(v)
-          redraw()
-        }}
-      />
-      {/* THE DEPENDENCY MADE VISIBLE — Robert, 2026-08-30: "what the fuck is own
-          res on and native res off, what is difference?". He was right to ask,
-          and the honest answer was worse than confusing: with native-res OFF
-          the capture constraint is the flat 1080p cap and this switch is not
-          consulted at all (acquire.ts, displayVideoConstraints). So he recorded
-          a take whose settings line said "own res" while the capture was 1080p.
-          A switch that reports itself ON while being inert is a lie, so it now
-          greys out with its owner, the way the max-ladder row already does. */}
-      <Toggle
-        label="Go past 1440p"
-        hint="Needs “Record at the screen’s size”. Off stops at 2560 across; on goes all the way to your screen’s own pixels."
-        on={sourceResEnabled()}
-        disabled={!nativeResEnabled()}
-        set={(v) => {
-          setSourceRes(v)
-          redraw()
-        }}
-      />
-      <Toggle
-        label="60 fps"
-        hint="The rate follows the source, up to 60"
-        on={sourceRateEnabled()}
-        set={(v) => {
-          setSourceRate(v)
-          redraw()
-        }}
-      />
-      <Choice
-        label="Quality mode"
-        hint="max: nothing steps down and nothing is refused. auto: the rate gives under load and comes back."
-        value={captureQualityMode()}
-        options={['auto', 'max'] as CaptureQualityMode[]}
-        set={(v) => {
-          setCaptureQualityMode(v)
-          redraw()
-        }}
-      />
-      <Toggle
-        label="Rate ladder inside max"
-        hint="Off by design. On, max trades rate for smoothness instead of dropping frames."
-        on={captureQualityMode() === 'max' ? rateLadderAllowed() : true}
-        disabled={captureQualityMode() !== 'max'}
-        set={(v) => {
-          setMaxLadder(v)
-          redraw()
-        }}
-      />
-      <Toggle
-        label="Vertical / source frame"
-        hint="The output takes the take’s own shape — a phone take stays portrait"
-        on={sourceFrameEnabled()}
-        set={(v) => {
-          setSourceFrame(v)
-          redraw()
-        }}
-      />
-      {/* B13(3). Robert heard this before it was measured: "some small noises in
-          tab audio". It is the export's old resampling maths, which only got the
-          top octaves roughly right — its error is 11 dB down at 16 kHz. The fix
-          is ON; this switch exists to put the OLD maths back so the two can be
-          compared on the same take, which is the only reason the old one is
-          still in the tree. */}
-      <Toggle
-        label="Clean audio resampling"
-        hint="On. Turn it OFF to hear the old maths: record a tab playing music, export, listen to cymbals and “s” sounds. Only does anything when the tab records at 44.1 kHz — at 48 kHz both settings give the same file."
-        on={bandLimitedResampling()}
-        set={(v) => {
-          setBandLimitedResampling(v)
-          redraw()
-        }}
-      />
+      {changed.length > 0 && (
+        <>
+          <div className="tp__sep">Not at default ({changed.length})</div>
+          {changed.map((r) => (
+            <Row key={`pin-${r.spec.id}`} reading={r} redraw={redraw} />
+          ))}
+        </>
+      )}
 
-      <div className="tp__sep">Rarely</div>
-      <Toggle
-        label="Encoder budget"
-        hint="Bounds a take on a machine that has been seen to collapse. Never bounds an unmeasured one."
-        on={encoderBudgetEnabled()}
-        set={(v) => {
-          setEncoderBudget(v)
-          redraw()
-        }}
-      />
-      <Toggle
-        label="Follow a resolution change"
-        hint="The screen channel segments when the source’s own size changes mid-take"
-        on={resolutionStepEnabled()}
-        set={(v) => {
-          setResolutionStep(v)
-          redraw()
-        }}
-      />
-      <Toggle
-        label="The render remembers"
-        hint="On. The export is made a couple of seconds at a time and kept, so an edit only re-does the seconds it changed and a closed tab picks up where it stopped. Costs the FIRST export about a tenth; the second one takes a fraction of a second instead of minutes. Off re-renders the whole take, every time. The row below sets how big those pieces are."
-        on={chunkedRenderEnabled()}
-        set={(v) => {
-          setChunkedRenderEnabled(v)
-          redraw()
-        }}
-      />
-      {/* J5, ruled 2026-09-04 (robert (27)). NOT greyed out with the row above:
-          it still works with the pieces off, it just throws away a whole render
-          instead of one piece when you edit again — which is the version he
-          deleted, and the reason the hint says what the two rows do together. */}
-      <Toggle
-        label="Make the export while you edit"
-        hint="On. A second after you stop moving something, the export for the edit you just made starts in the background, at low priority — it steps aside while your hand is on the timeline and stops dead while you record. Press Export and the file is usually already there. Opening a take and touching nothing renders nothing. With the row above off it starts the whole take over on every edit, which is wasteful; leave both on. Off is exactly 4 September: nothing is made until you press Export."
-        on={editRenderEnabled()}
-        set={(v) => {
-          setEditRenderEnabled(v)
-          redraw()
-        }}
-      />
-      {/* J7, ruled 2026-09-04. One number, two effects, so the hint names both. */}
-      <Choice
-        label="Piece size the export is made in"
-        hint="2.5 seconds is the default. This is how big a piece the export is built in, and it is also how often the finished file gets a full picture it can jump to. Smaller pieces mean a small edit re-does less — measured on a 30-second take, moving a zoom costs 1.8 s at 5 and 1.4 s at 2.5 — but the file grows (3% at 2.5, 12% at 1) and the very first export gets slower because each piece costs the same fixed moment to close. 5 is exactly what every take before 4 September did."
-        value={String(keyframeIntervalSec()) as GopChoice}
-        options={['2.5', '5', '1'] as GopChoice[]}
-        set={(v) => {
-          setKeyframeInterval(Number(v))
-          redraw()
-        }}
-      />
-      <Choice
-        label="Compositor painter"
-        hint="webgpu is the default: it never uploads the frame, so the composite costs 0.42 ms instead of 4.06, and warm colour comes out a little more saturated. webgl2 is exactly what every take before this used. 2d is the slow floor."
-        value={painterChoice()}
-        options={['webgpu', 'webgl2', '2d'] as PainterChoice[]}
-        set={(v) => {
-          setPainterChoice(v)
-          redraw()
-        }}
-      />
-      <Choice
-        label="How frames get in"
-        hint="Where the recorder gets its pictures from. auto is what every take has always used on Chrome, and is the row to leave alone. main reads the pictures on the page. worker hands the screen over to the background thread and reads them there — the only way Safari can, and it does NOTHING on Chrome (Chrome cannot, so it lands on element and says so in the console). element lets a hidden video play and snapshots it 30-60 times a second, which is how Firefox will do it, and it works here. Every one of them should make the SAME file; the one that does not is the bug this row exists to find."
-        value={intakeChoice()}
-        options={['auto', 'main', 'worker', 'element'] as IntakeChoice[]}
-        set={(v) => {
-          setIntakeChoice(v)
-          redraw()
-        }}
-      />
-      {/* X11a. The reader that keeps the sound: a stalled page used to make the
-          platform THROW PCM AWAY, and this row is how yesterday's take comes
-          back — the thing being replaced carries the switch. */}
-      <Choice
-        label="Where the sound is read"
-        hint="background is on by default and is the row to leave alone: it keeps the sound when the app is busy. Measured on a page frozen for 32 seconds — reading on the page lost 26.7 s of real audio and repaid it as silence, reading in the background lost none. page is how every take before this one worked; switch to it only to check whether this row is what changed something you can hear. Sound is placed the same either way — the batch carries the moment it was read, 0.05 ms before the page sees it."
-        value={audioTapThreadChoice() === 'worker' ? 'background' : 'page'}
-        options={['background', 'page']}
-        set={(v) => {
-          setAudioTapThread(v === 'background' ? 'worker' : 'main')
-          redraw()
-        }}
-      />
-      {/* O10b. The container word never reaches him either: the row says what he
-          GETS, which is the sounds kept apart or summed. */}
-      <Choice
-        label="Microphone and computer sound"
-        hint="mixed together is the normal one: one soundtrack, every player opens it. kept apart puts your voice and the computer's sound on two separate soundtracks inside the one file, so an editor can mute or level them on their own — most players will just play the first one, and the export takes a little longer because it cannot be copied straight out."
-        value={audioTrackMode() === 'separate' ? 'kept apart' : 'mixed together'}
-        options={['mixed together', 'kept apart']}
-        set={(v) => {
-          setAudioTrackMode(v === 'kept apart' ? 'separate' : 'flat')
-          redraw()
-        }}
-      />
-      {/* O9(b). SIZE-CODEC: the codec is never a user word, so the row says what
-          he GETS. Opt-in and staying opt-in — the file is blind-shared and no
-          probe can ask a recipient what they can play. */}
-      <Toggle
-        label="Keep every colour"
-        hint="Off. Normally a video stores one colour for every block of four pixels, which is why thin coloured text goes muddy and edges fringe. On, every pixel keeps its own colour: measured 78% → 99% of the green on a code page, and the fringe halves. Costs about a tenth more file, makes the export much slower because your processor does it instead of the video chip, and the file is for a machine you know — not every player opens it. Turning it on also means an untrimmed take is re-made instead of copied, so exporting stops being instant."
-        on={fullColourEnabled()}
-        set={(v) => {
-          setFullColourEnabled(v)
-          redraw()
-        }}
-      />
-      <Choice
-        label="Single generation"
-        hint="Whether the composite is recorded when a raw channel already holds the picture"
-        value={singleGenRung()}
-        options={['off', 'export'] as SingleGenRung[]}
-        set={(v) => {
-          setSingleGenRung(v)
-          redraw()
-        }}
-      />
-      {/* J6. The row says what he GETS, not "composite encoder": glue is his own
-          word for the screen and camera drawn into one picture. */}
-      <Choice
-        label="The glued picture while recording"
-        hint="paint (normal now): while you record, the screen and camera are still drawn together for the preview and for the frozen-screen warning — but that combined picture is no longer saved as a second video. That frees a whole video chip and one file's worth of writing on every take, which is what max and 60 fps run out of. The export is made in the background while you edit instead, so pressing Export still gives you a file straight away. record: save it again, exactly like before — use this if a take that used to export instantly now makes you wait, and say so."
-        value={glueRung()}
-        options={['paint', 'record'] as GlueRung[]}
-        set={(v) => {
-          setGlueRung(v)
-          redraw()
-        }}
-      />
+      {SWITCH_GROUPS.map((group) => (
+        <Group key={group} group={group} rows={all} redraw={redraw} />
+      ))}
 
       <button
         type="button"
         className="tp__reset"
-        onClick={() => {
-          setSourceRes(null)
-          setSourceRate(null)
-          setSourceFrame(null)
-          setCaptureQualityMode(null)
-          setMaxLadder(null)
-          setNativeRes(null)
-          setEncoderBudget(null)
-          setResolutionStep(null)
-          setSingleGenRung(null)
-          setGlueRung(null)
-          setChunkedRenderEnabled(null)
-          setFullColourEnabled(null)
-          setAudioTapThread(null)
-          setAudioTrackMode(null)
-          redraw()
-        }}
+        onClick={() => location.replace(resetAllSwitches(location.href))}
       >
-        Everything back to defaults
+        Reset everything ({changed.length} set)
       </button>
       {/* LEAVING TEST MODE IS DROPPING THE PARAMETER, now that the switch is
           URL-only. Kept as a button because the alternative is editing the
-          address bar, which is the thing this panel exists to spare him.
-          Navigates rather than re-renders: two screens read the gate, and there
-          is no session to lose here — the panel only shows when none is live. */}
+          address bar, which is the thing this panel exists to spare him. */}
       <button
         type="button"
         className="tp__reset tp__reset--exit"
@@ -306,67 +83,116 @@ export function TestPanel() {
       </button>
       <div className="tp__foot">
         Settings apply to the next take and persist. This panel does not: it is only ever here on a{' '}
-        <code>/?test</code> link, so a plain visit to the app never shows it.
+        <code>/?test</code> link, so a plain visit to the app never shows it. The line at the top
+        says the same thing the capture screen says, and is read from the same place.
       </div>
     </div>
   )
 }
 
-function Toggle({
-  label,
-  hint,
-  on,
-  set,
-  disabled,
+function Group({
+  group,
+  rows,
+  redraw,
 }: {
-  label: string
-  hint: string
-  on: boolean
-  set: (v: boolean | null) => void
-  disabled?: boolean
+  group: SwitchGroup
+  rows: SwitchReading[]
+  redraw: () => void
 }) {
+  const mine = rows.filter((r) => r.spec.group === group)
+  if (mine.length === 0) return null
   return (
-    <label className={`tp__row${disabled ? ' tp__row--off' : ''}`}>
-      <input type="checkbox" checked={on} disabled={disabled} onChange={(e) => set(e.target.checked)} />
-      <span className="tp__label">
-        {label}
-        <span className="tp__hint">{hint}</span>
-      </span>
-    </label>
+    <>
+      <div className="tp__sep">
+        {group}
+        {group === 'Harness' ? ' · agents only, link-only' : ''}
+      </div>
+      {mine.map((r) => (
+        <Row key={r.spec.id} reading={r} redraw={redraw} />
+      ))}
+    </>
   )
 }
 
-function Choice<T extends string>({
-  label,
-  hint,
-  value,
-  options,
-  set,
-}: {
-  label: string
-  hint: string
-  value: T
-  options: T[]
-  set: (v: T) => void
-}) {
+/** True when this switch's owner is not set the way it needs. */
+function inert(spec: SwitchSpec): boolean {
+  if (!spec.needs) return false
+  const owner = switchById(spec.needs.id)
+  if (!owner) return false
+  return (liveValue(owner.id) ?? readSwitch(owner).value) !== spec.needs.value
+}
+
+function Row({ reading, redraw }: { reading: SwitchReading; redraw: () => void }) {
+  const { spec } = reading
+  const live = liveValue(spec.id)
+  const value = live ?? reading.value
+  const off = inert(spec)
+  const linkOnly = spec.storageKey === null
+  const set = (v: string | null): void => {
+    writeSwitchStorage(spec, v)
+    redraw()
+  }
+
   return (
-    <div className="tp__row">
-      <span className="tp__label">
-        {label}
-        <span className="tp__hint">{hint}</span>
-      </span>
-      <span className="tp__choice">
-        {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            className={`tp__opt${o === value ? ' tp__opt--on' : ''}`}
-            onClick={() => set(o)}
-          >
-            {o}
-          </button>
-        ))}
-      </span>
+    <div className={`tp__row${off ? ' tp__row--off' : ''}`}>
+      {spec.kind === 'toggle' && !linkOnly && (
+        <input
+          type="checkbox"
+          checked={value === '1'}
+          disabled={off}
+          onChange={(e) => set(e.currentTarget.checked ? '1' : '0')}
+        />
+      )}
+      <div className="tp__label">
+        <span>{spec.label}</span>
+        <span className="tp__hint">
+          {spec.hint}
+          {off && spec.needs ? ` Inert right now: needs ${spec.needs.id}=${spec.needs.value}.` : ''}
+        </span>
+        {reading.source !== 'default' && (
+          <span className="tp__hint">
+            set to <code>{reading.value}</code>{' '}
+            {reading.source === 'url' ? 'in the address bar' : 'and sticky in this browser'}
+            {!linkOnly && (
+              <>
+                {' · '}
+                <button type="button" className="tp__clear" onClick={() => set(null)}>
+                  put back
+                </button>
+              </>
+            )}
+          </span>
+        )}
+      </div>
+      {spec.kind === 'choice' && !linkOnly && (
+        <div className="tp__choice">
+          {(spec.options ?? []).map((o) => (
+            <button
+              key={o}
+              type="button"
+              className={`tp__opt${value === o ? ' tp__opt--on' : ''}`}
+              disabled={off}
+              onClick={() => set(o)}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+      {(spec.kind === 'number' || spec.kind === 'text') && !linkOnly && (
+        <input
+          className="tp__num"
+          value={value ?? ''}
+          size={6}
+          onChange={(e) => set(e.currentTarget.value.trim() === '' ? null : e.currentTarget.value)}
+        />
+      )}
+      {linkOnly && (
+        <div className="tp__link">{reading.value === null ? '—' : reading.value}</div>
+      )}
     </div>
   )
 }
+
+/** Exported for the panel-coverage gate: every registry row is rendered here. */
+export const PANEL_ROWS = SWITCHES.map((s) => s.id)

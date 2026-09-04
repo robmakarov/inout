@@ -65,6 +65,22 @@ echo "build-gate: checking $short — build (tsc + vite) then tests, commit cont
 run_step build build.log run --silent build
 run_step "pass its tests" test.log test
 
+# U4 part 4: THE SWITCH COUNT ONLY GOES DOWN. A commit that carries more
+# switches than prod is serving is refused here, because the alternative —
+# noticing in review — is what let 37 of them accumulate unseen. Skipped in
+# silence only when the baseline has no registry (the commit that adds it).
+# The script travels with the commit, so a commit from before U4 simply has no
+# gate to run — and every commit that HAS it also has the registry it reads, so
+# any non-zero exit here is a real refusal and not a missing baseline.
+if [ -f "$tmp/scripts/switch-gate.mjs" ]; then
+  if ! (cd "$tmp" && node scripts/switch-gate.mjs "$sha" origin/main) 2>"$tmp/switch.log"; then
+    echo "build-gate: FAIL — the switch count is not allowed to rise." >&2
+    cat "$tmp/switch.log" >&2
+    exit 1
+  fi
+  cat "$tmp/switch.log" >&2
+fi
+
 mkdir -p "$gitdir/inout-gate"
 grep -o '/assets/[^"]*' "$tmp/dist/index.html" | sort >"$gitdir/inout-gate/$sha"
 echo "build-gate: PASS — $sha builds clean and its tests pass" >&2
