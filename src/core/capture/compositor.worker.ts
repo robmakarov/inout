@@ -46,6 +46,7 @@ import { burstFramesFor } from './burstBudget'
 import { LATE_TICK_MS, PressureSampler, type PressureCounters } from './pressureSampler'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
 import { createWGPUCompositor, wgpuDevice, type WGPUCompositor } from './compositorWGPU'
+import { trackProcessorCtor } from './frameIntake'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
 const ROOT_DIR = 'blobs'
@@ -167,6 +168,46 @@ export interface CompositorStartMsg {
    * failing the take.
    */
   painter?: 'webgpu' | 'webgl2' | '2d'
+  /**
+   * P9 — the MAIN THREAD'S `performance.timeOrigin`, so this worker can put a
+   * frame it read ITSELF on the main thread's clock.
+   *
+   * The composite has exactly one clock and it is the main thread's: every
+   * `atMs` in every message is `performance.now()` over THERE, and the audio
+   * batches carry the same. A worker's own `performance.now()` counts from a
+   * different origin, so the `worker-processor` rung — the one where frames
+   * never touch the main thread — would otherwise stamp its video on a clock
+   * the audio is not on. `timeOrigin` is the absolute instant each context's
+   * zero sits at, so `now() + (ours - theirs)` is their reading of now.
+   *
+   * Absent on the rungs that stamp on the main thread, where it is not needed
+   * and the delta stays 0.
+   */
+  mainTimeOrigin?: number
+}
+
+/**
+ * P9 — CAN THIS WORKER BUILD A TRACK PROCESSOR? Asked before `start`, and only
+ * by a main thread that has no processor of its own, so the shipped Chromium
+ * path never pays the round trip. There is no way to ask this from the outside:
+ * WebKit exposes MediaStreamTrackProcessor in workers and nowhere else, and a
+ * worker's globals are not visible to the page.
+ */
+export interface CompositorProbeMsg {
+  cmd: 'probe'
+}
+
+/**
+ * P9 — TAKE THIS TRACK AND READ IT YOURSELF (the `worker-processor` rung).
+ *
+ * The track is TRANSFERRED: after this message the main thread's handle is
+ * detached, which is also why the liveness beat below exists — the page can no
+ * longer read `readyState` on a track it has given away.
+ */
+export interface CompositorSourceMsg {
+  cmd: 'source'
+  kind: 'screen' | 'camera'
+  track: MediaStreamTrack
 }
 
 export interface CompositorFrameMsg {
@@ -226,6 +267,8 @@ export interface CompositorPoseMsg {
 
 export type CompositorMsg =
   | CompositorStartMsg
+  | CompositorProbeMsg
+  | CompositorSourceMsg
   | CompositorFrameMsg
   | CompositorAudioMsg
   | CompositorPreviewMsg
@@ -410,6 +453,18 @@ export type CompositorReply =
    *  actually reach the preview canvas, so the caller can swap away from its
    *  own preview without a blank flash in between. */
   | { ok: true; cmd: 'preview' }
+  /** P9 — whether this worker can build a track processor (see CompositorProbeMsg). */
+  | { ok: true; cmd: 'probe'; trackProcessor: boolean }
+  | { ok: true; cmd: 'source' }
+  /**
+   * P9 — the `worker-processor` rung's liveness evidence. The page gave its
+   * track away, so the worker is now the only thing that can see the source at
+   * all; it reports arrivals and the track's own health on a beat far finer
+   * than SOURCE_STALL_MS. Without this the detector would read a transferred
+   * (detached) track as dead the moment the take started, which is exactly the
+   * kind of silent difference between rungs this task exists to forbid.
+   */
+  | { event: 'source'; kind: 'screen' | 'camera'; frames: number; mediaSec: number; live: boolean }
   | { ok: true; cmd: 'stop'; stats: CompositorStats }
   | { ok: true; cmd: 'cancel' }
   | { ok: false; cmd: string; error: string }
@@ -625,6 +680,117 @@ let stopped = false
 
 /** Newest frame per source; the composite always paints the latest of each. */
 const latest: Partial<Record<'screen' | 'camera', VideoFrame>> = {}
+
+/**
+ * P9 — THE WORKER-SIDE INTAKE. Everything below this comment runs only on the
+ * `worker-processor` rung; on every other rung these stay empty and nothing in
+ * this file behaves differently from the day before the seam existed.
+ *
+ * THE WORKER NEVER BRANCHES ON THE BROWSER. It branches on the MESSAGE it was
+ * sent: a `source` message means "read this track yourself", `frame` messages
+ * mean "the page is reading them for you". Both end in the same `ingestFrame`,
+ * so no stage after the intake can tell which rung it is serving.
+ */
+let clockDeltaMs = 0
+const workerReaders: { cancel: () => void }[] = []
+const workerTracks = new Map<'screen' | 'camera', MediaStreamTrack>()
+const workerSourceStats = new Map<'screen' | 'camera', { frames: number; mediaSec: number }>()
+let beatTimer: ReturnType<typeof setInterval> | null = null
+/** Coarse against a frame, fine against SOURCE_STALL_MS (3000 ms). */
+const SOURCE_BEAT_MS = 250
+
+function postSourceBeats(): void {
+  for (const [kind, track] of workerTracks) {
+    const st = workerSourceStats.get(kind)
+    post({
+      event: 'source',
+      kind,
+      frames: st?.frames ?? 0,
+      mediaSec: st?.mediaSec ?? -1,
+      live: track.readyState === 'live' && !track.muted,
+    })
+  }
+}
+
+function attachWorkerTrack(kind: 'screen' | 'camera', track: MediaStreamTrack): void {
+  const TP = trackProcessorCtor()
+  if (!TP) throw new Error('compositor: no track processor in this worker')
+  workerTracks.set(kind, track)
+  workerSourceStats.set(kind, { frames: 0, mediaSec: -1 })
+  if (beatTimer === null) beatTimer = setInterval(postSourceBeats, SOURCE_BEAT_MS)
+  const reader = new TP({ track }).readable.getReader()
+  workerReaders.push({ cancel: () => void reader.cancel().catch(() => undefined) })
+  void (async () => {
+    for (;;) {
+      let result: ReadableStreamReadResult<VideoFrame>
+      try {
+        result = await reader.read()
+      } catch {
+        break
+      }
+      const { value, done } = result
+      if (done || stopped || fatal) {
+        value?.close()
+        break
+      }
+      const st = workerSourceStats.get(kind)
+      if (st) {
+        st.frames++
+        st.mediaSec = value.timestamp / 1e6
+      }
+      // The MAIN thread's clock, which is the composite's only clock.
+      ingestFrame(kind, value, performance.now() + clockDeltaMs)
+    }
+  })()
+}
+
+function releaseWorkerTracks(): void {
+  if (beatTimer !== null) {
+    clearInterval(beatTimer)
+    beatTimer = null
+  }
+  for (const r of workerReaders) r.cancel()
+  workerReaders.length = 0
+  // These are CLONES and stopping them is this worker's job. The main thread
+  // transferred a clone, never the take's own track: the same MediaStream feeds
+  // the raw channel recorder and the preview, and a transferred track is
+  // detached from the page that gave it away. The clone dies here; the original
+  // dies when the session releases the source, as it always has.
+  for (const track of workerTracks.values()) {
+    try {
+      track.stop()
+    } catch {
+      /* already gone */
+    }
+  }
+  workerTracks.clear()
+}
+
+/**
+ * ONE DOOR FOR A FRAME, whichever rung brought it. Lifted verbatim out of the
+ * `frame` case so that the two intakes cannot drift apart: a change here is a
+ * change for every rung, which is the only way "a silent difference between
+ * rungs is a defect" can be more than a wish.
+ */
+function ingestFrame(kind: 'screen' | 'camera', frame: VideoFrame, atMs: number): void {
+  noteOrigin(atMs)
+  if (stopped || fatal) {
+    frame.close()
+    return
+  }
+  stats.framesIn++
+  // F13: the FIRST frame decides the shape, before anything is encoded.
+  if (!shapeSettled) adoptShape(frame)
+  latest[kind]?.close()
+  latest[kind] = frame
+  // Frame-driven, capped at the output rate: two sources delivering 60 fps
+  // must not encode 120 composites.
+  if (atMs - lastEncodedMs >= 1000 / FPS - 1) encodeComposite(atMs, false)
+  else {
+    stats.framesGated++
+    if (atMs < lastEncodedMs) stats.framesStale++
+  }
+}
 let audioFramesTotal = 0
 let audioSampleRate = 48000
 let audioStartAtMs: number | null = null
@@ -1075,6 +1241,8 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   W = msg.width
   H = msg.height
   FPS = msg.fps
+  // P9: frames this worker reads itself are stamped on the MAIN thread's clock.
+  clockDeltaMs = msg.mainTimeOrigin === undefined ? 0 : performance.timeOrigin - msg.mainTimeOrigin
   videoBitrate = msg.videoBitrate
   followSource = msg.followSource === true
   burstEnabled = msg.burst !== false
@@ -1302,6 +1470,7 @@ function noteOrigin(mainMs: number): void {
 
 async function stop(): Promise<CompositorStats> {
   stopped = true
+  releaseWorkerTracks()
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   if (statsTimer) clearInterval(statsTimer)
   if (pressureStartTimer) clearTimeout(pressureStartTimer)
@@ -1347,6 +1516,7 @@ async function stop(): Promise<CompositorStats> {
 
 async function cancel(): Promise<void> {
   stopped = true
+  releaseWorkerTracks()
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   if (statsTimer) clearInterval(statsTimer)
   if (pressureStartTimer) clearTimeout(pressureStartTimer)
@@ -1415,26 +1585,16 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         await start(msg)
         post({ ok: true, cmd: 'start', backend: stats.backend ?? '2d' })
         break
-      case 'frame': {
-        noteOrigin(msg.atMs)
-        if (stopped || fatal) {
-          msg.frame.close()
-          return
-        }
-        stats.framesIn++
-        // F13: the FIRST frame decides the shape, before anything is encoded.
-        if (!shapeSettled) adoptShape(msg.frame)
-        latest[msg.kind]?.close()
-        latest[msg.kind] = msg.frame
-        // Frame-driven, capped at the output rate: two sources delivering 60 fps
-        // must not encode 120 composites.
-        if (msg.atMs - lastEncodedMs >= 1000 / FPS - 1) encodeComposite(msg.atMs, false)
-        else {
-          stats.framesGated++
-          if (msg.atMs < lastEncodedMs) stats.framesStale++
-        }
+      case 'frame':
+        ingestFrame(msg.kind, msg.frame, msg.atMs)
         break
-      }
+      case 'probe':
+        post({ ok: true, cmd: 'probe', trackProcessor: trackProcessorCtor() !== null })
+        break
+      case 'source':
+        attachWorkerTrack(msg.kind, msg.track)
+        post({ ok: true, cmd: 'source' })
+        break
       case 'audio': {
         noteOrigin(msg.atMs)
         if (stopped || fatal || !audioEncoder || audioEncoder.state !== 'configured') {

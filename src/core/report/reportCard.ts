@@ -510,16 +510,30 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     }
   }
 
-  /* 5. PICTURE — a source that froze recorded a still image and said nothing. */
+  /* 5. PICTURE — a source that froze recorded a still image and said nothing.
+
+        AND WHICH MACHINERY MADE THE COMPOSITE (P9's seam, O4's painter). Both
+        are chosen at runtime by probe and both fall through to a rung below
+        when a machine cannot honour them, so a card that does not name them
+        cannot notice one rung behaving differently from another — which is the
+        only way "a silent difference between rungs is a defect" can be
+        enforced rather than hoped for. A take made before the fields existed
+        says so instead of being read as a default. */
   {
     const stalled = recording.stalled ?? []
+    const comp = recording.composite
+    const machinery = !comp
+      ? null
+      : `composite by ${comp.intake ?? 'an unrecorded intake'} into ` +
+        `${comp.painter ?? 'an unrecorded painter'}`
+    const detail = stalled.length
+      ? `${stalled.map((k) => LABEL[k]).join(' & ')} froze mid-take — those stretches are a still image`
+      : `${video.length} video channel${video.length === 1 ? '' : 's'}, none stalled`
     dims.push({
       id: 'picture',
       status: stalled.length ? 'fail' : 'pass',
       ...(stalled.length ? { kinds: stalled } : null),
-      detail: stalled.length
-        ? `${stalled.map((k) => LABEL[k]).join(' & ')} froze mid-take — those stretches are a still image`
-        : `${video.length} video channel${video.length === 1 ? '' : 's'}, none stalled`,
+      detail: machinery ? `${detail}; ${machinery}` : detail,
     })
   }
 

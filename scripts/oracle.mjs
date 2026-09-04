@@ -532,6 +532,7 @@ async function main() {
             typeof m.compositeFirstPacketSec === 'number' ? `${(m.compositeFirstPacketSec * 1000).toFixed(0)}ms` : 'n/a'
           } ` +
           `compOff=${typeof m.compositeStartOffsetMs === 'number' ? `${m.compositeStartOffsetMs}ms` : 'n/a'} ` +
+          `made=${m.compositeIntake ?? 'n/a'}/${m.compositePainter ?? 'n/a'} ` +
           `inst=${m.instantPath ?? 'n/a'}/${
             typeof m.instantSyncMeanMs === 'number' ? `${m.instantSyncMeanMs.toFixed(1)}ms` : 'n/a'
           } ` +

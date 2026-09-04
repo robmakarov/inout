@@ -188,6 +188,71 @@ export interface ChannelRecording {
   diagnostics?: ChannelDiagnostics
 }
 
+/**
+ * HOW FRAMES REACH THE COMPOSITE WORKER — the frame-source seam (task P9).
+ *
+ * Every stage of the v2 engine is portable except one. WebCodecs, OPFS
+ * SyncAccessHandle, OffscreenCanvas, WebGPU and the fragmented-MP4 writer all
+ * exist on WebKit and Gecko; `MediaStreamTrackProcessor` on the MAIN THREAD
+ * does not. So that one stage becomes a contract with three implementations
+ * behind it — the same shape O4 gave the painter — and everything downstream
+ * of it is the one shipped worker.
+ *
+ *   main-processor    `new MediaStreamTrackProcessor({track})` on the main
+ *                     thread, each VideoFrame transferred to the worker. What
+ *                     every Chromium take has always done, untouched.
+ *   worker-processor  the TRACK is transferred into the worker and the
+ *                     processor is built there. Where the processor exists
+ *                     only in a worker (WebKit 18+), this is the whole
+ *                     difference; the main thread then never sees a frame.
+ *   element-sampler   a <video> element per source, paced by an AudioWorklet
+ *                     tick (the only clock a hidden tab does not throttle),
+ *                     sampled with `new VideoFrame(el, {timestamp})`. v1's
+ *                     proven mechanism, emitting into v2's worker. The floor
+ *                     for an engine with no track processor at all (Gecko).
+ *
+ * PROBES, NEVER NAMES. Nothing here asks which browser is running: a rung is
+ * chosen because its constructors answer, and a browser name is only ever used
+ * to say something honest to a person.
+ *
+ * A RUNG DECLARES WHAT IT CAN DO. A silent difference between rungs is a
+ * defect, so every axis on which they are not identical is a field below, said
+ * before the press and recorded after it.
+ */
+export type FrameIntakeKind = 'main-processor' | 'worker-processor' | 'element-sampler'
+
+export interface FrameIntakeDeclaration {
+  kind: FrameIntakeKind
+  /**
+   * The highest composite rate this rung can pace. A processor delivers
+   * whatever the source delivers, so its ceiling is the source's; a sampler's
+   * ceiling is its own tick.
+   */
+  maxFps: number
+  /**
+   * What a delivered frame's `timestamp` MEANS. `source` = the platform's own
+   * capture stamp. `sampled` = the moment this rung read the element, which is
+   * later than the capture by an amount nothing on the page can see. The
+   * composite's timeline never uses either (it is stamped on the main thread's
+   * wall clock at read), but the liveness detector's media clock does, and a
+   * sampled rung reads it off the element's `currentTime` instead.
+   */
+  frameClock: 'source' | 'sampled'
+  /**
+   * Where the liveness detector's evidence comes from. `track` = the main
+   * thread holds the MediaStreamTrack and reads `readyState`/`muted` directly.
+   * `beat` = the track lives in the worker, which reports arrivals back; the
+   * beat is coarser than a frame but far finer than SOURCE_STALL_MS.
+   */
+  liveness: 'track' | 'beat'
+  /**
+   * Does the main thread touch pixels? True only for the sampler, which
+   * constructs a VideoFrame from an element — the one rung that pays for the
+   * picture on the thread the UI runs on.
+   */
+  mainThreadPixels: boolean
+}
+
 /** Default-layout composite recorded live alongside the channels (instant export). */
 export interface CompositeRecording {
   blobKey: string
@@ -242,6 +307,18 @@ export interface CompositeRecording {
    * those still try and are still caught by the check.
    */
   engine?: 'v1' | 'v2'
+  /**
+   * WHICH PAINTER AND WHICH INTAKE WROTE THIS FILE (O4's backend, P9's seam).
+   *
+   * Both are chosen at runtime by probe and both can fall through to a rung
+   * below, so without these fields nothing outside the take can say which one
+   * actually ran — and a report card that cannot name the rung cannot notice a
+   * rung behaving differently, which is the whole point of the seam. Absent on
+   * every take recorded before they existed; `__inoutReport()` says so rather
+   * than guessing.
+   */
+  painter?: 'webgpu' | 'webgl2' | '2d'
+  intake?: FrameIntakeKind
   /** Encoded size. Lets the export size estimate use THIS take's own
    *  compressibility instead of guessing from the bitrate target. */
   bytes?: number

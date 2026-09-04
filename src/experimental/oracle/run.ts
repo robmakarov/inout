@@ -18,7 +18,7 @@
 import { exportByBestPath, exportRecording, smartCutEnabled, type ExportPath } from '@core/compose'
 import { getLastScratchStats } from '@core/compose/scratch'
 import { defaultEditState } from '@core/timeline'
-import { DEFAULT_EXPORT_SETTINGS, type EditState } from '@core/types'
+import { DEFAULT_EXPORT_SETTINGS, type EditState, type FrameIntakeKind } from '@core/types'
 import { analyzeAudioIntegrity, type AudioIntegrityReport } from './audioIntegrity'
 import { analyzeExport, type ExportAnalysis, type FlashSync } from './analyze'
 import { recordFiducialSession, sweepStaleOracleBlobs, type RecordOptions } from './rig'
@@ -110,6 +110,14 @@ export interface OracleReport {
    *  timeline (CompositeRecording.startOffsetMs). Null = the take was recorded
    *  before the field existed, i.e. both copy paths assume zero. */
   compositeStartOffsetMs: number | null
+  /**
+   * WHICH MACHINERY THIS CELL MEASURED — the frame intake (P9) and the painter
+   * (O4). Both are picked by probe and both fall through, so a cell that does
+   * not carry them cannot be read as evidence for the rung it was asked for.
+   * Null on a take recorded before the fields existed.
+   */
+  compositeIntake: FrameIntakeKind | null
+  compositePainter: 'webgpu' | 'webgl2' | '2d' | null
   /** Export throughput: recorded ms per ms of export wall time. */
   exportRealtimeFactor: number
   /**
@@ -380,6 +388,17 @@ export async function runOracle(
       compositeFirstPacketSec,
       compositeDurationSec,
       compositeStartOffsetMs: rig.recording.composite?.startOffsetMs ?? null,
+      /**
+       * WHICH MACHINERY THIS CELL ACTUALLY MEASURED (P9's intake, O4's painter).
+       *
+       * Both are chosen at runtime by probe and both fall through to a rung
+       * below when a machine cannot honour them. Without these on the cell, a
+       * run asked for one rung and silently given another reads as evidence
+       * FOR the rung it never used — which is how a fallback gets broken
+       * unmeasured, the exact failure the seam exists to prevent.
+       */
+      compositeIntake: rig.recording.composite?.intake ?? null,
+      compositePainter: rig.recording.composite?.painter ?? null,
       tail: (() => {
         const recordedMs = rig.recording.durationMs
         const exportedMs = full.durationSec * 1000

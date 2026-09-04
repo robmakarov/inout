@@ -312,6 +312,11 @@ export function gateOracleReport(report) {
   metrics.compositeFirstPacketSec = report.compositeFirstPacketSec ?? null
   metrics.compositeDurationSec = report.compositeDurationSec ?? null
   metrics.compositeStartOffsetMs = report.compositeStartOffsetMs ?? null
+  // P9/O4 — WHICH MACHINERY THIS CELL MEASURED. Carried onto the cell line so a
+  // run asked for one rung and silently given another can never be read as
+  // evidence for the rung it never used.
+  metrics.compositeIntake = report.compositeIntake ?? null
+  metrics.compositePainter = report.compositePainter ?? null
   if (report.instantPath) {
     metrics.instantPath = report.instantPath
     metrics.instantSyncMeanMs = report.instantSyncMeanMs ?? null

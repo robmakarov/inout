@@ -11,6 +11,7 @@ import {
 } from '@core/capture/captureQuality'
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { painterChoice, setPainterChoice, type PainterChoice } from '@core/capture/painterChoice'
+import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/frameIntake'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
@@ -163,6 +164,16 @@ export function TestPanel() {
         options={['webgpu', 'webgl2', '2d'] as PainterChoice[]}
         set={(v) => {
           setPainterChoice(v)
+          redraw()
+        }}
+      />
+      <Choice
+        label="How frames get in"
+        hint="auto picks the fastest way this browser can hand the recorder its pictures, and on Chrome that is the same way every take has always used. main reads them on the page. worker hands the whole camera/screen over to the background thread and reads them there — the only way Safari can. element lets a hidden video play and takes a snapshot of it 30-60 times a second, which is how Firefox will do it. Every one of them makes the SAME file; if one of them does not, that is the bug this switch is here to find."
+        value={intakeChoice()}
+        options={['auto', 'main', 'worker', 'element'] as IntakeChoice[]}
+        set={(v) => {
+          setIntakeChoice(v)
           redraw()
         }}
       />

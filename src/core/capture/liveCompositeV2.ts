@@ -24,7 +24,7 @@
  */
 import { blobStore } from '@core/store'
 import type { CompositorMsg, CompositorReply, CompositorStats } from './compositor.worker'
-import type { CameraPose, CompositeRecording } from '../types'
+import type { CameraPose, CompositeRecording, FrameIntakeKind } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import {
@@ -47,6 +47,17 @@ import { backgroundPaceEnabled, currentPace, noteTakePressure } from '../backgro
 import { passDoor } from '../door'
 import { burstAbsorberEnabled } from './burstBudget'
 import { painterChoice } from './painterChoice'
+import {
+  INTAKE_DECLARATION,
+  anyIntakeAvailable,
+  canSampleElement,
+  intakeChoice,
+  intakeFps,
+  intakeOrder,
+  intakeStateLine,
+  trackProcessorCtor,
+} from './frameIntake'
+import { startElementSampler, type ElementSamplerHandle } from './frameIntakeElement'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -165,18 +176,7 @@ function tapModuleUrl(): string {
   return tapUrl
 }
 
-/** MediaStreamTrackProcessor (Chromium) — still absent from the TS DOM lib. */
-interface TrackProcessorLike {
-  readable: ReadableStream<VideoFrame>
-}
-type TrackProcessorCtor = new (init: { track: MediaStreamTrack }) => TrackProcessorLike
-
 const LADDER_FLOOR = DELIVERY_FLOOR_RATIO
-
-function trackProcessorCtor(): TrackProcessorCtor | null {
-  const g = globalThis as { MediaStreamTrackProcessor?: TrackProcessorCtor }
-  return typeof g.MediaStreamTrackProcessor === 'function' ? g.MediaStreamTrackProcessor : null
-}
 
 export interface LiveCompositeV2Inputs {
   screen?: MediaStream
@@ -312,7 +312,10 @@ export function getCompositeFault(): CompositeFault | null {
 export function canLiveCompositeV2(inputs: LiveCompositeV2Inputs): boolean {
   if (!inputs.screen && !inputs.camera) return false
   return (
-    trackProcessorCtor() !== null &&
+    // P9: ANY intake, not the main-thread processor specifically. Which one is
+    // decided at start, where the worker can be asked; this is the synchronous
+    // half, and it deliberately answers for the weakest rung — see frameIntake.
+    anyIntakeAvailable() &&
     typeof VideoEncoder !== 'undefined' &&
     typeof AudioEncoder !== 'undefined' &&
     typeof VideoFrame !== 'undefined' &&
@@ -328,13 +331,13 @@ export async function startLiveCompositeV2(
   blobKey: string,
   options: LiveCompositeV2Options = {},
 ): Promise<LiveCompositeV2Handle> {
-  const TP = trackProcessorCtor()
-  if (!TP) throw new Error('live composite v2: MediaStreamTrackProcessor unavailable')
   // F13: the caller's frame, or the constant this engine shipped with.
   const outW = options.width && options.width > 0 ? options.width : W
   const outH = options.height && options.height > 0 ? options.height : H
-  // F15: the caller's rate, same contract.
-  const outFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
+  // F15: the caller's rate, same contract. P9 may lower it before the press if
+  // the chosen intake cannot pace it — never silently, and never at the press.
+  const askedFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
+  let outFps = askedFps
   if (fault?.startFails) {
     // Before the worker, before OPFS: the shape of a real capability failure.
     throw new Error('live composite v2: injected start failure (o4wedge)')
@@ -353,10 +356,22 @@ export async function startLiveCompositeV2(
     options.onGeometry?.({ width: st.outWidth, height: st.outHeight })
   }
 
+  /**
+   * P9 — what the worker last said about a source it reads ITSELF. Empty on
+   * every other rung. Declared up here, not beside the liveness map, because
+   * the message handler below closes over it and the intake probe now yields
+   * between the two.
+   */
+  const beats = new Map<'screen' | 'camera', { frames: number; mediaSec: number; live: boolean }>()
+
   const pending = new Map<string, { resolve: (r: CompositorReply) => void; reject: (e: Error) => void }>()
   worker.onmessage = (ev: MessageEvent<CompositorReply>) => {
     const reply = ev.data
     if ('event' in reply) {
+      if (reply.event === 'source') {
+        beats.set(reply.kind, { frames: reply.frames, mediaSec: reply.mediaSec, live: reply.live })
+        return
+      }
       if (reply.event === 'stats') {
         latestStats = reply.stats
         reportGeometry(reply.stats)
@@ -388,6 +403,50 @@ export async function startLiveCompositeV2(
       pending.set(msg.cmd, { resolve, reject })
       worker.postMessage(msg, transfer ?? [])
     })
+
+  // ---- P9: WHICH INTAKE FEEDS THIS TAKE ----------------------------------
+  //
+  // PROBES, NEVER NAMES. Three rungs in a fixed order, each tried by asking its
+  // constructor rather than by asking what browser this is. `auto` is the
+  // shipped order and, on a machine with a main-thread processor, is exactly
+  // what every take before the seam did. An explicit ask moves its rung to the
+  // front of the order and NOTHING else: a rung this machine does not have
+  // still falls through, because the engine never refuses a record press.
+  //
+  // The worker rung is the only one that cannot be probed from here — WebKit
+  // exposes the processor in workers and nowhere else — so it is asked, once,
+  // and only by a machine that is not already on the rung above it. The shipped
+  // Chromium path never sends this message.
+  let workerProbe: boolean | null = null
+  const workerHasProcessor = async (): Promise<boolean> => {
+    if (workerProbe === null) {
+      const reply = await call({ cmd: 'probe' })
+      workerProbe = 'trackProcessor' in reply && reply.trackProcessor === true
+    }
+    return workerProbe
+  }
+  const wanted = intakeChoice()
+  let intake: FrameIntakeKind | null = null
+  for (const rung of intakeOrder(wanted)) {
+    if (rung === 'main-processor' && trackProcessorCtor() !== null) intake = rung
+    else if (rung === 'element-sampler' && canSampleElement()) intake = rung
+    else if (rung === 'worker-processor' && (await workerHasProcessor())) intake = rung
+    if (intake) break
+  }
+  if (!intake) {
+    worker.terminate()
+    throw new Error('live composite v2: no frame intake on this machine')
+  }
+  const declared = INTAKE_DECLARATION[intake]
+  outFps = intakeFps(declared, askedFps)
+  // THE STATE LINE, BEFORE THE PRESS. A rung that quietly does less than the
+  // one above it is the defect this seam exists to prevent, so what this one
+  // can do is said out loud — and said again on the report card afterwards,
+  // off `CompositeRecording.intake`.
+  console.info(
+    `[capture] composite intake: ${intakeStateLine(declared, askedFps)}` +
+      (wanted === 'auto' ? '' : ` (asked for ${wanted})`),
+  )
 
   const startedAt = performance.now()
   const degrade = (reason: string): void => {
@@ -653,19 +712,39 @@ export async function startLiveCompositeV2(
   // ---- liveness: last frame timestamp per source, sampled on the tick ------
   const liveness = new Map<
     'screen' | 'camera',
-    { det: SourceLiveness; track: MediaStreamTrack; lastMediaSec: number; frames: number; framesAtLog: number }
+    {
+      det: SourceLiveness
+      /**
+       * P9: is the SOURCE still live? A function, not the track, because the
+       * `worker-processor` rung has given its track away and a detached handle
+       * reads as ended — the worker's beat answers for it instead. Every rung
+       * answers the same question; only the evidence differs.
+       */
+      live: () => boolean
+      lastMediaSec: number
+      frames: number
+      framesAtLog: number
+    }
   >()
   let lastFpsLog = startedAt
 
   const sampleLiveness = (): void => {
     const now = performance.now()
     for (const [kind, s] of liveness) {
+      // P9: on the rung where the worker holds the track, the worker is also
+      // the only thing that can count frames — take its beat as this source's
+      // arrivals and media clock. Empty on every other rung.
+      const beat = beats.get(kind)
+      if (beat) {
+        s.frames = beat.frames
+        s.lastMediaSec = beat.mediaSec
+      }
       // Frame silence is ambiguous on this frame-driven path (a static screen
       // delivers nothing); the track's own health decides — see sourceLiveness.
       const ev = s.det.sample(
         now,
         s.lastMediaSec,
-        s.track.readyState === 'live' && !s.track.muted,
+        s.live(),
         // H4: has this source EVER produced a frame? A static screen has (its
         // first one); a sensor-off camera has not, and no other signal on the
         // track tells them apart.
@@ -795,6 +874,10 @@ export async function startLiveCompositeV2(
     // see the page's URL. A machine without WebGPU falls through inside the
     // worker rather than being decided against here.
     painter: painterChoice(),
+    // P9: only the rung where the worker reads tracks itself needs to be told
+    // where the main thread's clock starts. Every other rung stamps its frames
+    // here and the field stays absent, so the shipped message is unchanged.
+    ...(intake === 'worker-processor' ? { mainTimeOrigin: performance.timeOrigin } : null),
     longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,
@@ -807,6 +890,8 @@ export async function startLiveCompositeV2(
     throw new Error('error' in startReply ? startReply.error : 'compositor start failed')
   }
   workerReady = true
+  /** O4's answer, kept for the take's own record (see CompositeRecording). */
+  let painterBackend: 'webgpu' | 'webgl2' | '2d' | null = null
   // ON THE PAGE'S CONSOLE, because the worker's own is invisible to every rig
   // and to the black box. It says what was ASKED for too when the two differ,
   // so a machine that fell back says so instead of quietly reading as a
@@ -814,6 +899,7 @@ export async function startLiveCompositeV2(
   {
     const asked = painterChoice()
     const got = 'backend' in startReply ? startReply.backend : 'unknown'
+    if ('backend' in startReply) painterBackend = startReply.backend
     console.info(
       `[capture] composite painter: ${got}${got === asked ? '' : ` (asked for ${asked})`}`,
     )
@@ -821,12 +907,19 @@ export async function startLiveCompositeV2(
   for (const batch of queuedAudio) sendAudio(batch)
   queuedAudio.length = 0
 
-  // ---- frame pumps ---------------------------------------------------------
+  // ---- frame intake: one of three, chosen above (P9) ------------------------
   const readers: { cancel: () => void }[] = []
+  let sampler: ElementSamplerHandle | null = null
+  const watch = (kind: 'screen' | 'camera', live: () => boolean): void => {
+    liveness.set(kind, { det: new SourceLiveness(), live, lastMediaSec: -1, frames: 0, framesAtLog: 0 })
+  }
+  const videoTrack = (stream: MediaStream): MediaStreamTrack | null => stream.getVideoTracks()[0] ?? null
+
   const pump = (stream: MediaStream, kind: 'screen' | 'camera'): void => {
-    const track = stream.getVideoTracks()[0]
-    if (!track) return
-    liveness.set(kind, { det: new SourceLiveness(), track, lastMediaSec: -1, frames: 0, framesAtLog: 0 })
+    const TP = trackProcessorCtor()
+    const track = videoTrack(stream)
+    if (!TP || !track) return
+    watch(kind, () => track.readyState === 'live' && !track.muted)
     const reader = new TP({ track }).readable.getReader()
     readers.push({ cancel: () => void reader.cancel().catch(() => undefined) })
     void (async () => {
@@ -854,13 +947,84 @@ export async function startLiveCompositeV2(
       }
     })()
   }
-  if (inputs.screen) pump(inputs.screen, 'screen')
-  if (inputs.camera) pump(inputs.camera, 'camera')
+
+  /**
+   * THE WORKER READS THE TRACK ITSELF. A CLONE is transferred, never the take's
+   * own track: the same MediaStream feeds the raw channel recorder and the
+   * preview, and transferring detaches the handle this page holds. The clone is
+   * the worker's to stop; the original dies with the session, as it always has.
+   *
+   * A transfer that is refused is not a dead take — the sampler below is a
+   * complete intake and takes over. That can only happen on an engine whose
+   * worker HAS a processor but will not hand it a track, which no engine does
+   * today; it is here because the alternative is a take with no picture.
+   */
+  const handOver = async (stream: MediaStream, kind: 'screen' | 'camera'): Promise<boolean> => {
+    const track = videoTrack(stream)
+    if (!track) return true
+    const clone = track.clone()
+    try {
+      await call({ cmd: 'source', kind, track: clone }, [clone as unknown as Transferable])
+    } catch (err) {
+      clone.stop()
+      console.warn(`[capture] composite intake: ${kind} track could not be transferred`, err)
+      return false
+    }
+    watch(kind, () => beats.get(kind)?.live ?? true)
+    return true
+  }
+
+  const attachSampler = async (): Promise<void> => {
+    sampler = await startElementSampler({
+      screen: inputs.screen,
+      camera: inputs.camera,
+      audioContext: audioCtx,
+      fps: outFps,
+      onFrame: (kind, frame, atMs, mediaSec) => {
+        if (torndown || degraded) {
+          frame.close()
+          return
+        }
+        const state = liveness.get(kind)
+        if (state) {
+          state.frames++
+          state.lastMediaSec = mediaSec
+        }
+        // Transferred, not copied — the worker owns and closes it, exactly as
+        // on the processor rungs.
+        worker.postMessage({ cmd: 'frame', kind, atMs, frame } satisfies CompositorMsg, [frame])
+      },
+    })
+    for (const [kind, stream] of [
+      ['screen', inputs.screen],
+      ['camera', inputs.camera],
+    ] as const) {
+      if (!stream) continue
+      const track = videoTrack(stream)
+      if (!track) continue
+      watch(kind, () => track.readyState === 'live' && !track.muted)
+    }
+  }
+
+  if (intake === 'main-processor') {
+    if (inputs.screen) pump(inputs.screen, 'screen')
+    if (inputs.camera) pump(inputs.camera, 'camera')
+  } else if (intake === 'worker-processor') {
+    const screenOk = inputs.screen ? await handOver(inputs.screen, 'screen') : true
+    const cameraOk = screenOk && inputs.camera ? await handOver(inputs.camera, 'camera') : screenOk
+    if (!screenOk || !cameraOk) {
+      intake = 'element-sampler'
+      await attachSampler()
+    }
+  } else {
+    await attachSampler()
+  }
 
   const teardown = async (): Promise<void> => {
     if (torndown) return
     torndown = true
     tap.port.onmessage = null
+    sampler?.stop()
     for (const r of readers) r.cancel()
     try {
       tap.disconnect()
@@ -964,6 +1128,10 @@ export async function startLiveCompositeV2(
       const composite: CompositeRecording = {
         blobKey,
         engine: 'v2',
+        // P9/O4: which rung and which backend actually ran. Both fall through
+        // at runtime, so a take that does not carry them cannot be read.
+        intake,
+        ...(painterBackend ? { painter: painterBackend } : null),
         mimeType: 'video/mp4',
         // The encoder's own last timestamp is the truth; wall time includes
         // teardown and would overstate the file by the drain.
