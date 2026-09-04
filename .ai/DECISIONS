@@ -1538,3 +1538,35 @@ framerate, which this encoder charges 1.84x for — see the platform finding bel
 TWO PLATFORM FACTS FOUND UNDERNEATH, both filed in BACKLOG and neither of them M4's to fix:
 `bitrateMode: 'quantizer'` silently DROPS frames, and the declared `framerate` moves the bytes for
 identical pictures.
+
+## A2 — SHADOW AUDIO'S PREMISE IS GONE, MEASURED 2026-09-04 (not built; Robert's call)
+A2 is "record the sound twice and splice the gaps", and Robert said "try it" when the gaps were real:
+B12 measured 45 s takes losing **20.1 / 28.6 / 32.5 s** of actual audio under a dosed main-thread
+block, repaid as silence. X11a then moved the reader off the main thread. THE SAME RIG, THE SAME
+DOSES, ON PROD WITH X11a LIVE (`scripts/b12-audiostarve.mjs --doses=0,400,1500,3000`, evidence
+docs/qa/a2-premise-after-x11a.json):
+
+  dose      main-thread duty   largest single gap   audio lost   padded   channels
+  0 ms      0.00               3 ms                 0.0 s        0        GREEN, 4 channels full length
+  400 ms    0.80               3 ms                 0.0 s        0        GREEN
+  1500 ms   0.94               3 ms                 0.0 s        0        GREEN
+  3000 ms   0.97               3 ms                 0.0 s        0        GREEN
+
+The dosed cells are indistinguishable from the undosed control — 3 ms is the synthetic source's own
+floor, present with the dose at zero. The cards read RED at every dose on `lateness`, which is the
+blocker doing exactly what it was told to do, and never on `channels`.
+
+SO THE SPLICE HALF HAS NOTHING TO SPLICE on the measured path, and A2 as specified would add a second
+audio encoder, a second OPFS key and a second set of writes to EVERY take in exchange for filling
+gaps that no longer happen. By robert (23) — name what it removes, and if the answer is anything, it
+is not a proposal — this one now removes nothing.
+
+WHAT A2 WOULD STILL BE FOR, and why it is not enough on its own: losses BELOW the page, which is
+Robert's real complaint (the tab-audio death autopsied 2026-09-04 — the channel carried zeros while
+Chrome's own speaker icon stayed lit). A shadow recorder on the SAME track records the same silence,
+so it cannot fill those; it could only witness them. And that witness already shipped in another
+form: B12 put `tapGapMs`, `tapMaxGapMs` and `lastArrivalMs` in every take, which is what says whether
+the tap was handed sound at all.
+
+NOT CLOSED BY THIS SESSION — the "try it" was his, so the retirement is his too. The measurement is
+here and the row waits on his word.
