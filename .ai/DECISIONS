@@ -1224,3 +1224,27 @@ Also ruled the same day, on O9: he asked what the 4:4:4 rung actually buys and t
 it CANNOT beat what the browser hands us. Real getDisplayMedia delivers NV12 at 1.5 bytes/px (measured,
 docs/qa/o4-gpu-residency.json, `display 3024x1964`); every lever we own can only stop us LOSING more
 than that. See .ai/TASKS O9.
+
+robert 2026-09-04 (27): RENDER WHILE HE EDITS, NOT WHILE HE RECORDS — and the glued copy's ENCODER comes
+out. "kill the glued copy encoding and do background render while editing". Reached by his own reasoning
+across the session, and the two numbers that decided it: (1) ANY REAL EDIT RENDERS — choose.ts,
+"anything that changes PIXELS cannot be copied through" — so a zoom, a camera move or a background sends
+the export down the full render path and the live composite is never opened. He reports he has NEVER seen
+an instant export, which is consistent. (2) ASSUME EVERY TAKE IS EDITED (his instruction; he prices the
+unedited case at ~10 %). Under that assumption the live composite is encoded and written on every take
+and read on none, while costing a whole hardware encoder — the one the encoder budget already sheds FIRST
+under pressure, and the one max/60 fps runs out of.
+WHAT STAYS: the compositor keeps PAINTING (0.4 ms/frame on WebGPU). His words: "we need preview". The
+preview and source-liveness ("your screen froze") both come from the paint, not the encode, so neither is
+given up. Only the encode and the file go.
+ORDER IS PART OF THE RULING AND IS NOT OPTIONAL: BACKGROUND RENDER LANDS FIRST, THEN THE ENCODER COMES
+OUT. Killing the composite alone would take instant export off an unedited CAMERA take, and "instant
+default export" is frozen by his own 2026-07-15 ruling (robert: "INSTANT IS LAW"). Background rendering
+puts it back and improves it — the deleted speculative pre-render (robert (23)) guessed at no edit and
+threw everything away on the first change; this one renders the edit he actually made, on J1's
+content-keyed 5 s chunks, so it is that idea moved to where the edit EXISTS. Screen-only takes never lose
+instant either way: single generation's default rung already copies the raw screen channel, not the
+composite.
+CONSEQUENCE HE SHOULD BE HELD TO WHEN O9 COMES BACK: the only objection to 4:4:4 by default was that it
+kills instant export. With the export pre-made while he edits there is no instant path left to kill, so
+the colour default becomes nearly free. O9(b) is re-opened by this, not closed.
