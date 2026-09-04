@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATE_DEFAULTS, fft, gate, hannWindow, noiseProfile } from './spectralGate'
+import { GATE_DEFAULTS, StreamingGate, fft, gate, hannWindow, noiseProfile } from './spectralGate'
 
 /**
  * O10c's claims, each pinned by the measurement it is a claim about. The order
@@ -179,5 +179,87 @@ describe('the gate removes what it exists to remove', () => {
     const drop = db(rms(bed)) - db(rms(r.out))
     expect(drop).toBeGreaterThan(0)
     expect(drop).toBeLessThanOrEqual(6.5)
+  })
+})
+
+describe('fed a second at a time, it is the same gate', () => {
+  /**
+   * THE SEAM THAT DECIDES WHETHER THIS CAN SHIP. render.ts writes audio one
+   * second at a time, so the gate never sees the whole signal; a chunk gated on
+   * its own would ramp its window in and out at every boundary — a click, or a
+   * breath of level, once a second, for the length of the take. That is exactly
+   * the defect B13 is about, so "similar" is not the bar: the streamed output
+   * has to BE the whole-signal output.
+   */
+  function bedAndBursts(n: number): Float32Array {
+    const bed = noise(n, 0.02, 3)
+    const out = Float32Array.from(bed)
+    for (const [from, to] of [
+      [12000, 36000],
+      [60000, 84000],
+    ]) {
+      const t = tone(to - from, 440, 0.3)
+      for (let i = 0; i < t.length; i++) out[from + i] = out[from + i]! + t[i]!
+    }
+    return out
+  }
+
+  it('gating in one-second pieces gives the same samples as gating it whole', () => {
+    const n = 48000 * 2
+    const signal = bedAndBursts(n)
+    const profile = noiseProfile(signal)
+    const whole = gate(signal, profile, GATE_DEFAULTS)
+
+    const streamer = new StreamingGate(profile, GATE_DEFAULTS)
+    const pieces: Float32Array[] = []
+    for (let at = 0; at < n; at += 48000) {
+      pieces.push(streamer.push(signal.subarray(at, Math.min(n, at + 48000))))
+    }
+    pieces.push(streamer.flush())
+    const streamed = new Float32Array(n)
+    let w = 0
+    for (const p of pieces) {
+      streamed.set(p.subarray(0, Math.min(p.length, n - w)), w)
+      w += p.length
+    }
+    expect(w).toBeGreaterThanOrEqual(n - GATE_DEFAULTS.overFloorDb * 0) // every sample accounted for
+
+    // Compare the interior, away from the ramp at either end.
+    const err = new Float32Array(n)
+    for (let i = 0; i < n; i++) err[i] = streamed[i]! - whole.out[i]!
+    const errDb = db(rms(err, 4096, n - 4096))
+    const sigDb = db(rms(whole.out, 4096, n - 4096))
+    expect(errDb).toBeLessThan(sigDb - 100)
+    // And it gated the same things, not merely a similar amount.
+    expect(streamer.triggers).toBe(whole.triggers)
+  })
+
+  it('an uneven feed is the same as an even one — chunk size is not a parameter', () => {
+    const n = 48000
+    const signal = bedAndBursts(n)
+    const profile = noiseProfile(signal)
+    const collect = (sizes: number[]): Float32Array => {
+      const g2 = new StreamingGate(profile, GATE_DEFAULTS)
+      const out = new Float32Array(n)
+      let at = 0
+      let w = 0
+      let i = 0
+      while (at < n) {
+        const take = Math.min(sizes[i % sizes.length]!, n - at)
+        const p = g2.push(signal.subarray(at, at + take))
+        out.set(p.subarray(0, Math.min(p.length, n - w)), w)
+        w += p.length
+        at += take
+        i++
+      }
+      const tail = g2.flush()
+      out.set(tail.subarray(0, Math.max(0, Math.min(tail.length, n - w))), Math.min(w, n))
+      return out
+    }
+    const even = collect([48000])
+    const ragged = collect([1000, 7777, 129, 30000])
+    const err = new Float32Array(n)
+    for (let i = 0; i < n; i++) err[i] = ragged[i]! - even[i]!
+    expect(db(rms(err, 4096, n - 4096))).toBeLessThan(db(rms(even, 4096, n - 4096)) - 100)
   })
 })

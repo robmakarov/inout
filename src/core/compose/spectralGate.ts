@@ -318,3 +318,178 @@ export function gate(
   }
   return { out, triggers, bins: examined }
 }
+
+/**
+ * THE SAME GATE, FED A SECOND AT A TIME — and it has to be the same gate.
+ *
+ * `render.ts` writes audio in one-second chunks, so the gate cannot see the
+ * whole signal at once. Gating each chunk on its own would ramp the window in
+ * and out at every boundary: a click, or a breath of level, once a second, for
+ * the length of the take. That is precisely the defect B13 is about, so this
+ * carries state across the boundary instead.
+ *
+ * WHAT IS CARRIED: the tail of the input that the next frame still needs
+ * (`frame - hop` samples), and the partial overlap-add sums for the samples
+ * whose windows are not all in yet. A sample is only EMITTED once every window
+ * covering it has landed, which is what makes the streamed output identical to
+ * the whole-signal output rather than merely similar. The test asserts exactly
+ * that, at -100 dB, because "similar" is how a seam ships.
+ *
+ * The profile is given once and never adapts: same input, same output, and a
+ * chunk boundary cannot change the gain of a bin.
+ */
+export class StreamingGate {
+  private readonly frame: number
+  private readonly hop: number
+  private readonly win: Float32Array
+  private readonly re: Float32Array
+  private readonly im: Float32Array
+
+  /**
+   * ONE ABSOLUTE TIMELINE, and everything is an index into it. The first cut of
+   * this mixed a buffer-relative frame start with a count of samples already
+   * emitted, which agreed with itself on an even feed and drifted on a ragged
+   * one — the streamed output came back 24 dB from the whole-signal output when
+   * the chunk sizes varied. Absolute positions cannot drift.
+   */
+  /** Absolute index of `buf[0]`. */
+  private bufAt = 0
+  private buf: Float32Array<ArrayBuffer> = new Float32Array(0)
+  /** Absolute start of the next frame to transform. */
+  private nextFrame = 0
+  /** Absolute index of `acc[0]`. */
+  private accAt = 0
+  private acc: Float32Array<ArrayBuffer> = new Float32Array(0)
+  private accNorm: Float32Array<ArrayBuffer> = new Float32Array(0)
+  private accIn: Float32Array<ArrayBuffer> = new Float32Array(0)
+  /** Absolute index of the next sample to hand back. */
+  private emitAt = 0
+  triggers = 0
+  bins = 0
+
+  constructor(
+    private readonly profile: NoiseProfile,
+    private readonly params: SpectralGateParams = GATE_DEFAULTS,
+    frame = GATE_FRAME,
+    hop = GATE_HOP,
+  ) {
+    this.frame = frame
+    this.hop = hop
+    this.win = hannWindow(frame)
+    this.re = new Float32Array(frame)
+    this.im = new Float32Array(frame)
+  }
+
+  /** Feed the next piece; get back every sample that is now finished. */
+  push(chunk: Float32Array): Float32Array {
+    this.append(chunk)
+    const end = this.bufAt + this.buf.length
+    while (this.nextFrame + this.frame <= end) {
+      this.oneFrame(this.nextFrame)
+      this.nextFrame += this.hop
+    }
+    // No frame after this one can reach a sample before its start, so
+    // everything below the last transformed frame's start is complete.
+    const complete = Math.max(this.emitAt, this.nextFrame - (this.frame - this.hop))
+    const out = this.emitTo(complete)
+    this.dropBufferBefore(this.nextFrame)
+    return out
+  }
+
+  /** No more input: hand back everything still held. */
+  flush(): Float32Array {
+    return this.emitTo(this.accAt + this.acc.length)
+  }
+
+  private append(chunk: Float32Array): void {
+    const next = new Float32Array(new ArrayBuffer((this.buf.length + chunk.length) * 4))
+    next.set(this.buf)
+    next.set(chunk, this.buf.length)
+    this.buf = next
+  }
+
+  /** Forget input no frame will read again. */
+  private dropBufferBefore(at: number): void {
+    const cut = at - this.bufAt
+    if (cut <= 0) return
+    this.buf = new Float32Array(this.buf.subarray(Math.min(cut, this.buf.length)))
+    this.bufAt = at
+  }
+
+  private ensureAcc(from: number, to: number): void {
+    if (this.acc.length === 0) {
+      this.accAt = from
+      const n = to - from
+      this.acc = new Float32Array(new ArrayBuffer(n * 4))
+      this.accNorm = new Float32Array(new ArrayBuffer(n * 4))
+      this.accIn = new Float32Array(new ArrayBuffer(n * 4))
+      return
+    }
+    const need = to - this.accAt
+    if (need <= this.acc.length) return
+    const grow = (a: Float32Array): Float32Array<ArrayBuffer> => {
+      const next = new Float32Array(new ArrayBuffer(need * 4))
+      next.set(a)
+      return next
+    }
+    this.acc = grow(this.acc)
+    this.accNorm = grow(this.accNorm)
+    this.accIn = grow(this.accIn)
+  }
+
+  private oneFrame(at: number): void {
+    const { frame, win, re, im, params, profile } = this
+    const bins = frame / 2 + 1
+    const over = Math.pow(10, params.overFloorDb / 20)
+    const minGain = Math.pow(10, -params.maxAttenDb / 20)
+    const silent = (frame / 4) * Math.pow(10, -params.silenceDb / 20)
+    const off = at - this.bufAt
+    re.fill(0)
+    im.fill(0)
+    for (let i = 0; i < frame; i++) re[i] = this.buf[off + i]! * win[i]!
+    fft(re, im, -1)
+    for (let b = 0; b < bins; b++) {
+      const mag = Math.hypot(re[b]!, im[b]!)
+      if (mag < silent) continue
+      if (profile.floor[b]! < silent) continue
+      if (profile.steady[b]! < params.steadyRatio) continue
+      const threshold = profile.floor[b]! * over
+      this.bins++
+      if (!(mag < threshold) || threshold <= 0) continue
+      const ratio = mag / threshold
+      const g = Math.max(minGain, ratio * ratio)
+      if (g > 0.9885) continue
+      this.triggers++
+      re[b] = re[b]! * g
+      im[b] = im[b]! * g
+      if (b > 0 && b < frame / 2) {
+        const m = frame - b
+        re[m] = re[m]! * g
+        im[m] = im[m]! * g
+      }
+    }
+    fft(re, im, 1)
+    this.ensureAcc(at, at + frame)
+    const base = at - this.accAt
+    for (let i = 0; i < frame; i++) {
+      this.acc[base + i] = this.acc[base + i]! + (re[i]! / frame) * win[i]!
+      this.accNorm[base + i] = this.accNorm[base + i]! + win[i]! * win[i]!
+      this.accIn[base + i] = this.buf[off + i]!
+    }
+  }
+
+  /** Normalise and hand back everything from `emitAt` up to `to`. */
+  private emitTo(to: number): Float32Array {
+    const end = Math.min(to, this.accAt + this.acc.length)
+    const n = Math.max(0, end - this.emitAt)
+    const out = new Float32Array(n)
+    const steady = 1.5
+    for (let i = 0; i < n; i++) {
+      const k = this.emitAt - this.accAt + i
+      const norm = this.accNorm[k]!
+      out[i] = norm > steady * 0.1 ? this.acc[k]! / norm : this.accIn[k]!
+    }
+    this.emitAt += n
+    return out
+  }
+}
