@@ -1325,6 +1325,11 @@ MEASURED, 30 s take at 1080p30, 12 chunks (`npm run exp -- j5`, docs/qa/j5-backg
     over 30 ms on either side**, and the console shows the brake stepping to trickle (20 % duty) as the
     hand lands. Phase 1's "no editor stall > 30 ms" is met with two orders of magnitude in hand.
   · Both oracles PASS (v2 sync 49.8/82.0 ms inst 67.3 trim 71.0 export 4.48x; v1 sync 49.5/62.8 ms).
+  · VERIFIED ON PROD, AT DEFAULT FLAGS, not from the source: `node scripts/editor-drag-cost.mjs --j5
+    --url=https://inout-kappa.vercel.app "--query=synthetic=1&qstep=1080p&screensize=1920x1080"` — no
+    `bgrender` in the URL, so this is the shipped default. The frame preset started the render (the
+    console said the edit settled), the brake said trickle as the hand landed, drag p95 0.8 -> 0.9 ms,
+    worst tick 1.3 -> 1.4 ms, zero stalls over 30 ms, 62.5 Hz on a visible page.
 NOT WIDENED, per J7's own ruling: nothing was cut from prepare, finalize or publish.
 WHAT IT TAKES AWAY: the machine now spends the export's work while he edits instead of after he presses.
 On a take he edits and never exports, that is work nobody asked for — bounded by the brake, by the chunk
