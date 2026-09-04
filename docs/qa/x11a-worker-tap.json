@@ -1,0 +1,181 @@
+{
+  "task": "X11a \u2014 the PCM reader off the main thread",
+  "date": "2026-09-04",
+  "question": "Does reading the track tap in a worker place the take late? (+14 ms on the first build)",
+  "answer": "No. The hand-off the stamp corrects is 0.05 ms median / <=1 ms p95, and the product sync band is identical on both arms.",
+  "handoff": {
+    "note": "main-thread receipt minus the worker's own stamp, per batch; absent on the main pump where the stamp IS the receipt",
+    "cells": [
+      {
+        "kind": "system-audio",
+        "medianMs": 0.2,
+        "p95Ms": 0.9
+      },
+      {
+        "kind": "mic",
+        "medianMs": 0.1,
+        "p95Ms": 1
+      },
+      {
+        "kind": "system-audio",
+        "medianMs": -0.1,
+        "p95Ms": 0.2
+      },
+      {
+        "kind": "mic",
+        "medianMs": -0.1,
+        "p95Ms": 0.1
+      },
+      {
+        "kind": "mic",
+        "medianMs": 0.1,
+        "p95Ms": 0.5
+      },
+      {
+        "kind": "system-audio",
+        "medianMs": 0.1,
+        "p95Ms": 0.5
+      },
+      {
+        "kind": "system-audio",
+        "medianMs": -0.1,
+        "p95Ms": 0.6
+      },
+      {
+        "kind": "mic",
+        "medianMs": 0,
+        "p95Ms": 0.7
+      },
+      {
+        "kind": "mic",
+        "medianMs": 0.2,
+        "p95Ms": 0.3
+      },
+      {
+        "kind": "system-audio",
+        "medianMs": 0.2,
+        "p95Ms": 0.4
+      },
+      {
+        "kind": "system-audio",
+        "medianMs": 0,
+        "p95Ms": 0.4
+      },
+      {
+        "kind": "mic",
+        "medianMs": 0,
+        "p95Ms": 0.5
+      }
+    ],
+    "medianOfMediansMs": 0.05,
+    "worstP95Ms": 1
+  },
+  "oracleSyncBand": {
+    "note": "npm run oracle, 7 cold cells per arm, ONE build, --query=audiotapthread=main is the control arm",
+    "worker": {
+      "p50": {
+        "n": 7,
+        "meanMs": 49.7,
+        "sdMs": 12.0,
+        "minMs": 34.8,
+        "maxMs": 66.9,
+        "values": [
+          34.8,
+          62.6,
+          66.9,
+          54.2,
+          40.9,
+          40.6,
+          47.6
+        ]
+      },
+      "max": {
+        "n": 7,
+        "meanMs": 64.2,
+        "sdMs": 12.5,
+        "minMs": 48.6,
+        "maxMs": 81.4,
+        "values": [
+          48.6,
+          76.2,
+          81.4,
+          72.0,
+          54.3,
+          54.3,
+          62.5
+        ]
+      }
+    },
+    "main": {
+      "p50": {
+        "n": 7,
+        "meanMs": 49.9,
+        "sdMs": 11.0,
+        "minMs": 39.2,
+        "maxMs": 68.0,
+        "values": [
+          42.6,
+          49.4,
+          46.3,
+          62.1,
+          39.2,
+          68.0,
+          41.4
+        ]
+      },
+      "max": {
+        "n": 7,
+        "meanMs": 70.4,
+        "sdMs": 9.4,
+        "minMs": 59.0,
+        "maxMs": 82.7,
+        "values": [
+          59.0,
+          69.6,
+          61.2,
+          82.1,
+          72.3,
+          82.7,
+          65.7
+        ]
+      }
+    },
+    "deltaP50Ms": -0.2,
+    "deltaMaxMs": -6.2,
+    "verdicts": {
+      "worker": [
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "main": [
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS"
+      ]
+    }
+  },
+  "whyTheAnchorABCannotAnswerIt": {
+    "note": "rawAnchorMs differencing was the method that blocked this task; it is disproven by its own control",
+    "sameArmControl": "scripts/x11a-anchor.mjs --arms=main,main: paired delta -50.3 ms (mic) / -45.3 ms (system audio), pairs -27.8 and -72.8, between cells that differ in nothing",
+    "firstVsSecondTakeInAProcess": "85.6+-5.2 ms against 38.3 ms",
+    "spreadAcrossAllCells": "19-350 ms on one build, idle machine",
+    "audioDataTimestamp": "the system monotonic clock rebased per browser process (107,423 s read against a 107,400 s uptime), so ctx= is how long that browser had been making sound; a take whose audio device was already running anchors ~110 ms later. Consumed only by a console line \u2014 nothing downstream reads it. Lead for X14."
+  },
+  "rigs": [
+    "scripts/x11a-workertap.mjs",
+    "scripts/x11a-anchor.mjs"
+  ],
+  "raw": {
+    "anchorAB": "/tmp/x11a-anchor-run1.json",
+    "control": "/tmp/x11a-control-main.json"
+  }
+}

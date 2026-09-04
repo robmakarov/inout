@@ -1454,3 +1454,51 @@ reports rather than counts), raw tail 27/31 ms and 30.1/30.2 fps against a 30 fp
 control's composite 88/-2 ms and raw 57/32 ms. Two adjacent runs, both PASS.
 Evidence: docs/qa/e3-claimpace-{before,after}.json, docs/qa/e3-laneart-{before,after}.json; rigs
 `scripts/e3-claimpace.mjs`, `scripts/e3-laneart.mjs`.
+
+## X11a — THE PCM READER MOVES TO ITS OWN THREAD (2026-09-04)
+WHAT IT FIXES, and it was measured before it was built: `MediaStreamTrackProcessor` does not wait for
+a starved reader, it DROPS (B12). B12 widened the platform's ~87 ms buffer to 4 s; this removes the
+deadline instead, because a reader on its own thread is never the thing that is late. Through the
+product, 45 s takes with the buffer cut to 100 ms so only the thread can save it and the main thread
+blocked 32 s: **the page reader lost 26.7 s of real audio and the wall-clock hold repaid it as
+silence; the worker reader lost 1.56 s against its own 1.53 s control.** The premise was PROBED
+first (`scripts/x11a-workertap.mjs`) because a transferred ReadableStream could have been a proxy the
+original thread still cranks: 20.0 s of block cost the page reader 13.8-15.3 s of a 21 s window and
+the worker reader nothing, worst step 3 ms.
+THE TRANSFER IS THE CAPABILITY GATE — attempted in a try/catch, falling through to A1's main-thread
+pump, so a platform that refuses (Safari today) records exactly as before. No capability table.
+WHAT BLOCKED IT FOR A DAY, AND HOW IT WAS ANSWERED. The anchor dates sample 0 from when a batch
+ARRIVES, and a min-filter strips jitter but never a constant, so a reader one postMessage away would
+place the whole take late — read at +14 ms (anchor 88.3 -> 102.1 ms) on the first build. THE METHOD
+WAS THE PROBLEM, not the reader. Differencing two anchors cannot resolve 14 ms on this machine, and
+its own control says so: `x11a-anchor.mjs --arms=main,main` runs the SAME thread against itself and
+reads a paired **-50.3 ms on the mic and -45.3 ms on system audio** (pairs -27.8, -72.8) between
+cells that differ in nothing. The first take in a browser process anchors 85.6+-5.2 ms and the second
+38.3 ms, so an A/B that did not alternate its order would report that position effect as an arm
+difference — which is the likeliest origin of the original +14 ms. Across 24 readings on one build on
+an idle machine, `rawAnchorMs` spans **19 to 350 ms**.
+SO THE MECHANISM IS MEASURED DIRECTLY. The batch carries the moment the WORKER completed it
+(`performance.timeOrigin + performance.now()`, converted with the page's own origin) and the take now
+records what that correction is worth — `tapHandoffMs` / `tapHandoffP95Ms`, main-thread receipt minus
+worker stamp: **0.05 ms median of six cells, worst p95 1 ms, both channels, every cell inside
+-0.1..0.2 ms.** The direction is structural: the stamp precedes its own delivery, so the correction
+can only place a take EARLIER, never later, and by at most a millisecond.
+AND THE PRODUCT'S OWN SYNC BAND AGREES, on ONE build, 7 cold oracle cells per arm
+(`--query=audiotapthread=main` is the control arm): **sync p50 worker 49.7+-12.0 ms against main
+49.9+-11.0 — delta -0.2 ms; worst pair 64.2+-12.5 against 70.4+-9.4. 14 of 14 PASS.**
+THE SWITCH IS A PANEL ROW because the default moves: `/?test` -> "Where the sound is read"
+(background | page), storage-backed, in the reset, in docs/FLAGS.md. The thing being REPLACED carries
+it.
+TWO INSTRUMENT DEFECTS found reading the branch back and fixed here: B12's `tapGapMs` is cumulative
+ACROSS revivals on the main pump and was cumulative PER GENERATION on the worker (a revived worker
+take under-reported); and a take that armed on the main pump and got its transfer on a later revival
+left the old pump reading a clone nobody retired.
+KEPT FOR X14, not fixed here (a capture change is Robert's): `AudioData.timestamp` is the SYSTEM
+MONOTONIC clock rebased per BROWSER PROCESS — 107,423 s read against a 107,400 s machine uptime — so
+the `ctx=` in the first-sample line is how long that browser had been making sound. A take whose
+audio device was ALREADY RUNNING anchors ~110 ms later (median ~148 ms against ~36 ms), which is
+larger than today's whole 40-66 ms sync. Nothing downstream reads that value; it feeds one console
+line.
+GATES: typecheck green, `npm test` 1248/1248 (5 new, pinning the flag's three sources and their
+order). Oracle 14/14 PASS as above. Evidence docs/qa/x11a-worker-tap.json; rigs
+`scripts/x11a-workertap.mjs`, `scripts/x11a-anchor.mjs`.
