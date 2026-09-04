@@ -1,7 +1,27 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+
+/**
+ * WHICH COMMIT THIS BUNDLE IS — stamped into every take (src/core/build.ts).
+ *
+ * A long take is always made on an OLD build: the tab has to be open before the
+ * take starts and the service worker serves what it cached, so Robert's 71.7 min
+ * take ran a build that predated J1 by seven minutes and looked, to every
+ * session that read it afterwards, like J1 was broken. Vercel exports the sha;
+ * locally git has it; in dev there is no build and the app says `dev`.
+ */
+function buildId(): string {
+  const fromVercel = process.env.VERCEL_GIT_COMMIT_SHA
+  if (fromVercel) return fromVercel.slice(0, 8)
+  try {
+    return execFileSync('git', ['rev-parse', '--short=8', 'HEAD'], { encoding: 'utf8' }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
 
 /**
  * B3 — WRITE DOWN WHAT THIS BUILD IS MADE OF.
@@ -40,6 +60,9 @@ function assetManifest() {
 
 export default defineConfig({
   plugins: [react(), assetManifest()],
+  define: {
+    __INOUT_BUILD__: JSON.stringify(buildId()),
+  },
   resolve: {
     alias: {
       '@core': fileURLToPath(new URL('./src/core', import.meta.url)),

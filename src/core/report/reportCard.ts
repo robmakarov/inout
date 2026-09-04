@@ -86,6 +86,10 @@ export interface ReportCard {
   recordingId: string
   /** Epoch ms the take stopped (Recording.createdAt). */
   createdAt: number
+  /** The commit the tab's bundle came from, `dev`, or null on a take made
+   *  before this was stamped. In the headline, because a field report about a
+   *  long take is a report about the build the tab was LOADED with. */
+  buildId: string | null
   durationMs: number
   verdict: Verdict
   /** ONE line: the verdict, the dimension that decides it, and its numbers. */
@@ -854,7 +858,16 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   const unmeasured = dims.filter((d) => d.status === 'unmeasured')
   const verdict: Verdict = failed.length ? 'red' : unmeasured.length ? 'incomplete' : 'green'
 
-  const head = `${recording.id} · ${dur(take)} · ${verdict.toUpperCase()}`
+  /**
+   * THE BUILD IS IN THE HEADLINE, next to the id, because that is where someone
+   * reading a field report looks. A long take is always made on an OLD build
+   * (the tab is open before the take starts and the service worker serves what
+   * it cached), and a take that does not say which build made it invites a
+   * session to investigate a defect that was fixed before the take existed —
+   * which is exactly what Robert's 71.7 min take cost. `?` on every take made
+   * before this field, which is itself an answer.
+   */
+  const head = `${recording.id} · ${dur(take)} · build ${recording.buildId ?? '?'} · ${verdict.toUpperCase()}`
   const body = failed.length
     ? ` — ${failed.map((d) => `${d.id}: ${d.headline ?? d.detail}`).join(' · ')}`
     : ` — ${dims.length - unmeasured.length} of ${dims.length} dimensions measured and inside band`
@@ -865,6 +878,8 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   return {
     recordingId: recording.id,
     createdAt: recording.createdAt,
+    /** Which build recorded this — see Recording.buildId. */
+    buildId: recording.buildId ?? null,
     durationMs: take,
     verdict,
     line: head + body + tail,

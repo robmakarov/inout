@@ -36,6 +36,7 @@ import {
 } from './resolutionStep'
 import { containVerdict, exhaustedWhy, type ContainCause } from './segmentContain'
 import { faultDelayMs, slowStopMs } from './faultInject'
+import { buildId } from '@core/build'
 import {
   budgetVerdict,
   describePlan,
@@ -3548,6 +3549,11 @@ class Session implements CaptureSession {
       // the export ladder is capped by what was chosen for IT — see
       // Recording.qualityStep.
       qualityStep: loadQualityStep(),
+      // Which build recorded this. See Recording.buildId: a long take is always
+      // made on an old one, and until this was stamped nothing in the take said
+      // which, so a fixed defect could be re-investigated off a take made before
+      // the fix landed.
+      buildId: buildId(),
       // UI1: the pose the composite was written with, so the editor opens on
       // the composition this take actually holds.
       ...(this.cameraPose ? { cameraPose: this.cameraPose } : null),

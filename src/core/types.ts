@@ -513,6 +513,18 @@ export interface Recording {
    * dimension that reads this reports `unmeasured` rather than passing.
    */
   stopStats?: TakeStopStats
+  /**
+   * WHICH BUILD THIS TAKE WAS MADE ON — the commit the tab's bundle came from,
+   * or `dev`.
+   *
+   * A LONG TAKE IS ALWAYS MADE ON AN OLD BUILD: the tab must be open before the
+   * take starts, and the service worker serves what it cached. Robert's 71.7 min
+   * take ran a build that predated J1 by seven minutes, and every session that
+   * read it afterwards saw J1's chunk cache "not engaging" and went looking for
+   * a bug that did not exist. Absent on every take made before this field, which
+   * is itself the answer to "was this made before or after?".
+   */
+  buildId?: string
 }
 
 /**

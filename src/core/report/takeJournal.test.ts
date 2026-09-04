@@ -11,6 +11,7 @@ afterEach(() => __resetTakeReports())
 const card = (over: Partial<ReportCard> = {}): ReportCard => ({
   recordingId: 'rec_1',
   createdAt: 1_000,
+  buildId: 'abc12345',
   durationMs: 12_000,
   verdict: 'green',
   line: 'rec_1 · 12.0s · GREEN — 10 of 10 dimensions measured and inside band.',
