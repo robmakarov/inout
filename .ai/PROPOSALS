@@ -63,6 +63,33 @@ Robert's own headline case.
 MEASURE FIRST, one number: what fraction of a real ≥60-min take is byte-identical frame to frame. The
 detector exists (X17's census). That number decides whether the days are worth spending.
 
+## F — A ZOOM COSTS THE ZOOM, NOT THE TAKE [medium · compose · offered 2026-09-04]
+WHAT IT TAKES AWAY: rendering. Nothing else — no feature, no picture change, no format. The file must
+decode to the same pixels as today, and that is the gate.
+
+THE FACT: one zoom at 4:00 in a one-hour take renders all sixty minutes. But outside that zoom NOTHING
+IS DRAWN ON THE PICTURE — no viewport transform, no background, no PiP — so those output frames are the
+recorded frames. We already copy packets for exactly this reason when the edit is TIME-ONLY (smart cut,
+`isPixelDefaultEdit`); the proposal is to ask the question PER SPAN instead of per export, so a take
+mixes copied spans and rendered spans.
+
+WHY IT IS NOT THE DEAD FAMILY: J2's block-level patching died because a background frame SCALES the
+screen so every pixel lands somewhere new, and because motion vectors carry contamination across a
+patched block's boundary. This copies WHOLE PICTURES on keyframe boundaries and never touches a block —
+the same operation smart cut already performs and the oracle already grades. It is dead in the same
+cases smart cut is (a background frame, a resize, a frame preset), and honest about it.
+
+WHAT MUST BE MEASURED BEFORE A LINE IS WRITTEN, in this order:
+ 1. How much of a real edited take is span-identity? If Robert's edits are zooms scattered through a
+    take, most of it. If he sets a background, none of it, and the proposal is worth nothing.
+ 2. Do the copied and rendered spans JOIN cleanly — one avcC, keyframe-aligned boundaries, no visible
+    seam? J1's concatenation already answers the first two and grades the third.
+ 3. What does it cost when it DECLINES? It must fall through to today's render with no penalty.
+
+RELATION TO J5: J5 makes render speed something Robert does not feel, because the work happens while he
+edits. This makes the work SMALLER. They compose, and J5 is worth more first — do not start this until
+J5 has landed and its numbers are in.
+
 ## C — ADDITIVE UI, NEVER A CONDITION OF SPEED [light]
 Offered ONLY as things Robert may want anyway, never as the price of a fix (robert (23)(b) forbids
 that framing): the frame preset chosen on the CAPTURE screen as well as in the editor, and the camera
