@@ -200,7 +200,15 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   // an IN-FLIGHT one is as important as taking a finished one, because it means
   // pressing export early costs the remainder rather than starting the same
   // work twice. Never slower than before: a miss falls straight through.
-  const ready = takePrerender(prerenderKey({ recording, edit, settings }))
+  /**
+   * O9(b) SKIPS THE PRE-RENDER, and the reason is a hole this task found rather
+   * than made: `prerenderKey` is `[recording.id, edit, settings]` and carries NO
+   * render flag at all. A file made before the switch was flipped is served for
+   * an export made after it, and the switch silently does nothing — the exact
+   * defect `?cq=` and `?sourceframe=` already cost this project once. Those two
+   * still ride that hole (BACKLOG, G lane); this one does not.
+   */
+  const ready = fullColour ? null : takePrerender(prerenderKey({ recording, edit, settings }))
   if (ready) {
     // A JOINED JOB IS THIS EXPORT NOW, so it reports ITS OWN place and obeys
     // THIS export's cancel. The first version of the join reported a flat
