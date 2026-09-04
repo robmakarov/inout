@@ -59,7 +59,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchChromeRetrying, quitChrome, resolveChrome, sleep } from './lib/chrome.mjs'
+import { removeProfile, launchChromeRetrying, quitChrome, resolveChrome, sleep } from './lib/chrome.mjs'
 
 const PROD_URL = 'https://inout-kappa.vercel.app/'
 const args = process.argv.slice(2)
@@ -312,7 +312,7 @@ async function main() {
       console.error(`b12: ${line(c)}`)
     } finally {
       if (chrome) await quitChrome(chrome).catch(() => undefined)
-      rmSync(profile, { recursive: true, force: true })
+      removeProfile(profile)
     }
   }
   writeFileSync(OUT, JSON.stringify(out, null, 2))

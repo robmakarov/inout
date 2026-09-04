@@ -30,7 +30,7 @@
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchChromeRetrying, quitChrome, resolveChrome, sleep } from './lib/chrome.mjs'
+import { removeProfile, launchChromeRetrying, quitChrome, resolveChrome, sleep } from './lib/chrome.mjs'
 
 const PROD_URL = 'https://inout-kappa.vercel.app/'
 
@@ -223,7 +223,7 @@ async function runCell(name, fault) {
     out.error = String(err)
   } finally {
     if (s) await quitChrome(s)
-    if (!opts.keepProfile) rmSync(profile, { recursive: true, force: true })
+    if (!opts.keepProfile) removeProfile(profile)
   }
   return out
 }

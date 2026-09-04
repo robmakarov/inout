@@ -19,7 +19,7 @@
  * the difference between simulating a crash and staging one.
  */
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -105,6 +105,19 @@ export async function launchChrome({
   extraArgs = [],
   throttled = false,
   viaOpen = false,
+  /**
+   * `--mute-audio` IS THE DEFAULT AND IT MUST BE, because a rig that plays
+   * sound at three in the morning is a rig that gets killed. But it is not
+   * cosmetic: a muted Chrome captures a muted tab, so a lane that MEASURES tab
+   * audio records digital zeros and grades itself RED for a reason that has
+   * nothing to do with the product. Measured 2026-09-05 — `memory-slope --tab`
+   * captured the tab-audio channel (which the whole-screen lane cannot even
+   * have) and it was 100 % zeros until this flag came off.
+   *
+   * So a lane that needs real sound asks for it, out loud, and says so in its
+   * own header.
+   */
+  muteAudio = true,
 }) {
   const port = await freePort()
   const args = [
@@ -125,7 +138,7 @@ export async function launchChrome({
           '--disable-backgrounding-occluded-windows',
           '--disable-renderer-backgrounding',
         ]),
-    '--mute-audio',
+    ...(muteAudio ? ['--mute-audio'] : []),
     '--window-size=900,700',
     '--window-position=0,0',
     ...extraArgs,
@@ -323,6 +336,30 @@ export async function quitChrome(session) {
  * --type= switch, so a leak can be attributed to the renderer, the GPU process
  * or a utility rather than to "Chrome".
  */
+/**
+ * REMOVE A RIG'S PROFILE, AND NEVER LET THAT COST THE RESULT.
+ *
+ * Found the hard way 2026-09-05: a full 60-minute `memory-slope --real` soak
+ * reached "stop pressed — waiting for the card" and then DIED in its own
+ * `finally`, because Chrome was still writing into the profile as it quit and
+ * `rmSync(recursive)` raced it to ENOTEMPTY. `force: true` forgives a path that
+ * is missing, not a directory that grew back under the walk — and a throw in a
+ * `finally` propagates, so the process ended before the curve, the bands and
+ * the verdict were printed. An hour of measurement, lost to housekeeping.
+ *
+ * Every rig in this repo had the same line. A temp directory nobody removed is
+ * one macOS will remove; a report nobody printed is gone.
+ */
+export function removeProfile(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+    return true
+  } catch (err) {
+    console.error(`chrome: could not remove the profile at ${dir} (${String(err)}) — left in place`)
+    return false
+  }
+}
+
 export function chromeRss(profile) {
   const out = { totalKb: 0, byType: {}, processes: 0 }
   try {

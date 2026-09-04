@@ -78,6 +78,7 @@ import { pathToFileURL } from 'node:url'
 import {
   chromeRss,
   launchChromeRetrying,
+  removeProfile,
   quitChrome,
   resolveChrome,
   sleep,
@@ -85,6 +86,9 @@ import {
 
 const PROD_URL = 'https://inout-kappa.vercel.app/'
 const BAND = { rssMbPerMin: 5, heapMbPerMin: 1, warmupMin: 5 }
+
+/** The tone tab's title — how the picker is answered, so `parseArgs` needs it. */
+const TAB_TITLE = 'INOUT SOAK TONE'
 
 function parseArgs(argv) {
   const o = {
@@ -202,8 +206,6 @@ function takeUrl(url) {
  * pixels — a max60 take of a 400x300 tab is not the take Phase 1 is asking
  * about.
  */
-const TAB_TITLE = 'INOUT SOAK TONE'
-
 /**
  * THE PAGE IS WRITTEN TO A FILE AND OPENED WITH `file://`, NOT HANDED OVER AS A
  * `data:` URL. Chrome has refused top-level navigation to `data:` since 60, and
@@ -241,13 +243,32 @@ const TONE_HTML =
   // and a timer behind it, so a frozen picture is never silent about itself.
   `function loop(){paint();requestAnimationFrame(loop)}requestAnimationFrame(loop);` +
   `let lastN=0;setInterval(()=>{if(n===lastN)paint();lastN=n;` +
-  `document.getElementById('s').textContent='soak '+c1.state+' frames '+n;},250);` +
-  // A 440 Hz sine at -26 dBFS: audible to the tap, quiet enough that an hour of
-  // it is not a torture test of the limiter.
+  `document.getElementById('s').textContent='soak ctx='+c1.state+' el='+elState+(el.paused?'(paused)':'')+' frames '+n;},250);` +
+  // THE SOUND DOES NOT DEPEND ON AN AudioContext, and the 3-minute rehearsal of
+  // 2026-09-05 is why: the tab lane's first run captured the tab-audio channel
+  // (which `--real` cannot even have) and it was digital zeros for the whole
+  // take — the context never left `suspended`, because there is no user gesture
+  // in a rig and `--autoplay-policy=no-user-gesture-required` did not rescue it
+  // here. A MEDIA ELEMENT is the reliable path under that flag, so the page
+  // builds a one-second 440 Hz WAV in memory (440 cycles fit exactly, so the
+  // loop is seamless), plays it on repeat, and keeps the oscillator as a second
+  // source. Both states are on screen, so a silent take says which failed.
+  `const R=48000,N=R,b=new ArrayBuffer(44+N*2),v=new DataView(b);` +
+  `const S=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};` +
+  `S(0,'RIFF');v.setUint32(4,36+N*2,true);S(8,'WAVEfmt ');v.setUint32(16,16,true);` +
+  `v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,R,true);` +
+  `v.setUint32(28,R*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);S(36,'data');` +
+  `v.setUint32(40,N*2,true);` +
+  `for(let i=0;i<N;i++)v.setInt16(44+i*2,Math.round(0.05*32767*Math.sin(2*Math.PI*440*i/R)),true);` +
+  `const el=new Audio(URL.createObjectURL(new Blob([b],{type:'audio/wav'})));` +
+  `el.loop=true;el.volume=1;let elState='pending';` +
+  `el.play().then(()=>{elState='playing'}).catch(e=>{elState='refused: '+e.name});` +
+  // The oscillator stays as a second source: if the element is refused and the
+  // context is not, the take still has sound in it.
   `const c1=new AudioContext();` +
   `const o=c1.createOscillator(),g=c1.createGain();` +
   `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c1.destination);o.start();` +
-  `setInterval(()=>{if(c1.state!=='running')c1.resume()},1000);` +
+  `setInterval(()=>{if(c1.state!=='running')c1.resume();if(el.paused)el.play().catch(()=>{})},1000);` +
   `</` + `script></body>`
 
 /** Chrome's own picker automation, so `getDisplayMedia` is answered by a switch
@@ -325,6 +346,13 @@ console.error(
   `memory-slope: HEAVY — ${opts.minutes} min soak, sampled every ${(opts.sampleMs / 1000).toFixed(0)} s · ` +
     `${opts.headed ? 'HEADED' : 'HEADLESS'} · source: ${report.source} · ${report.url}`,
 )
+if (opts.tab) {
+  console.error(
+    'memory-slope: THIS LANE MAKES SOUND — a muted Chrome captures a muted tab, so `--mute-audio` ' +
+      'is off here and a 440 Hz tone plays for the length of the soak. Check the machine is not ' +
+      'about to wake someone.',
+  )
+}
 
 const profile = join(tmpdir(), `inout-h3-${process.pid}`)
 rmSync(profile, { recursive: true, force: true })
@@ -348,6 +376,10 @@ try {
     // A node-spawned Chrome is denied macOS Screen Recording (TCC attributes to
     // the responsible process), so the real source has to come up under `open`.
     viaOpen: opts.real && process.platform === 'darwin',
+    // THE TAB LANE MUST NOT BE MUTED. A muted Chrome captures a muted tab, so
+    // this lane's whole subject — the tab-audio channel Phase 1's criterion
+    // names — would be digital zeros. It makes sound; the header says so.
+    muteAudio: !opts.tab,
   })
   step('chrome up, CDP attached')
   if (opts.real) {
@@ -525,7 +557,9 @@ try {
   report.error = String(err)
 } finally {
   await quitChrome(session)
-  if (!opts.keepProfile) rmSync(profile, { recursive: true, force: true })
+  // Cleaning up must never cost the report — an hour of measurement was lost
+  // to a `finally` that threw, 2026-09-05. `removeProfile` carries the story.
+  if (!opts.keepProfile) removeProfile(profile)
 }
 
 // ---- the curve ------------------------------------------------------------
