@@ -1657,3 +1657,27 @@ one that can ever be green on `channels`, because macOS gives Chrome no system a
 capture — was BUILT (it opens a painting, sounding tab, sizes the window to the display and answers the
 picker by title). A weakness the `--real` run measured and the tab lane fixes: a static screen falls to
 1.5 MB/min, so an hour of it is an honest memory soak and says nothing about max60 throughput.
+
+session 2026-09-05 (2) — THE PHASE-1 SOAK, AND THE FLAG THAT WAS HIDING ITS OWN ANSWER.
+`memory-slope --real`, 60 min at `qstep=max` on prod, real display: **60 samples, still recording at
+the last one; RSS slope +1.38 MB/min against a band of 5** (r2 0.15 — mostly the ±90 MB oscillation
+that file's own header predicts) with **half-means 278 → 310 MB**, **heap +0.048 MB/min against a band
+of 1** (half-means 10 → 11 MB), 646 MB written. H3's three bands held over a full hour. IT IS A MEMORY
+RESULT AND NOT A THROUGHPUT ONE, and the rig said so itself: the captured screen went static and the
+take fell from 22.7 to **1.5 MB/min**, so the encoder was barely loaded.
+THAT RUN ALSO ATE ITS OWN CARD: it reached "stop pressed — waiting for the card" and died in its
+`finally` on `rmSync` ENOTEMPTY, because Chrome was still writing into the profile as it quit and a
+throw in a finally propagates. The samples survived on the console, which is the only reason the hour
+was not wasted. `removeProfile()` (lib/chrome.mjs) retries and then shrugs; three rigs use it.
+**THE TAB LANE IS BUILT AND IS GREEN 13/13** — screen 2700x1838@60 + camera 1280x720@30 + mic + TAB
+AUDIO delivered stereo 44.1 kHz RAW, 60.0 fps, ~99 MB/min. It exists because macOS gives Chrome no
+system audio off a WHOLE-SCREEN capture, so the `--real` lane can never be green on `channels`.
+**AND THE REASON ITS FIRST TWO RUNS WERE RED WAS OURS: `--mute-audio`.** Every rig launches Chrome
+with it, which is the right default — a rig that plays sound at 3 a.m. gets killed — and a MUTED
+CHROME CAPTURES A MUTED TAB, so the one lane whose subject is tab audio recorded silence by
+construction and graded itself red for a reason with nothing to do with the product. The page was
+ruled out first (a WAV built in memory on a media element, plus the oscillator, both states on screen,
+rendered in real Chrome as `ctx=running el=playing`). `launchChrome` takes `muteAudio` now and the tab
+lane says out loud that it makes sound. Also: the camera DID deliver here (first frame +1460 ms,
+filmstrip 20/20), so X14a's "camera delivers zero frames on this machine" does not hold through the
+app's own acquisition.
