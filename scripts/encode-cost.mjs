@@ -414,6 +414,26 @@ async function run(st, frames) {
     waitPct: Math.round((waited / ms) * 100),
     kbPerFrame: Math.round(box.bytes / Math.max(1, box.out) / 102.4) / 10,
     ms: Math.round(ms),
+    /**
+     * WHAT THE ENCODER ACTUALLY MADE, against what it was handed — and this is
+     * not bookkeeping. M4 measured (2026-09-04, BACKLOG G lane) that this
+     * machine's hardware AVC encoder in quantizer bitrate mode — the mode
+     * the SHIPPED cell below uses — silently DROPS a variable share of
+     * submitted frames, and the loss grows the closer the timestamps are: 60 of
+     * 60 kept at 15 fps spacing, 59 then 41 at 30, 44 at 60, 21-44 at 120. A
+     * bitrate target keeps every frame at every rate.
+     *
+     * The fps above is frames SUBMITTED per second and is left exactly as it was,
+     * because the numbers in this file's header were measured that way and
+     * silently redefining them would make every one of them a lie of a
+     * different kind. outFps is the same wall clock over frames the encoder
+     * returned. When they differ, the cell says so on its own line rather than
+     * leaving the next session to divide.
+     */
+    submitted: frames,
+    out: box.out,
+    outFps: Math.round((box.out / (ms / 1000)) * 10) / 10,
+    keptEveryFrame: box.out === frames,
   };
 }
 
