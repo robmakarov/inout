@@ -717,6 +717,16 @@ export async function startMeasuredAudioCapture(opts: {
    * second, ~2,600 a minute of Float64) and reduced once at stop.
    */
   const tapHandoffMs: number[] = []
+  /**
+   * B12's gap counter is CUMULATIVE ACROSS REVIVALS on the main pump — it is
+   * never reset by `swapTrackReader` — and the worker's is cumulative per
+   * generation, because a new pump starts a new count. Without this base the
+   * two arms would disagree about the same take: a revived worker take would
+   * report only the gap since its last revival. The generation's running total
+   * is banked here when the next one opens.
+   */
+  let tapGapBaseUs = 0
+  let tapGapThisGenUs = 0
 
   const onBatch = (
     frames: number,
@@ -1043,6 +1053,9 @@ export async function startMeasuredAudioCapture(opts: {
    * without a capability table to maintain.
    */
   const startTrackTap = (clone: MediaStreamTrack): 'worker' | 'main' => {
+    // Bank the retiring generation's gap before its counter is replaced.
+    tapGapBaseUs += tapGapThisGenUs
+    tapGapThisGenUs = 0
     const gen = ++tapGeneration
     const bufChunks = trackTapBufferChunks(sampleRate)
     if (audioTapThreadChoice() === 'worker' && canTransferReadable()) {
@@ -1061,7 +1074,8 @@ export async function startMeasuredAudioCapture(opts: {
           // The worker sees the chunks, so it owns B12's instrument. Cumulative
           // per generation: a revival restarts it, exactly as the main pump's
           // reset does, because a swap's seam is `revivals` and not a drop.
-          tapGapUs = msg.tapGapUs
+          tapGapThisGenUs = msg.tapGapUs
+          tapGapUs = tapGapBaseUs + tapGapThisGenUs
           if (msg.tapMaxGapUs > tapMaxGapUs) tapMaxGapUs = msg.tapMaxGapUs
           // The worker's clock, in this thread's frame. See AudioTapBatch.
           const stampedMs = msg.stampMs - performance.timeOrigin
@@ -1078,6 +1092,12 @@ export async function startMeasuredAudioCapture(opts: {
         }
         w.postMessage(open, [readable as unknown as Transferable])
         tapWorker = w
+        // A take that armed on the main pump and only now got its transfer
+        // (the first attempt threw, a revival's did not) would otherwise leave
+        // that pump reading a clone nobody retired.
+        const stale = trackReader
+        trackReader = null
+        void stale?.cancel().catch(() => undefined)
         return 'worker'
       } catch (err) {
         // Not a failure worth a warning on every platform that cannot do it —
