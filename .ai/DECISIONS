@@ -1169,3 +1169,17 @@ not a dial) · oracle v2 PASS on BOTH painters · oracle v1 PASS · oracle:long 
 paint +41 B (299,769 vs main's 299,728) · instant and smart-cut untouched.
 AWAITING ROBERT: his eye on ~/Downloads/inout-o4, and with it the default. One word in
 `painterChoice()`.
+
+robert 2026-09-04 (2) — "WebGPU — turn it on": THE PAINTER DEFAULT MOVES.
+Shown the A/B from ~/Downloads/inout-o4 (the same real screen frame through both painters, plus a 4x
+crop of the worst region) and told what separates them — WebGPU renders warm saturated content more
+saturated, 13,485 pixels of 2,073,600 off by more than one step, worst 37, green identical, luma within
+2.02, and nothing else differs at all (synthetic source: maxAbs 1 of 255, PSNR 110 dB) — he chose
+WebGPU. So `painterChoice()` defaults to `webgpu` and `?painter=webgl2` is now the revert carrying
+every take made before it, which is the rule: the thing being replaced carries the switch.
+WHAT THE PRODUCT GAINS: 3.64 ms a frame on the composite, 90 %, 22 % of a 60 fps budget.
+GATES ON THE FLIP: 1,182 tests + typecheck green · oracle v2 PASS on the new default (sync 49.1/62.9 ms,
+spur -53.0 dB, tail 82 ms, export 3.5x) AND on the `?painter=webgl2` control (54.3/67.6, -40.5 dB, 81 ms,
+3.64x) · oracle v1 PASS (61.3/81.3, export 1.2x) on a second reading after one INCONCLUSIVE at export
+0.99x under load/core 1.64 — v1 has ZERO references to the painter, so that was G6's confirm-a-red rule
+working, not a regression.

@@ -340,7 +340,7 @@ GATES: green-channel colour kept ≥ 94 % on the chroma rig at (a), ≥ 99 % at 
 Instrument a take on Robert's ACTUAL work screen: per second, what fraction of the frame changed, at 8/16/32/64 px tiles, split by content (text editing, scrolling, video, cursor-only). Report the distribution, not an average, plus the bytes a lossless tile codec would have cost against what the encoder actually wrote. No engine change ships from this task. Binds robert (8): EVERY MOVEMENT IS KEPT — the census counts what changed, it never introduces a threshold below which change is discarded.
 GATES: the census runs on a real take without changing the recording (pinned: byte-identical output) · numbers for all four tile sizes and all four content classes · the cursor-only and text-field-only cases counted separately (they are exactly what AI1's picker dropped) · a one-paragraph verdict per idea 1 / 15 / 16: worth building, or not, with the number that decides it · headed, never the hidden pane.
 ### O10a loudness attenuation [BUILT, INERT — WAITING ON ROBERT'S RULING] — R128/BS.1770 −14 LUFS is implemented behind `?loudness=r128` and is a NO-OP until Robert allows attenuation. Exports sit 1-9 dB above −14 LUFS; turning it on means bright takes LOSE ~9 dB, which is a behaviour a user hears, so it is his call and nobody else's. GATES when allowed: −14 ±0.5 LUFS on the synthetic set · loudness spread across content (7.84 dB today) quoted after · fidelity green · A/B for his ear.
-### O4 the WebGPU backend [BUILT 2026-09-04, OFF BY DEFAULT — waiting on Robert's eye for one colour]
+### ~~O4 the WebGPU backend~~ DONE 2026-09-04 — BUILT, MEASURED, AND ON BY ROBERT'S RULING
 STEP 1 ANSWERED FIRST AND IT SHRANK THE PRIZE (`node scripts/gpu-residency.mjs`, evidence
 docs/qa/o4-gpu-residency.json, verdict in DECISIONS): the transferred capture frame is NOT read back —
 3024x1964 NV12 uploads in 0.72-0.80 ms against 3.23-3.41 ms for the SAME bytes from a JS ArrayBuffer =
@@ -364,9 +364,10 @@ THEY ARE NOT: 13,485 pixels of 2,073,600 differ by more than one step, 6,552 by 
 difference is systematic and it is COLOUR — across the twelve worst pixels the green channel is
 identical every time, red is 3-11 higher on WebGPU, blue 29-37 lower, luma within 2.02 of 255. WebGPU
 renders warm saturated content MORE saturated. That is the NV12→RGB conversion differing between
-`texImage2D` and `importExternalTexture`, not the drawing. A colour a user can see moves only on
-Robert's yes: A/B pair in ~/Downloads/inout-o4 (gpuFull/glFull, and a 4x nearest crop of the worst
-region). HIS CALL IS THE ONLY THING BETWEEN THIS AND THE DEFAULT.
+`texImage2D` and `importExternalTexture`, not the drawing. HE WAS SHOWN THE A/B (~/Downloads/inout-o4)
+AND CHOSE WEBGPU, so it is the default and `?painter=webgl2` is every take made before it. The
+direction is also where O9 is spending GPU headroom anyway: the composite keeps 70-75 % of the source's
+colour against the raw screen's 80-89 %, and this moves it up.
 NO THROUGHPUT REGRESSION: o4step2 v2 1080p 8 s — paint 1.10 ms (webgl2) vs 1.25 (webgpu), 190 vs 197
 frames encoded, 0 dropped either way. Three real takes per painter through fps-check: the composite and
 the RAW channel move together, and the raw channel never touches the painter, so the one collapsed run
@@ -382,8 +383,12 @@ is a pixel format and not a dial) · oracle v2 PASS on BOTH painters · oracle v
 (120 s cell, 189.4 s: sync 48.0/71.3 ms, spur -51.5 dB, tail 75 ms, instant 51.8, smartcut 51.2, export
 5.4x) · first paint +41 B (299,769 against main's 299,728; the 218,793 this file used to quote
 was years stale) · instant and smart-cut paths untouched · export wall clock unmoved.
-STILL OPEN: Robert's eye on the A/B, and with it the default. If he says the WebGPU colour is right or
-does not care, `painterChoice()` flips one word.
+DEFAULT FLIPPED the same day on his word, with the oracle re-run on both painters either side of it:
+v2 PASS on webgpu (sync 49.1/62.9, spur -53.0 dB, tail 82 ms) and PASS on the webgl2 control (54.3/67.6,
+-40.5 dB, 81 ms); v1 PASS (61.3/81.3, export 1.2x) on a second reading after one INCONCLUSIVE under a
+loaded machine — v1 has ZERO references to the painter, so that was G6's confirmation rule doing its job.
+NOTHING IS LEFT IN THIS TASK. O9(a)'s supersampling now runs on a painter that never copies, and F12's
+zoom model has its WebGPU device.
 ### O10b multitrack export [light-medium · PHASE 1 since 2026-09-02] — mic + system audio as SEPARATE tracks in the container, default flattened exactly as today. GATES: default export byte-identical (pinned) · tracks separate and independently selectable in a player that supports it · every export path states which it took · fidelity green.
 ### O10c deterministic spectral gating [medium · opt-in · PHASE 1 since 2026-09-02] — opt-in, deterministic DSP (no model), raw untouched, default OFF. Feeds B13(3) if the "small noises" turn out to be in the source rather than in our chain. GATES: OFF byte-identical (pinned) · ZERO gating triggers on clean speech, on a breathy-speech fixture too · measured SNR gain on a known-noise rig · fidelity bands green · A/B files for Robert's ear before any default moves.
 ### O10d cross-channel AEC [medium · BLOCKED ON P4 — this is a dependency, not a preference]

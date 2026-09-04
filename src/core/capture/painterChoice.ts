@@ -44,35 +44,41 @@ function fromStorage(): PainterChoice | null {
 }
 
 /**
- * WEBGL2 IS STILL THE DEFAULT, AND THAT IS A MEASUREMENT AND NOT CAUTION.
+ * WEBGPU BY DEFAULT SINCE 2026-09-04, ON ROBERT'S RULING, AND THE ONE THING IT
+ * CHANGES THAT A USER CAN SEE IS THE THING HE RULED ON.
  *
- * The gate O4 set was "both painters required identical". They are not, and the
- * parity rig says exactly where (`scripts/painter-parity.mjs`, 2026-09-04):
+ * The parity rig (`scripts/painter-parity.mjs`) put the two painters on the
+ * same frames:
  *
- *   · on a synthetic canvas source they ARE identical — maxAbs 1 of 255, PSNR
- *     110 dB. Every shape, corner radius, border stroke, feathered edge and
- *     blend agrees. The shaders and the geometry are not in question.
- *   · on a REAL NV12 screen-capture frame they do not. 13,485 pixels of
- *     2,073,600 differ by more than one step, 6,552 by more than four, worst 37
- *     of 255, PSNR 55.9 dB. The difference is systematic and it is COLOUR:
- *     across the twelve worst pixels the green channel is identical every time,
- *     red is 3-11 higher on WebGPU and blue is 29-37 lower, luma within 2 of
- *     255. WebGPU renders warm saturated content more saturated. That is the
- *     NV12 -> RGB conversion differing between `texImage2D` and
- *     `importExternalTexture`, not the drawing.
+ *   · on a synthetic source they are IDENTICAL — maxAbs 1 of 255, PSNR 110 dB.
+ *     Every shape, corner radius, border stroke, feathered edge and blend
+ *     agrees, so the shaders and the geometry are not in question and never
+ *     were.
+ *   · on a REAL NV12 screen frame they differ, systematically, in COLOUR:
+ *     13,485 pixels of 2,073,600 by more than one step, 6,552 by more than
+ *     four, worst 37, PSNR 55.9 dB. Over the twelve worst pixels the green
+ *     channel is identical every time, red is 3-11 higher here and blue 29-37
+ *     lower, luma within 2.02 of 255 — WebGPU renders warm saturated content
+ *     MORE saturated. `texImage2D` and `importExternalTexture` disagree about
+ *     NV12 -> RGB; the drawing does not.
  *
- * A colour a user can see does not move without Robert's yes — the hard rule,
- * and the one the "a fix ships on" clause does not override, because this is a
- * new engine and not a defect fix. The A/B pair is in ~/Downloads/inout-o4.
+ * He was shown the A/B (~/Downloads/inout-o4) and chose this one. The direction
+ * is also the direction O9 is spending GPU headroom to go: the composite keeps
+ * 70-75 % of the source's colour against the raw screen's 80-89 %, and this
+ * moves it up rather than down.
  *
- * WHAT IT COSTS TO WAIT, so the trade is on the table rather than buried: on the
- * capture composition (a 3024x1964 NV12 screen into a 1080p composite, screen
- * draw + camera PiP) the paint measures 4.059 ms on WebGL2 against 0.416 ms on
- * WebGPU behind a real fence — 3.64 ms a frame, 90 %, because WebGL2 uploads
- * the frame once per draw and WebGPU uploads it never.
+ * WHAT IT BUYS: on the capture composition — a 3024x1964 NV12 screen into a
+ * 1080p composite, screen draw plus camera PiP, behind a real fence — 0.416 ms
+ * a frame against WebGL2's 4.059. 3.64 ms, 90 %, 22 % of a 60 fps budget,
+ * because WebGL2 uploads the frame once PER DRAW and WebGPU uploads it never.
+ *
+ * THE THING BEING REPLACED CARRIES THE SWITCH, which is the repo's rule:
+ * `?painter=webgl2` is every take made before this, unchanged. A machine
+ * without WebGPU is not affected in any way — it gets WebGL2, which is what it
+ * had.
  */
 export function painterChoice(): PainterChoice {
-  return fromSearch() ?? override ?? fromStorage() ?? 'webgl2'
+  return fromSearch() ?? override ?? fromStorage() ?? 'webgpu'
 }
 
 export function setPainterChoice(p: PainterChoice | null): void {

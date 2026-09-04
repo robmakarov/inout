@@ -158,7 +158,7 @@ export function TestPanel() {
       />
       <Choice
         label="Compositor painter"
-        hint="webgl2 is what every take has used. webgpu never uploads the frame, so the composite costs 0.42 ms a frame instead of 4.06 — but warm saturated colour comes out MORE saturated (A/B in ~/Downloads/inout-o4). 2d is the slow floor."
+        hint="webgpu is the default: it never uploads the frame, so the composite costs 0.42 ms instead of 4.06, and warm colour comes out a little more saturated. webgl2 is exactly what every take before this used. 2d is the slow floor."
         value={painterChoice()}
         options={['webgpu', 'webgl2', '2d'] as PainterChoice[]}
         set={(v) => {
