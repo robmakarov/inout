@@ -370,7 +370,11 @@ each .mp4 + .png + a 4x blow-up of the text where the difference is visible) **d
 plays at its destination: the 4:4:4 file decodes in Chrome (every score above is read off a decode);
 Safari is UNVERIFIED and is exactly why this is opt-in · wall clock per rung **stated above** · instant and
 smart-cut untouched with the flag off **oracle v2 PASS: inst=instant/61.2 ms, trim=smartcut/59.3 ms,
-sync 65.4/77.6, spur -54.6 dB, tail 71 ms, export 3.46x** · 1,213 unit tests + typecheck green.
+sync 65.4/77.6, spur -54.6 dB, tail 71 ms, export 3.46x** · `oracle:long` PASS TWICE and the instant/
+trimmed numbers did NOT move up: run 2 inst 52.4 / trim 52.0 / export 5.33x against the standing
+51.8 / 51.2 / 5.4x (run 1 read 69.6 / 68.7 / 2.6x under a 53 % loaded machine and did not reproduce —
+G6's confirmation rule doing its job; `git diff main` on instant.ts, smartCut.ts and copySource.ts is
+EMPTY, so there is nothing in those paths that could have moved) · 1,213 unit tests + typecheck green.
 WHAT IS LEFT: Robert looks at `~/Downloads/inout-o9` and says whether the default moves, and for which
 destinations. NOTHING ELSE IN THIS TASK IS ENGINEERING.
 THE GENERAL FINDING, so no session re-derives it: **the colour is lost to 4:2:0 subsampling, once per
