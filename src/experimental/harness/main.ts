@@ -385,6 +385,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'j5',
+    title: 'J5 — the export is made while he edits, through the product’s own door',
+    detail:
+      'drives `noteEditorEdit` (the one call the editor makes) and answers J5’s four gates as numbers: an open, untouched editor schedules nothing and writes no chunk; one zoom edit renders in the background and the press after a quiet minute is timed against the same edit pressed cold; the pre-made file is SHA-256 compared with a cold foreground render of that edit; and a second, small edit reports how many chunks it re-rendered against how many it reused. The editor-stall half of the gate is not here — it needs a real visible editor: `node scripts/editor-drag-cost.mjs --j5`.',
+    run: async (args) => {
+      const { runBackgroundEditRender } = await import('../perf/backgroundEditRender')
+      return runBackgroundEditRender({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        audioChannels: typeof args?.audioChannels === 'number' ? args.audioChannels : undefined,
+        quietMs: typeof args?.quietMs === 'number' ? args.quietMs : undefined,
+        untouchedWatchMs: typeof args?.untouchedWatchMs === 'number' ? args.untouchedWatchMs : undefined,
+        rebuild: typeof args?.rebuild === 'boolean' ? args.rebuild : undefined,
+      })
+    },
+  },
+  {
     id: 'b1b',
     title: 'B1b — the size probe against the file, and against its own ten seconds',
     detail:

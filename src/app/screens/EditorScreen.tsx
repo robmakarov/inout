@@ -13,6 +13,7 @@ import {
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { cancelPrerender, editBindsPrerender, exportWouldRender } from '@core/compose'
+import { cancelEditRender, noteEditorEdit } from '@core/compose/editRender'
 import { noteEditingActivity, noteEditorOpen, noteEditorOpening } from '@core/backgroundWork'
 import { startEditorLateness } from '@core/lateness'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
@@ -244,47 +245,62 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   }, [edit])
 
   /**
-   * NOTHING RENDERS BECAUSE OF AN EDIT — task J3, Robert 2026-09-03 (robert
-   * (23)): "render in background while editing is fucked up, it goes back and
-   * forth and it wastage of resourses, i dont want it".
+   * THE EDIT HE MADE IS RENDERED WHILE HE MAKES THE NEXT ONE — task J5, Robert
+   * 2026-09-04 (robert (27)): "kill the glued copy encoding and do background
+   * render while editing", and the order is part of that ruling — this lands
+   * before the composite's encoder comes out (J6), because without a pre-made
+   * file an unedited camera take would lose instant export.
    *
-   * WHAT USED TO BE HERE, and why he is right. F16 started a whole-take render
-   * 1.2 s after every edit settled, and `editBindsPrerender` cancelled it the
-   * moment the next edit landed. On a long take that is exactly the "back and
-   * forth" he watched: a frame preset and a zoom could burn two discarded
-   * hour-long renders before Export was ever pressed, on a machine that was
-   * then hot for the render that counts. The debounce made it politer, never
-   * cheaper — 1.2 s of stillness is not evidence that the NEXT edit is not
-   * coming.
+   * IT IS NOT THE ONE HE DELETED (robert (23), "it goes back and forth and it
+   * wastage of resourses"). F16's version rendered the whole take from zero and
+   * threw all of it away on the next edit. Since J1 the render is content-keyed
+   * chunks, so a superseded job loses the 2.5 s chunk it was inside and every
+   * other chunk it finished stays on disk and is reused — by the next job and
+   * by the press. Same trigger, bounded waste.
    *
-   * WHAT IS LEFT, and it is not speculation. Two things still happen here and
-   * both only ever REMOVE work:
-   *  · `editBindsPrerender` still STOPS the at-stop job (F16b) when an edit
-   *    makes its output unservable. That is the ruling's own half — the job
-   *    stops immediately instead of spending the machine on a file the key
-   *    would never let anyone serve — and since J1 it costs nothing to stop:
-   *    every chunk it finished stays on disk under its own content name and
-   *    the eventual export reuses it.
+   * FOUR THINGS HAPPEN HERE, and only one of them starts work:
+   *  · `noteEditorEdit` (compose/editRender.ts) is the ONE door to a background
+   *    render. It holds the rules and is unit-pinned: opening a take starts
+   *    nothing, an undo back to the take as it opened starts nothing and
+   *    cancels what was pending, an export that would be a packet copy starts
+   *    nothing, and a real edit starts one 1.2 s after it settles.
+   *  · `editBindsPrerender` still STOPS a running job when an edit makes its
+   *    output unservable — the job stops instead of spending the machine on a
+   *    file the key would never let anyone serve, and since J1 stopping costs
+   *    one chunk.
    *  · a take whose export is a packet copy or a smart cut cancels the job
    *    outright, because those paths are already instant.
-   * Neither starts anything. The export is started by the PRESS, and J1's
-   * chunks are what make that press cheap: an edit costs only the chunks whose
-   * pixels moved, so the work this effect used to speculate about is now done
-   * once, when it is asked for.
+   *  · the whole thing is braked by `?bgpace=`, which this screen already feeds
+   *    (`noteEditorOpening` / `noteEditingActivity`): a trickle while the
+   *    editor is opening, a trickle while a hand is on it, paused beside a live
+   *    take. The render is supposed to make progress while someone reviews a
+   *    take; what it may never do is make the hand stutter.
    */
   useEffect(() => {
     if (!prerenderEnabled()) return
     const chosen = resolveTier(tier, frameAspect, frameRate)
     const settings = settingsForTier(chosen)
+    const wouldRender = exportWouldRender({
+      recording,
+      edit,
+      settings,
+      allowPacketCopy: isDefaultTier(tier),
+    })
     editBindsPrerender({ recording, edit, settings })
-    if (!exportWouldRender({ recording, edit, settings, allowPacketCopy: isDefaultTier(tier) })) {
-      cancelPrerender()
-    }
+    if (!wouldRender) cancelPrerender()
+    noteEditorEdit({ recording, edit, settings, wouldRender })
   }, [recording, edit, tier, frameAspect, frameRate])
 
   // A take that is left behind takes its pre-render with it: the file is for an
-  // export nobody is going to ask for now.
-  useEffect(() => () => cancelPrerender(), [recording.id])
+  // export nobody is going to ask for now — and the schedule goes with it, or
+  // the next editor would open onto a render aimed at the take it replaced.
+  useEffect(
+    () => () => {
+      cancelEditRender()
+      cancelPrerender()
+    },
+    [recording.id],
+  )
 
   const discard = async () => {
     setConfirmOpen(false)

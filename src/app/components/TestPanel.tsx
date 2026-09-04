@@ -15,6 +15,7 @@ import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
+import { editRenderEnabled, setEditRenderEnabled } from '@core/compose/editRenderFlag'
 import { keyframeIntervalSec, setKeyframeInterval } from '@core/compose/keyframeInterval'
 import { fullColourEnabled, setFullColourEnabled } from '@core/compose/fullColour'
 import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
@@ -158,6 +159,19 @@ export function TestPanel() {
         on={chunkedRenderEnabled()}
         set={(v) => {
           setChunkedRenderEnabled(v)
+          redraw()
+        }}
+      />
+      {/* J5, ruled 2026-09-04 (robert (27)). NOT greyed out with the row above:
+          it still works with the pieces off, it just throws away a whole render
+          instead of one piece when you edit again — which is the version he
+          deleted, and the reason the hint says what the two rows do together. */}
+      <Toggle
+        label="Make the export while you edit"
+        hint="On. A second after you stop moving something, the export for the edit you just made starts in the background, at low priority — it steps aside while your hand is on the timeline and stops dead while you record. Press Export and the file is usually already there. Opening a take and touching nothing renders nothing. With the row above off it starts the whole take over on every edit, which is wasteful; leave both on. Off is exactly 4 September: nothing is made until you press Export."
+        on={editRenderEnabled()}
+        set={(v) => {
+          setEditRenderEnabled(v)
           redraw()
         }}
       />

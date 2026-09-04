@@ -1,17 +1,20 @@
 /**
- * J3's gate: NO CODE PATH STARTS A RENDER FROM AN EDIT.
+ * THERE IS ONE DOOR BETWEEN AN EDIT AND A RENDER — J5's source gate.
  *
- * Robert, 2026-09-03 (robert (23)): "render in background while editing is
- * fucked up, it goes back and forth and it wastage of resourses, i dont want
- * it". The deleted code was one `setTimeout(() => startPrerender(...), 1200)`
- * in the editor, and one line is exactly the kind of thing that comes back —
- * so this reads the shipped source and fails if it does.
+ * WHAT THIS FILE USED TO SAY, and why it changed. J3 (Robert 2026-09-03) gated
+ * an ABSENCE: no code path may start a render from an edit, scanned for as a
+ * `setTimeout(startPrerender)` anywhere in the app. Robert reversed the ruling
+ * on 2026-09-04 (robert (27)) once J1 made a superseded render cost one 2.5 s
+ * chunk instead of the whole take — "kill the glued copy encoding and do
+ * background render while editing" — so the absence is gone and what replaces
+ * it is a single, unit-pinned door: `core/compose/editRender.ts`.
  *
- * It is deliberately a SOURCE test rather than a behavioural one. The
- * behaviour it guards is an ABSENCE, and the honest way to gate an absence is
- * to look for the thing that must not be there; a render-started-by-accident
- * would otherwise only show up as a slow machine on somebody's long take,
- * which is how it got here in the first place.
+ * The rules themselves are behavioural and live in `editRender.test.ts` (an
+ * untouched editor renders nothing, a settle, no render for a packet copy, the
+ * flag). What can only be gated by READING THE SOURCE is that the door stays
+ * the only one — a second `startPrerender` call added to a component months
+ * from now would pass every behavioural test in the repo while quietly putting
+ * F16's speculative render back.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -36,7 +39,7 @@ function code(text: string): string {
     .replace(/`(?:[^`\\]|\\.)*`/g, '``')
 }
 
-describe('J3 — nothing renders because of an edit', () => {
+describe('J5 — one door from an edit to a background render', () => {
   it('reads the modules it is gating', () => {
     // A glob that came back empty would pass every assertion below by looking
     // at nothing at all (note 17: a gate that cannot fail is not a gate).
@@ -44,12 +47,14 @@ describe('J3 — nothing renders because of an edit', () => {
     expect(Object.keys(coreSources).length).toBeGreaterThan(20)
     const editor = Object.entries(appSources).find(([f]) => f.endsWith('EditorScreen.tsx'))
     expect(editor, 'EditorScreen.tsx must be in the scanned set').toBeTruthy()
+    const door = Object.entries(coreSources).find(([f]) => f.endsWith('compose/editRender.ts'))
+    expect(door, 'compose/editRender.ts is the door and must be in the scanned set').toBeTruthy()
   })
 
-  it('the EDITOR never calls startPrerender', () => {
-    // Scoped to the editor on purpose: the capture screen still starts the
-    // at-stop job, and that one is not speculation — it runs once, when the
-    // machine is idle by definition, and the gate below pins that it stays.
+  it('the EDITOR goes through the door — it never calls startPrerender itself', () => {
+    // Scoped to the editor and its components on purpose: the capture screen
+    // still starts the at-stop job, and that one is not speculation — it runs
+    // once, when the machine is idle by definition.
     const offenders = Object.entries(appSources)
       .filter(([file]) => !/\.test\.tsx?$/.test(file))
       .filter(([file]) => /screens\/EditorScreen\.tsx$|components\//.test(file))
@@ -58,31 +63,39 @@ describe('J3 — nothing renders because of an edit', () => {
     expect(offenders).toEqual([])
   })
 
-  it('no app or core module starts a render on a timer', () => {
-    // The deleted shape exactly: a deferred call into the pre-render.
-    const deferred = /set(?:Timeout|Interval)\([^;]{0,200}?startPrerender/
+  it('the editor DOES call the door — the feature is on, not merely allowed', () => {
+    // The other half, and the one that matters after robert (27): a fix that
+    // ships wired to nothing is the "you did fix and turned it off" defect.
+    const editor = Object.entries(appSources).find(([f]) => f.endsWith('EditorScreen.tsx'))!
+    expect(code(editor[1])).toMatch(/\bnoteEditorEdit\s*\(/)
+    expect(code(editor[1])).toMatch(/\bcancelEditRender\s*\(/)
+  })
+
+  it('editRender.ts is the ONLY module that starts a render on a timer', () => {
+    // The exact shape J3 deleted, allowed in precisely one file now.
+    const deferred = /set(?:Timeout|Interval)\([^;]{0,400}?startPrerender/
     const offenders = [...Object.entries(appSources), ...Object.entries(coreSources)]
       // Tests are excluded, and this one is why: the born-red assertion below
       // carries the forbidden shape as a regex literal, so a scan that included
       // itself would fail forever on its own gate.
       .filter(([file]) => !/\.test\.tsx?$/.test(file))
+      .filter(([file]) => !/compose\/editRender\.ts$/.test(file))
       .filter(([, text]) => deferred.test(code(text).replace(/\s+/g, ' ')))
       .map(([file]) => file)
     expect(offenders).toEqual([])
   })
 
   it('catches the shape it is meant to catch', () => {
-    // Born red against the line J3 deleted, so this is known to be able to fail.
-    const deleted = 'const t = setTimeout(() => startPrerender({ recording, edit, settings }), 1200)'
-    expect(/\bstartPrerender\s*\(/.test(code(deleted))).toBe(true)
-    expect(/set(?:Timeout|Interval)\([^;]{0,200}?startPrerender/.test(code(deleted).replace(/\s+/g, ' '))).toBe(
+    // Born red against the line J3 deleted and J5 re-homed, so this is known to
+    // be able to fail.
+    const loose = 'const t = setTimeout(() => startPrerender({ recording, edit, settings }), 1200)'
+    expect(/\bstartPrerender\s*\(/.test(code(loose))).toBe(true)
+    expect(/set(?:Timeout|Interval)\([^;]{0,400}?startPrerender/.test(code(loose).replace(/\s+/g, ' '))).toBe(
       true,
     )
   })
 
-  it('the AT-STOP render is untouched — J3 deleted speculation, not the feature', () => {
-    // The gate is "press-to-first-byte on an unedited take unchanged", and that
-    // is the at-stop job (F16b) doing its work while the machine is idle.
+  it('the AT-STOP render is untouched — J5 added a trigger, it did not move one', () => {
     const capture = Object.entries(appSources).find(([f]) => f.endsWith('CaptureScreen.tsx'))
     expect(capture).toBeTruthy()
     expect(code(capture![1])).toMatch(/startPrerender\(/)
