@@ -36,7 +36,6 @@ import {
 } from './chunkedRender'
 import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from './chunkedFlag'
 import { setConstantQualityOverride } from './constantQuality'
-import { setSupersampleOverride } from './supersample'
 import { setFullColourOverride } from './fullColour'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
@@ -67,8 +66,6 @@ export type ExportWorkerIn =
         sourceFrame?: boolean
         /** J1's `?chunked=` — the render that remembers. Default off. */
         chunked?: boolean
-        /** O9(a)'s `?ss=` — the supersampled draw. 1 = today's draw. */
-        ss?: number
         /** O9(b)'s `?colour=all` — the 4:4:4 rung. Default off. */
         fullColour?: boolean
       }
@@ -146,7 +143,6 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (msg.flags.loudness) setLoudnessMode(msg.flags.loudness)
     if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
     if (typeof msg.flags.chunked === 'boolean') setChunkedRenderOverride(msg.flags.chunked)
-    if (typeof msg.flags.ss === 'number') setSupersampleOverride(msg.flags.ss)
     if (typeof msg.flags.fullColour === 'boolean') setFullColourOverride(msg.flags.fullColour)
   }
   if (msg.pace) paceLevel = msg.pace

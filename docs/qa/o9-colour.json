@@ -1,0 +1,2534 @@
+{
+ "notes": [
+  "master painted once at 3840x2160; every source and the reference are downscales of it"
+ ],
+ "rows": [
+  {
+   "id": "src1x-ss1-low",
+   "sourceScale": 1,
+   "sourceW": 1920,
+   "sourceH": 1080,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "low",
+   "drawMs": 0.154,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.8,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.8,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0,
+     "lumaSmearMean": 0,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 99
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 551817,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 607,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.2,
+       214.2
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.7,
+       222.6,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.74,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.5
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586471,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 804,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.5,
+       208.4,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.3
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       121.9,
+       191.4,
+       250.5
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.61,
+     "lumaSmearMean": 2.35,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.5
+   },
+   "error": null
+  },
+  {
+   "id": "src1x-ss1-high",
+   "sourceScale": 1,
+   "sourceW": 1920,
+   "sourceH": 1080,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "high",
+   "drawMs": 0.132,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.8,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.8,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0,
+     "lumaSmearMean": 0,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 99
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 551817,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 608,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.2,
+       214.2
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.7,
+       222.6,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.74,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.5
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586471,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 732,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.5,
+       208.4,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.3
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       121.9,
+       191.4,
+       250.5
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.61,
+     "lumaSmearMean": 2.35,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.5
+   },
+   "error": null
+  },
+  {
+   "id": "src1x-ss2-low",
+   "sourceScale": 1,
+   "sourceW": 1920,
+   "sourceH": 1080,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "low",
+   "drawMs": 0.123,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       187.7,
+       195.4,
+       203.3
+      ],
+      "saturationPct": 7.7,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 104.1,
+      "saturationDeltaPts": 0.3,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       118.2,
+       215.8,
+       127.1
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       113.5,
+       179.4,
+       238.4
+      ],
+      "saturationPct": 52.4,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 99.8,
+      "saturationDeltaPts": -0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 2.98,
+     "lumaSmearMean": 13.88,
+     "edgeContrastKept": 0.78,
+     "flatLumaMean": 0.1
+    },
+    "db": 29.5
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 528994,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.06
+    },
+    "encodeMs": 611,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       190.2,
+       194.5,
+       200.6
+      ],
+      "saturationPct": 5.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 70.3,
+      "saturationDeltaPts": -2.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       134.1,
+       208.8,
+       144.1
+      ],
+      "saturationPct": 35.8,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.7,
+      "saturationDeltaPts": -9.7,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       126.3,
+       176.7,
+       222.7
+      ],
+      "saturationPct": 43.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 82.5,
+      "saturationDeltaPts": -9.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.57,
+     "lumaSmearMean": 13.87,
+     "edgeContrastKept": 0.79,
+     "flatLumaMean": 0.3
+    },
+    "db": 28
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 522678,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.05
+    },
+    "encodeMs": 845,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       188,
+       195.4,
+       200.6
+      ],
+      "saturationPct": 6.3,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 85.1,
+      "saturationDeltaPts": -1.1,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       119.1,
+       214.6,
+       129
+      ],
+      "saturationPct": 44.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 97.8,
+      "saturationDeltaPts": -1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       114.6,
+       179.2,
+       234.2
+      ],
+      "saturationPct": 51.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.3,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.34,
+     "lumaSmearMean": 14.19,
+     "edgeContrastKept": 0.78,
+     "flatLumaMean": 0.48
+    },
+    "db": 28.5
+   },
+   "error": null
+  },
+  {
+   "id": "src1x-ss2-high",
+   "sourceScale": 1,
+   "sourceW": 1920,
+   "sourceH": 1080,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "high",
+   "drawMs": 0.12,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       190.8,
+       198.6,
+       206.5
+      ],
+      "saturationPct": 7.6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 102.7,
+      "saturationDeltaPts": 0.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       120,
+       219.4,
+       128.9
+      ],
+      "saturationPct": 45.3,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.6,
+      "saturationDeltaPts": -0.2,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       115.3,
+       182.4,
+       240.5
+      ],
+      "saturationPct": 52.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 99.2,
+      "saturationDeltaPts": -0.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 2.57,
+     "lumaSmearMean": 11.56,
+     "edgeContrastKept": 0.82,
+     "flatLumaMean": 0.07
+    },
+    "db": 31
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 534559,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.07
+    },
+    "encodeMs": 1598,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       193.4,
+       197.7,
+       203.8
+      ],
+      "saturationPct": 5.1,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 68.9,
+      "saturationDeltaPts": -2.3,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       136.6,
+       212.2,
+       146.6
+      ],
+      "saturationPct": 35.6,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.2,
+      "saturationDeltaPts": -9.9,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       128.6,
+       179.7,
+       225
+      ],
+      "saturationPct": 42.8,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.5,
+      "saturationDeltaPts": -9.7,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.42,
+     "lumaSmearMean": 11.58,
+     "edgeContrastKept": 0.82,
+     "flatLumaMean": 0.28
+    },
+    "db": 28.9
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 536083,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.07
+    },
+    "encodeMs": 1568,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       191.2,
+       198.7,
+       203.8
+      ],
+      "saturationPct": 6.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 83.8,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       120.9,
+       218.2,
+       130.9
+      ],
+      "saturationPct": 44.6,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 98,
+      "saturationDeltaPts": -0.9,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       116.6,
+       182.1,
+       236.4
+      ],
+      "saturationPct": 50.7,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 96.6,
+      "saturationDeltaPts": -1.8,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.08,
+     "lumaSmearMean": 11.85,
+     "edgeContrastKept": 0.82,
+     "flatLumaMean": 0.45
+    },
+    "db": 29.7
+   },
+   "error": null
+  },
+  {
+   "id": "src1.575x-ss1-low",
+   "sourceScale": 1.575,
+   "sourceW": 3024,
+   "sourceH": 1702,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "low",
+   "drawMs": 0.123,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       195.2,
+       203,
+       211
+      ],
+      "saturationPct": 7.5,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 101.4,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       122.4,
+       224.2,
+       131.4
+      ],
+      "saturationPct": 45.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.8,
+      "saturationDeltaPts": -0.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       117.6,
+       186.5,
+       247.8
+      ],
+      "saturationPct": 52.5,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.21,
+     "lumaSmearMean": 15.07,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.04
+    },
+    "db": 23.9
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 541865,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.08
+    },
+    "encodeMs": 610,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       198.1,
+       202.5,
+       208.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       139.4,
+       216.5,
+       149.2
+      ],
+      "saturationPct": 35.6,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.2,
+      "saturationDeltaPts": -9.9,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       131.4,
+       183.7,
+       231
+      ],
+      "saturationPct": 43.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 82.1,
+      "saturationDeltaPts": -9.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.13,
+     "lumaSmearMean": 16.02,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.27
+    },
+    "db": 23.5
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 576446,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.15
+    },
+    "encodeMs": 840,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       195.1,
+       202.8,
+       207.9
+      ],
+      "saturationPct": 6.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 83.8,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       122.8,
+       223.2,
+       133
+      ],
+      "saturationPct": 45,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 98.9,
+      "saturationDeltaPts": -0.5,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       118.7,
+       186.2,
+       243.4
+      ],
+      "saturationPct": 51.2,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.5,
+      "saturationDeltaPts": -1.3,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.43,
+     "lumaSmearMean": 15.79,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.46
+    },
+    "db": 23.7
+   },
+   "error": null
+  },
+  {
+   "id": "src1.575x-ss1-high",
+   "sourceScale": 1.575,
+   "sourceW": 3024,
+   "sourceH": 1702,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "high",
+   "drawMs": 0.126,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       195.2,
+       203,
+       211
+      ],
+      "saturationPct": 7.5,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 101.4,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       122.4,
+       224.2,
+       131.4
+      ],
+      "saturationPct": 45.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.8,
+      "saturationDeltaPts": -0.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       117.6,
+       186.5,
+       247.8
+      ],
+      "saturationPct": 52.5,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.21,
+     "lumaSmearMean": 15.07,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.04
+    },
+    "db": 23.9
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 542156,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.08
+    },
+    "encodeMs": 608,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       198.2,
+       202.5,
+       208.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       139.4,
+       216.5,
+       149.1
+      ],
+      "saturationPct": 35.6,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.2,
+      "saturationDeltaPts": -9.9,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       131.4,
+       183.7,
+       231.1
+      ],
+      "saturationPct": 43.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 82.1,
+      "saturationDeltaPts": -9.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.13,
+     "lumaSmearMean": 16.02,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.27
+    },
+    "db": 23.5
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 576670,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.15
+    },
+    "encodeMs": 905,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       195.1,
+       202.8,
+       207.9
+      ],
+      "saturationPct": 6.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 83.8,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       122.8,
+       223.2,
+       133
+      ],
+      "saturationPct": 45,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 98.9,
+      "saturationDeltaPts": -0.5,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       118.7,
+       186.2,
+       243.4
+      ],
+      "saturationPct": 51.2,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.5,
+      "saturationDeltaPts": -1.3,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.42,
+     "lumaSmearMean": 15.79,
+     "edgeContrastKept": 0.92,
+     "flatLumaMean": 0.46
+    },
+    "db": 23.7
+   },
+   "error": null
+  },
+  {
+   "id": "src1.575x-ss2-low",
+   "sourceScale": 1.575,
+   "sourceW": 3024,
+   "sourceH": 1702,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "low",
+   "drawMs": 0.125,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       191.9,
+       199.7,
+       207.6
+      ],
+      "saturationPct": 7.6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 102.7,
+      "saturationDeltaPts": 0.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       120.5,
+       220.3,
+       129.4
+      ],
+      "saturationPct": 45.3,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.6,
+      "saturationDeltaPts": -0.2,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       115.9,
+       183.4,
+       243.6
+      ],
+      "saturationPct": 52.4,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 99.8,
+      "saturationDeltaPts": -0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.59,
+     "lumaSmearMean": 16.76,
+     "edgeContrastKept": 0.84,
+     "flatLumaMean": 0.05
+    },
+    "db": 24
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 532596,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.07
+    },
+    "encodeMs": 615,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       194.7,
+       199,
+       205
+      ],
+      "saturationPct": 5,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 67.6,
+      "saturationDeltaPts": -2.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       137,
+       212.9,
+       146.7
+      ],
+      "saturationPct": 35.7,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.5,
+      "saturationDeltaPts": -9.8,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       129.3,
+       180.6,
+       227.3
+      ],
+      "saturationPct": 43.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 82.1,
+      "saturationDeltaPts": -9.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.36,
+     "lumaSmearMean": 17.38,
+     "edgeContrastKept": 0.85,
+     "flatLumaMean": 0.27
+    },
+    "db": 23.5
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 541143,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.08
+    },
+    "encodeMs": 911,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       192,
+       199.6,
+       204.7
+      ],
+      "saturationPct": 6.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 83.8,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       121.1,
+       219.2,
+       131.1
+      ],
+      "saturationPct": 44.8,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 98.5,
+      "saturationDeltaPts": -0.7,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       116.9,
+       183.1,
+       239.2
+      ],
+      "saturationPct": 51.1,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.3,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.7,
+     "lumaSmearMean": 17.27,
+     "edgeContrastKept": 0.84,
+     "flatLumaMean": 0.45
+    },
+    "db": 23.8
+   },
+   "error": null
+  },
+  {
+   "id": "src1.575x-ss2-high",
+   "sourceScale": 1.575,
+   "sourceW": 3024,
+   "sourceH": 1702,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "high",
+   "drawMs": 0.17,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       192.9,
+       200.7,
+       208.6
+      ],
+      "saturationPct": 7.5,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 101.4,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       121.2,
+       221.5,
+       130
+      ],
+      "saturationPct": 45.3,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.6,
+      "saturationDeltaPts": -0.2,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       116.5,
+       184.4,
+       244.2
+      ],
+      "saturationPct": 52.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 99.6,
+      "saturationDeltaPts": -0.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.54,
+     "lumaSmearMean": 16.42,
+     "edgeContrastKept": 0.86,
+     "flatLumaMean": 0.05
+    },
+    "db": 24
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 534372,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.07
+    },
+    "encodeMs": 1639,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       195.6,
+       199.9,
+       205.9
+      ],
+      "saturationPct": 5,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 67.6,
+      "saturationDeltaPts": -2.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       137.9,
+       214.1,
+       147.5
+      ],
+      "saturationPct": 35.6,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 78.2,
+      "saturationDeltaPts": -9.9,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       130.1,
+       181.6,
+       228
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 9.32,
+     "lumaSmearMean": 16.98,
+     "edgeContrastKept": 0.86,
+     "flatLumaMean": 0.28
+    },
+    "db": 23.6
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 548810,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 1670,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       193,
+       200.6,
+       205.7
+      ],
+      "saturationPct": 6.2,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 83.8,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       121.7,
+       220.4,
+       131.8
+      ],
+      "saturationPct": 44.8,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 98.5,
+      "saturationDeltaPts": -0.7,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       117.5,
+       184,
+       239.7
+      ],
+      "saturationPct": 51,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.1,
+      "saturationDeltaPts": -1.5,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 5.66,
+     "lumaSmearMean": 16.82,
+     "edgeContrastKept": 0.86,
+     "flatLumaMean": 0.45
+    },
+    "db": 23.8
+   },
+   "error": null
+  },
+  {
+   "id": "src2x-ss1-low",
+   "sourceScale": 2,
+   "sourceW": 3840,
+   "sourceH": 2160,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "low",
+   "drawMs": 0.117,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.9,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0.19,
+     "lumaSmearMean": 0.18,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 61.4
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 552311,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 717,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.3,
+       214.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.8,
+       222.5,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.75,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.4
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586057,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 846,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.6,
+       208.3,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.4
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       122,
+       191.4,
+       250.4
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.65,
+     "lumaSmearMean": 2.39,
+     "edgeContrastKept": 0.99,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.4
+   },
+   "error": null
+  },
+  {
+   "id": "src2x-ss1-high",
+   "sourceScale": 2,
+   "sourceW": 3840,
+   "sourceH": 2160,
+   "ss": 1,
+   "ssUsed": 1,
+   "drawW": 1920,
+   "drawH": 1080,
+   "smoothing": "high",
+   "drawMs": 0.107,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.9,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0.19,
+     "lumaSmearMean": 0.18,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 61.4
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 552311,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 615,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.3,
+       214.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.8,
+       222.5,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.75,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.4
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586057,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 883,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.6,
+       208.3,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.4
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       122,
+       191.4,
+       250.4
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.65,
+     "lumaSmearMean": 2.39,
+     "edgeContrastKept": 0.99,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.4
+   },
+   "error": null
+  },
+  {
+   "id": "src2x-ss2-low",
+   "sourceScale": 2,
+   "sourceW": 3840,
+   "sourceH": 2160,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "low",
+   "drawMs": 0.119,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.9,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0.19,
+     "lumaSmearMean": 0.18,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 61.4
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 552311,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 764,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.3,
+       214.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.8,
+       222.5,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.75,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.4
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586057,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 963,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.6,
+       208.3,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.4
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       122,
+       191.4,
+       250.4
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.65,
+     "lumaSmearMean": 2.39,
+     "edgeContrastKept": 0.99,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.4
+   },
+   "error": null
+  },
+  {
+   "id": "src2x-ss2-high",
+   "sourceScale": 2,
+   "sourceW": 3840,
+   "sourceH": 2160,
+   "ss": 2,
+   "ssUsed": 2,
+   "drawW": 3840,
+   "drawH": 2160,
+   "smoothing": "high",
+   "drawMs": 0.117,
+   "drawOnly": {
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.7,
+       208.7,
+       216.7
+      ],
+      "saturationPct": 7.4,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       230.8,
+       134.8
+      ],
+      "saturationPct": 45.5,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 100,
+      "saturationDeltaPts": 0,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       120.9,
+       191.8,
+       254.8
+      ],
+      "saturationPct": 52.6,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 100.2,
+      "saturationDeltaPts": 0.1,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 0.19,
+     "lumaSmearMean": 0.18,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0
+    },
+    "db": 61.4
+   },
+   "avc420": {
+    "codec": "avc1.640028",
+    "file": {
+     "bytes": 552311,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "avc1.640028",
+     "achievedMbps": 1.1
+    },
+    "encodeMs": 766,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       203.8,
+       208.3,
+       214.4
+      ],
+      "saturationPct": 4.9,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 66.2,
+      "saturationDeltaPts": -2.5,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       143.8,
+       222.5,
+       153.3
+      ],
+      "saturationPct": 35.4,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 77.8,
+      "saturationDeltaPts": -10.1,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       135.5,
+       188.9,
+       237.3
+      ],
+      "saturationPct": 42.9,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 81.7,
+      "saturationDeltaPts": -9.6,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 8.6,
+     "lumaSmearMean": 2.75,
+     "edgeContrastKept": 1,
+     "flatLumaMean": 0.23
+    },
+    "db": 33.4
+   },
+   "av1444": {
+    "codec": "av01.1.08M.08",
+    "file": {
+     "bytes": 586057,
+     "durationSec": 4,
+     "packets": 120,
+     "keyframes": 2,
+     "codec": "av01.1.08M.08.0.110.06.06.06.0",
+     "achievedMbps": 1.17
+    },
+    "encodeMs": 977,
+    "chroma": [
+     {
+      "key": "grey",
+      "colour": "grey  #c9d1d9",
+      "pixels": 44782,
+      "mean": [
+       200.6,
+       208.3,
+       213.3
+      ],
+      "saturationPct": 6,
+      "sourceSaturationPct": 7.4,
+      "keptPct": 81.1,
+      "saturationDeltaPts": -1.4,
+      "status": "ok"
+     },
+     {
+      "key": "green",
+      "colour": "green #7ee787",
+      "pixels": 17075,
+      "mean": [
+       125.9,
+       229.7,
+       136.4
+      ],
+      "saturationPct": 45.2,
+      "sourceSaturationPct": 45.5,
+      "keptPct": 99.3,
+      "saturationDeltaPts": -0.3,
+      "status": "ok"
+     },
+     {
+      "key": "blue",
+      "colour": "blue  #79c0ff",
+      "pixels": 21822,
+      "mean": [
+       122,
+       191.4,
+       250.4
+      ],
+      "saturationPct": 51.3,
+      "sourceSaturationPct": 52.5,
+      "keptPct": 97.7,
+      "saturationDeltaPts": -1.2,
+      "status": "ok"
+     }
+    ],
+    "edge": {
+     "edgePixels": 224776,
+     "edgeSharePct": 10.8,
+     "chromaFringeMean": 3.65,
+     "lumaSmearMean": 2.39,
+     "edgeContrastKept": 0.99,
+     "flatLumaMean": 0.4
+    },
+    "db": 37.4
+   },
+   "error": null
+  }
+ ],
+ "cost": [
+  {
+   "id": "avc-420-hardware",
+   "codec": "avc1.640028",
+   "frames": 120,
+   "ms": 814,
+   "fps": 147.4,
+   "bytes": 573728,
+   "error": null
+  },
+  {
+   "id": "av1-444-software",
+   "codec": "av01.1.08M.08",
+   "frames": 120,
+   "ms": 1466,
+   "fps": 81.9,
+   "bytes": 1070326,
+   "error": null
+  }
+ ],
+ "gates": {
+  "the draw alone loses colour when the source is bigger than the file": {
+   "pass": true,
+   "detail": "1:1 draw of a 3024x1702 source into 1920x1080 keeps 99.8 % of the green, with NO encoder anywhere (fringe 3.21)"
+  },
+  "supersampling beats the free lever (imageSmoothingQuality high)": {
+   "pass": false,
+   "detail": "draw only: 1x/low 99.8 % · 1x/high 99.8 % · 2x/low 99.6 %"
+  },
+  "green kept >= 94 % through the export at (a)": {
+   "pass": false,
+   "detail": "src1x-ss1-low 77.8 % · src1x-ss1-high 77.8 % · src1x-ss2-low 78.7 % · src1x-ss2-high 78.2 % · src1.575x-ss1-low 78.2 % · src1.575x-ss1-high 78.2 % · src1.575x-ss2-low 78.5 % · src1.575x-ss2-high 78.2 % · src2x-ss1-low 77.8 % · src2x-ss1-high 77.8 % · src2x-ss2-low 77.8 % · src2x-ss2-high 77.8 %"
+  },
+  "green kept >= 99 % at (b), the 4:4:4 rung": {
+   "pass": true,
+   "detail": "src1x-ss1-low 99.3 % · src1x-ss1-high 99.3 % · src1x-ss2-low 97.8 % · src1x-ss2-high 98 % · src1.575x-ss1-low 98.9 % · src1.575x-ss1-high 98.9 % · src1.575x-ss2-low 98.5 % · src1.575x-ss2-high 98.5 % · src2x-ss1-low 99.3 % · src2x-ss1-high 99.3 % · src2x-ss2-low 99.3 % · src2x-ss2-high 99.3 %"
+  },
+  "(b) prints its true cost on MOVING content": {
+   "pass": true,
+   "detail": "120 moving frames at 1920x1080: AVC 4:2:0 hardware 147.4 fps / 573728 B · AV1 4:4:4 software 81.9 fps / 1070326 B = 1.8x slower, 1.87x the bytes"
+  }
+ },
+ "verdict": "THE DRAW AND THE ENCODE LOSE DIFFERENT THINGS. Best 4:2:0 row: none at n/a % green; its DRAW alone kept n/a %, so the rest is 4:2:0 subsampling at the delivery size and no drawing can reach it. The 4:4:4 rung on the same frame: n/a %."
+}

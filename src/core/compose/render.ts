@@ -100,7 +100,6 @@ import { BitsAudit, formatBits } from './bits'
 import { DEFAULT_TARGET_LUFS, gainForTargetLufs } from './lufs'
 import { loudnessMode } from './loudnessMode'
 import { drawVideoFrame, type FrameCanvas } from './layout'
-import { supersampleDraw } from './supersample'
 import { fullColourActive, fullColourCodec, noteFullColourDeclined } from './fullColour'
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
@@ -489,28 +488,18 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('Canvas 2D context unavailable')
     /**
-     * O9(a). The composition is drawn at an integer multiple of the output and
-     * reduced into `canvas` once per frame, so every delivered pixel is the
-     * exact block average of its draw pixels instead of one bilinear tap of a
-     * minified source. `null` — the default — is today's draw, byte for byte:
-     * `frame` IS the delivery canvas and no blit happens anywhere below.
+     * O9(a) WAS MEASURED HERE AND REFUSED, 2026-09-04 — recorded so no session
+     * builds it a second time. A supersampled draw (compose the frame at 2x and
+     * reduce it in one aligned step) was built, shipped behind `?ss=`, measured
+     * with `node scripts/o9-colour.mjs`, and removed: THIS DRAW IS NOT WHERE
+     * THE COLOUR GOES. A 1:1 draw of a 3024-wide source into 1080p keeps 99.8 %
+     * of the green with no encoder anywhere, and drawing it at 2x moved the
+     * finished 4:2:0 file from 78.2 % to 78.2-78.7 % — inside run variance —
+     * while raising the glyph fringe 3.21 → 3.59 and the export's wall clock
+     * 8 %. The loss is 4:2:0 subsampling at the delivery size, once per encode
+     * generation, and the only lever that reaches it is fullColour.ts.
      */
-    const ss = supersampleDraw(width, height)
-    const drawCanvas = ss ? new OffscreenCanvas(ss.width, ss.height) : canvas
-    const drawCtx = ss ? drawCanvas.getContext('2d', { alpha: false }) : ctx
-    if (!drawCtx) throw new Error('Canvas 2D context unavailable')
-    if (ss) {
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = 'high'
-      console.info(
-        `[compose] O9(a) supersampled draw ${ss.width}x${ss.height} → ${width}x${height} (${ss.factor}x)`,
-      )
-    }
-    const frame: FrameCanvas = ss
-      ? { ctx: drawCtx, width: ss.width, height: ss.height, scale: frameScale(ss.width, ss.height) }
-      : { ctx, width, height, scale: frameScale(width, height) }
-    /** The reduction, counted as draw because that is what it is. */
-    const reduce = ss ? (): void => { ctx.drawImage(drawCanvas, 0, 0, width, height) } : null
+    const frame: FrameCanvas = { ctx, width, height, scale: frameScale(width, height) }
 
     // CONSTANT QUALITY, when this browser honours it (Robert 2026-08-29, "more
     // quality and much less size"). Resolved BEFORE the output so the file's
@@ -715,7 +704,6 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       if (drawWaveform) {
         const tDraw = performance.now()
         drawWaveform(tSec)
-        reduce?.()
         stats.drawMs += performance.now() - tDraw
       } else {
         const tDecode = performance.now()
@@ -749,7 +737,6 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           if (recMs !== null) view = viewportAt(edit.viewport, recMs)
         }
         drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
-        reduce?.()
         stats.drawMs += performance.now() - tDraw
       }
       // Awaited, and that is not the stall O5 assumed it was: mediabunny's

@@ -82,16 +82,6 @@ export interface RenderFlagPrint {
   loudness: string
   /** F13's `?sourceframe=` — silently drew the camera with a different fit. */
   sourceFrame: boolean
-  /**
-   * O9(a)'s `?ss=` — the supersampled draw. IT MOVES PIXELS, so it belongs in
-   * the key: a chunk drawn at 2x and reduced is not the chunk today's draw
-   * makes, and serving one for the other is the silent corruption this file
-   * exists to prevent. It is in the PRINT rather than in `KEY_VERSION` because
-   * the default (1) draws exactly what shipped — bumping the version would
-   * throw away every valid cached chunk on every machine to record a change
-   * that has not happened yet. The version bump belongs to the DEFAULT FLIP.
-   */
-  ss: number
   /** O9(b)'s `?colour=all` — 4:4:4 changes every byte of every chunk. */
   fullColour: boolean
 }
@@ -337,7 +327,6 @@ function settingsPrint(s: ExportSettings, flags: RenderFlagPrint): (string | num
     s.keyFrameIntervalSec ?? null,
     flags.cq,
     flags.sourceFrame,
-    flags.ss,
     flags.fullColour,
   ]
 }

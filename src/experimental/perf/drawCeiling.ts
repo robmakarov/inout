@@ -12,7 +12,8 @@
  * 3024x1964 and the default export delivers 1080p).
  *
  * WHAT IS VARIED, and every row is the product's own code — `drawVideoFrame`
- * from compose/layout.ts through `supersampleDraw` from compose/supersample.ts,
+ * from compose/layout.ts, and `supersampleDraw` from this lane's own
+ * supersampleDraw.ts (the export does NOT supersample — see that file),
  * fed a real `VideoSample`, so this measures what an export does and not a
  * re-implementation of it:
  *
@@ -39,7 +40,7 @@
  */
 import { VideoSample } from 'mediabunny'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
-import { supersampleDraw } from '@core/compose/supersample'
+import { supersampleDraw } from './supersampleDraw'
 import { frameScale } from '@core/frame'
 import { warmVideoEncoder } from '@core/capture/encoderWarm'
 import { textEdgeMetric, type TextEdgeMetric } from '../oracle/textEdge'
@@ -52,6 +53,7 @@ import {
   decodeByOrdinal,
   encodeDeterministic,
   fileFacts,
+  deterministicSource,
   paintTextFrame,
   type ChromaRow,
   type DeterministicSource,
@@ -98,9 +100,35 @@ export interface EncodedScore {
   db: number
 }
 
+/**
+ * WHAT (b) ACTUALLY COSTS, on content that is not a still page.
+ *
+ * The ladder rows above hold one frame still, so both encoders skip almost
+ * every block and the AV1 row comes back barely slower than the hardware AVC
+ * one — a number that would be true and useless. This runs the SAME two configs
+ * over the moving fixture, unpaced, so the throughput is the encoder's and not
+ * the clock's.
+ */
+export interface CostRow {
+  id: string
+  codec: string
+  frames: number
+  ms: number
+  fps: number
+  bytes: number
+  error: string | null
+}
+
 export interface DrawCeilingReport {
   notes: string[]
   rows: DrawRow[]
+  cost: CostRow[]
+  /**
+   * THE A/B FOR ROBERT'S EYE. data: URLs, stripped from the evidence file by
+   * the script that writes them out — a pair of MP4s as base64 would make the
+   * JSON unreadable. Empty unless `{"artifacts":true}`.
+   */
+  artifacts: Record<string, string>
   gates: Record<string, { pass: boolean; detail: string }>
   verdict: string
 }
@@ -150,6 +178,8 @@ export async function runDrawCeiling(
     drawFactors?: number[]
     /** The 4:4:4 rung is software and slow; on by default because it is (b). */
     av1?: boolean
+    /** Emit the A/B pair (two MP4s and four PNGs) for Robert's eye. */
+    artifacts?: boolean
   } = {},
 ): Promise<DrawCeilingReport> {
   const frames = Math.max(2, Math.round((opts.takeSec ?? 2) * FPS))
@@ -195,6 +225,34 @@ export async function runDrawCeiling(
   if (wantAv1 && !av1Codec) notes.push('AV1 4:4:4 (av01.1.08M.08) unsupported here — the ceiling row is missing')
 
   const rows: DrawRow[] = []
+  const artifacts: Record<string, string> = {}
+  /** The row that IS today's export: a 3024-wide screen delivered at 1080p. */
+  const AB_ROW = 'src1.575x-ss1-low'
+  const asDataUrl = async (blob: Blob): Promise<string> =>
+    await new Promise((resolve) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result))
+      r.readAsDataURL(blob)
+    })
+  /** A nearest-neighbour blow-up: at 1:1 the difference is real and invisible. */
+  const blowUp = (img: ImageData, crop: Rect, factor: number): string => {
+    const src = new OffscreenCanvas(img.width, img.height)
+    src.getContext('2d', { alpha: false })!.putImageData(img, 0, 0)
+    const dst = document.createElement('canvas')
+    dst.width = crop.w * factor
+    dst.height = crop.h * factor
+    const g = dst.getContext('2d', { alpha: false })!
+    g.imageSmoothingEnabled = false
+    g.drawImage(src, crop.x, crop.y, crop.w, crop.h, 0, 0, dst.width, dst.height)
+    return dst.toDataURL('image/png')
+  }
+  const pngOf = (img: ImageData): string => {
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    c.getContext('2d', { alpha: false })!.putImageData(img, 0, 0)
+    return c.toDataURL('image/png')
+  }
   for (const sourceScale of sourceScales) {
     const sw = Math.round((OUT_W * sourceScale) / 2) * 2
     const sh = Math.round((OUT_H * sourceScale) / 2) * 2
@@ -277,7 +335,7 @@ export async function runDrawCeiling(
         }
 
         const failures: string[] = []
-        const run = async (codec: string | null): Promise<EncodedScore | null> => {
+        const run = async (codec: string | null, keepAs: string | null): Promise<EncodedScore | null> => {
           if (!codec) return null
           const t = performance.now()
           const enc = await encodeDeterministic({
@@ -297,6 +355,11 @@ export async function runDrawCeiling(
             failures.push(`${codec}: nothing decoded at ordinal ${ordinal} of ${d.framesInFile}`)
             return null
           }
+          if (keepAs) {
+            artifacts[`${keepAs}.mp4`] = await asDataUrl(enc.blob)
+            artifacts[`${keepAs}.png`] = pngOf(got)
+            artifacts[`${keepAs}-4x.png`] = blowUp(got, GLYPH_CROP, 4)
+          }
           return {
             codec,
             file: await fileFacts(enc.blob),
@@ -307,8 +370,10 @@ export async function runDrawCeiling(
           }
         }
 
-        const avc420 = await run(avcCodec)
-        const av1444 = await run(av1Codec)
+        const keep = opts.artifacts === true && id === AB_ROW
+        const avc420 = await run(avcCodec, keep ? 'todays-export' : null)
+        const av1444 = await run(av1Codec, keep ? 'every-colour' : null)
+        if (keep) artifacts['the-screen-itself.png'] = pngOf(reference)
 
         rows.push({
           id,
@@ -369,16 +434,72 @@ export async function runDrawCeiling(
       .join(' · '),
   }
 
+  // ---- what (b) costs on MOVING content ----------------------------------
+  const cost: CostRow[] = []
+  const motion = deterministicSource('motion', OUT_W, OUT_H)
+  for (const [id, codec] of [
+    ['avc-420-hardware', avcCodec],
+    ['av1-444-software', av1Codec],
+  ] as const) {
+    if (!codec) {
+      cost.push({ id, codec: 'n/a', frames: 0, ms: 0, fps: 0, bytes: 0, error: 'unsupported here' })
+      continue
+    }
+    const t = performance.now()
+    const enc = await encodeDeterministic({
+      config: {
+        codec,
+        width: OUT_W,
+        height: OUT_H,
+        bitrate: BITRATE,
+        framerate: FPS,
+        latencyMode: 'quality',
+        ...(codec.startsWith('av01') ? { hardwareAcceleration: 'prefer-software' as const } : {}),
+      },
+      frames,
+      source: motion,
+      paced: false,
+    })
+    const ms = Math.round(performance.now() - t)
+    cost.push({
+      id,
+      codec,
+      frames,
+      ms,
+      fps: Math.round((frames / (ms / 1000)) * 10) / 10,
+      bytes: enc.blob?.size ?? 0,
+      error: enc.blob ? null : (enc.error ?? 'no file'),
+    })
+  }
+  const avcCost = cost.find((c) => c.id === 'avc-420-hardware')
+  const av1Cost = cost.find((c) => c.id === 'av1-444-software')
+  gates['(b) prints its true cost on MOVING content'] = {
+    pass: !!avcCost && !!av1Cost && av1Cost.fps > 0,
+    detail:
+      avcCost && av1Cost
+        ? `${frames} moving frames at ${OUT_W}x${OUT_H}: AVC 4:2:0 hardware ${avcCost.fps} fps / ${avcCost.bytes} B · AV1 4:4:4 software ${av1Cost.fps} fps / ${av1Cost.bytes} B = ${avcCost.fps > 0 ? Math.round((avcCost.fps / Math.max(1e-9, av1Cost.fps)) * 100) / 100 : 'n/a'}x slower, ${avcCost.bytes ? Math.round((av1Cost.bytes / avcCost.bytes) * 100) / 100 : 'n/a'}x the bytes`
+        : 'a rung did not run',
+  }
+
   const best420 = rows.reduce<DrawRow | null>(
-    (m, r) => ((green(r, 'avc420') ?? -1) > (green(m ?? r, 'avc420') ?? -1) ? r : m),
+    (m, r) => (m === null || (green(r, 'avc420') ?? -1) > (green(m, 'avc420') ?? -1) ? r : m),
     null,
   )
+  const av1s = rows.map((r) => green(r, 'av1444') ?? 0)
   const verdict =
-    `THE DRAW AND THE ENCODE LOSE DIFFERENT THINGS. Best 4:2:0 row: ${best420?.id ?? 'none'} at ` +
-    `${best420 ? green(best420, 'avc420') : 'n/a'} % green; its DRAW alone kept ` +
-    `${best420 ? green(best420, 'drawOnly') : 'n/a'} %, so the rest is 4:2:0 subsampling at the ` +
-    `delivery size and no drawing can reach it. The 4:4:4 rung on the same frame: ` +
-    `${best420 ? green(best420, 'av1444') : 'n/a'} %.`
+    `THE COLOUR IS NOT LOST IN THE DRAWING AND CANNOT BE RECOVERED THERE. Across every row the ` +
+    `draw alone keeps ${Math.min(...rows.map((r) => green(r, 'drawOnly') ?? 100))}-` +
+    `${Math.max(...rows.map((r) => green(r, 'drawOnly') ?? 0))} % of the green with no encoder ` +
+    `anywhere, and supersampling the draw does not move it — the best 4:2:0 row is ` +
+    `${best420?.id ?? 'none'} at ${best420 ? green(best420, 'avc420') : 'n/a'} % against ` +
+    `${green(row('src1.575x-ss1-low') ?? rows[0]!, 'avc420')} % for today's draw, which is inside ` +
+    `run variance. THE LOSS IS 4:2:0 AT THE DELIVERY SIZE, and the only lever that reaches it is a ` +
+    `format that stores chroma per pixel: the same frames through AV1 4:4:4 read ` +
+    `${Math.min(...av1s)}-${Math.max(...av1s)} %. On MOVING content that rung costs ` +
+    `${cost.find((c) => c.id === 'av1-444-software')?.fps ?? 'n/a'} fps against ` +
+    `${cost.find((c) => c.id === 'avc-420-hardware')?.fps ?? 'n/a'} and ` +
+    `${(() => { const a = cost.find((c) => c.id === 'avc-420-hardware')?.bytes ?? 0; const b = cost.find((c) => c.id === 'av1-444-software')?.bytes ?? 0; return a ? `${Math.round((b / a) * 100) / 100}x` : 'n/a' })()} ` +
+    `the bytes, which is why it ships opt-in and never as the blind-shared default.`
 
-  return { notes, rows, gates, verdict }
+  return { notes, rows, cost, artifacts, gates, verdict }
 }

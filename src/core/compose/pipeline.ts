@@ -32,7 +32,6 @@ import { isInlinePositionedWriterEnabled } from '@core/store'
 import { sourceFrameEnabled } from '@core/frame'
 import { constantQualityQp } from './constantQuality'
 import { chunkedRenderEnabled } from './chunkedFlag'
-import { supersampleFactor } from './supersample'
 import { fullColourEnabled } from './fullColour'
 import { ChunkedRenderUnavailable, getLastChunkedStats, renderChunked, type ChunkedRenderStats } from './chunkedRender'
 import { loudnessMode } from './loudnessMode'
@@ -242,7 +241,6 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         loudness: loudnessMode(),
         sourceFrame: sourceFrameEnabled(),
         chunked: chunkedRenderEnabled(),
-        ss: supersampleFactor(),
         fullColour: fullColourEnabled(),
       },
       paced: !!pace,

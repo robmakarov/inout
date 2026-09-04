@@ -700,6 +700,7 @@ const runners: Runner[] = [
           : undefined,
         drawFactors: Array.isArray(args?.drawFactors) ? (args.drawFactors as number[]) : undefined,
         av1: typeof args?.av1 === 'boolean' ? args.av1 : undefined,
+        artifacts: typeof args?.artifacts === 'boolean' ? args.artifacts : undefined,
       })
     },
   },

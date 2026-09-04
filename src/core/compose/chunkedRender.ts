@@ -76,7 +76,6 @@ import { KEYFRAME_INTERVAL_SEC, VIDEO_BITRATE, pickEncodingTarget } from './code
 import { constantQualityQp } from './constantQuality'
 import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
-import { supersampleActive } from './supersample'
 import { fullColourActive } from './fullColour'
 import { exportFileName } from './fileName'
 import { createExportScratch, type ExportScratch } from './scratch'
@@ -143,7 +142,6 @@ export function currentRenderFlags(): RenderFlagPrint {
     cq: constantQualityQp(),
     loudness: loudnessMode(),
     sourceFrame: sourceFrameEnabled(),
-    ss: supersampleActive(),
     fullColour: fullColourActive(),
   }
 }
@@ -221,6 +219,22 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   const settings = opts.settings ?? DEFAULT_EXPORT_SETTINGS
   const t0 = performance.now()
   const flags = currentRenderFlags()
+  /**
+   * O9(b) DECLINES HERE, and the fallback is the point of the fallback. The
+   * concatenation below muxes every chunk's packets onto ONE track opened with
+   * `pickEncodingTarget`'s codec — 'avc' — while a full-colour render encodes
+   * AV1. The first run of (b) through this path died on
+   * "Couldn't extract an AVCDecoderConfigurationRecord from the AVC packet",
+   * which is the muxer being handed AV1 packets on an AVC track. Teaching the
+   * concatenation a second codec is its own piece of work; declining costs an
+   * opt-in export its chunk cache and nothing else, and the unbroken render is
+   * the runtime fallback this path was built to have.
+   */
+  if (flags.fullColour) {
+    throw new ChunkedRenderUnavailable(
+      'every colour asked for: the chunk concatenation muxes one AVC track and this render is AV1 4:4:4',
+    )
+  }
   const plan = planChunks({ recording, edit, settings, flags })
   if (!plan.chunkable) throw new ChunkedRenderUnavailable(plan.unchunkableReason ?? 'no plan')
 
