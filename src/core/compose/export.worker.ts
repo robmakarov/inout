@@ -36,6 +36,7 @@ import {
 } from './chunkedRender'
 import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from './chunkedFlag'
 import { setConstantQualityOverride } from './constantQuality'
+import { setKeyframeIntervalOverride } from './keyframeInterval'
 import { setFullColourOverride } from './fullColour'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
@@ -68,6 +69,8 @@ export type ExportWorkerIn =
         chunked?: boolean
         /** O9(b)'s `?colour=all` — the 4:4:4 rung. Default off. */
         fullColour?: boolean
+        /** `?gop=` — the keyframe interval, which is also J1's chunk grid. */
+        gop?: number
       }
       /**
        * F16b: this render is a BACKGROUND job and obeys the elastic brake.
@@ -144,6 +147,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
     if (typeof msg.flags.chunked === 'boolean') setChunkedRenderOverride(msg.flags.chunked)
     if (typeof msg.flags.fullColour === 'boolean') setFullColourOverride(msg.flags.fullColour)
+    if (typeof msg.flags.gop === 'number') setKeyframeIntervalOverride(msg.flags.gop)
   }
   if (msg.pace) paceLevel = msg.pace
   try {

@@ -1280,3 +1280,23 @@ THE ONE LEVER, PRICED AND HIS TO PULL: the chunk grid IS the output's keyframe i
 5073 → 5511 KB (+3 %, +12 %), while the FIRST press gets slower (5598 → 5770 → 6733 ms) because the
 per-file 59 ms triples. 2.5 s is the knee. It is a codec change and a file-size change, so it is Robert's
 call, not a task.
+
+robert 2026-09-04 (28): THE EXPORT IS MADE IN 2.5-SECOND PIECES, NOT FIVE. Asked on J7's measured trade
+and chose the knee. One number, two effects, which is why it was his call and not a task: J1 made the
+keyframe interval the CHUNK GRID as well (the concatenation is a packet copy, so a chunk must begin on a
+keyframe), so it decides both how much output a small edit re-encodes and how many keyframes the
+delivered file carries. On a 30 s take at 1080p30 — 5 s → 2.5 s → 1 s — a small edit costs 1758 → 1443 →
+1341 ms, the file 4926 → 5073 → 5511 KB, the first press 5598 → 5770 → 6733 ms. WHAT IT TAKES AWAY: three
+per cent of every exported file, for good, on every take including the ones he never edits.
+SHIPPED AND CONFIRMED at the new default, same rig, same take: a small edit **1845 → 1386 ms (−25 %)**
+across three runs (1391/1386/1368), re-press 33 ms, the unbroken render unmoved (4968 ms), 12 chunks
+where there were 6. Oracle PASS (instant 76.0 ms, smartcut 78.7 ms). B1b's size probe re-proved at the
+new grid — text 0.92× of the file, motion 1.02×, both inside B1b's own 0.91-1.03 band — and the produced
+file demuxes to **24 keyframes of 24 expected** on a 60 s take, which is the flip being real in the
+output rather than in a constant.
+ONE DEFECT FOUND BY MAKING THE MOVE AND FIXED WITH IT: the chunk key printed the UNSET settings field, so
+it recorded `null` for every export on the shipped path and could not tell one grid from another —
+yesterday's 5 s chunks would have been concatenated onto a 2.5 s grid under keys that matched. It now
+carries the RESOLVED grid, pinned by keyframeInterval.test.ts.
+`?gop=` and its `/?test` row put 5 s back unchanged, per the rule that the thing being replaced carries
+the switch. Owner: src/core/compose/keyframeInterval.ts.

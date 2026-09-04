@@ -64,7 +64,7 @@ import {
   type ExportSettings,
   type Recording,
 } from '@core/types'
-import { KEYFRAME_INTERVAL_SEC } from './codecs'
+import { keyframeIntervalSec } from './keyframeInterval'
 
 /**
  * Bump on ANY change that can move a pixel or a byte: the draw (layout.ts,
@@ -324,7 +324,15 @@ function settingsPrint(s: ExportSettings, flags: RenderFlagPrint): (string | num
     s.height,
     s.fps,
     s.videoBitrate ?? null,
-    s.keyFrameIntervalSec ?? null,
+    /**
+     * THE RESOLVED GRID, NEVER THE UNSET FIELD. Nothing on the shipped path
+     * sets `keyFrameIntervalSec`, so this printed `null` for every export and
+     * the chunk key could not tell one grid from another — move the default
+     * (2026-09-04, 5 s → 2.5 s) and yesterday's 5 s chunks would have been
+     * concatenated onto a 2.5 s grid under keys that matched. A cache that
+     * cannot tell two different files apart is worse than no cache.
+     */
+    s.keyFrameIntervalSec ?? keyframeIntervalSec(),
     flags.cq,
     flags.sourceFrame,
     flags.fullColour,
@@ -390,7 +398,7 @@ export function planChunks(input: ChunkPlanInput): ChunkPlan {
   const { recording, edit, flags } = input
   const settings = input.settings ?? DEFAULT_EXPORT_SETTINGS
   const fps = settings.fps
-  const gopSec = settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC
+  const gopSec = settings.keyFrameIntervalSec ?? keyframeIntervalSec()
   const durationMs = outputDurationMs(edit)
   const durationSec = durationMs / 1000
   const totalFrames = Math.max(1, Math.ceil(durationSec * fps - EPS))

@@ -15,6 +15,7 @@ import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
+import { keyframeIntervalSec, setKeyframeInterval } from '@core/compose/keyframeInterval'
 import { fullColourEnabled, setFullColourEnabled } from '@core/compose/fullColour'
 import { bandLimitedResampling, setBandLimitedResampling } from '@core/compose/audio'
 import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
@@ -34,6 +35,8 @@ import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
  * Changes apply to THE NEXT TAKE, not this one: every flag is read when a take
  * arms. Nothing here needs a reload.
  */
+type GopChoice = '1' | '2.5' | '5'
+
 export function TestPanel() {
   const [, bump] = useState(0)
   const redraw = (): void => bump((n) => n + 1)
@@ -151,10 +154,21 @@ export function TestPanel() {
       />
       <Toggle
         label="The render remembers"
-        hint="On. The export is made five seconds at a time and kept, so an edit only re-does the seconds it changed and a closed tab picks up where it stopped. Costs the FIRST export about 8%; the second one takes half a second instead of three minutes. Off re-renders the whole take, every time."
+        hint="On. The export is made a couple of seconds at a time and kept, so an edit only re-does the seconds it changed and a closed tab picks up where it stopped. Costs the FIRST export about a tenth; the second one takes a fraction of a second instead of minutes. Off re-renders the whole take, every time. The row below sets how big those pieces are."
         on={chunkedRenderEnabled()}
         set={(v) => {
           setChunkedRenderEnabled(v)
+          redraw()
+        }}
+      />
+      {/* J7, ruled 2026-09-04. One number, two effects, so the hint names both. */}
+      <Choice
+        label="Piece size the export is made in"
+        hint="2.5 seconds is the default. This is how big a piece the export is built in, and it is also how often the finished file gets a full picture it can jump to. Smaller pieces mean a small edit re-does less — measured on a 30-second take, moving a zoom costs 1.8 s at 5 and 1.4 s at 2.5 — but the file grows (3% at 2.5, 12% at 1) and the very first export gets slower because each piece costs the same fixed moment to close. 5 is exactly what every take before 4 September did."
+        value={String(keyframeIntervalSec()) as GopChoice}
+        options={['2.5', '5', '1'] as GopChoice[]}
+        set={(v) => {
+          setKeyframeInterval(Number(v))
           redraw()
         }}
       />

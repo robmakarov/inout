@@ -39,8 +39,15 @@ export const AUDIO_CHANNEL_COUNT = 2
  * player has to work with. This is the OUTPUT file's cadence only — the smart
  * cut in O5 needs a tight cadence on the CAPTURE encoder, which is O4's and
  * unaffected, and the instant path copies packets a MediaRecorder produced.
+ *
+ * MOVED 5 s → 2.5 s ON ROBERT'S RULING, 2026-09-04, and the reason is not bytes
+ * at all: J1 made this interval the CHUNK GRID too, so it decides how much
+ * output a small edit re-encodes. The trade is measured in keyframeInterval.ts,
+ * which now owns the number and the `?gop=` switch that puts 5 s back. This
+ * constant stays as the value nothing-said resolves to, so every reader that
+ * cannot reach the flag (tests, fixtures) still agrees with the default.
  */
-export const KEYFRAME_INTERVAL_SEC = 5
+export { KEYFRAME_INTERVAL_DEFAULT_SEC as KEYFRAME_INTERVAL_SEC } from './keyframeInterval'
 
 /**
  * Encoder knobs the render passes straight through to WebCodecs (task O5).

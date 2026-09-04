@@ -72,7 +72,8 @@ import {
   touchChunk,
 } from './chunkStore'
 import { buildCertification, certificationComment } from './certify'
-import { KEYFRAME_INTERVAL_SEC, VIDEO_BITRATE, pickEncodingTarget } from './codecs'
+import { VIDEO_BITRATE, pickEncodingTarget } from './codecs'
+import { keyframeIntervalSec } from './keyframeInterval'
 import { constantQualityQp } from './constantQuality'
 import { loudnessMode } from './loudnessMode'
 import { sourceFrameEnabled } from '@core/frame'
@@ -420,7 +421,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
             container: target.mimeType,
             video: target.videoCodec,
             audio: needAudio ? target.audioCodec : undefined,
-            gopSec: settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC,
+            gopSec: settings.keyFrameIntervalSec ?? keyframeIntervalSec(),
             rung: `${target.rung}-chunked`,
             qp: flags.cq ?? undefined,
           },

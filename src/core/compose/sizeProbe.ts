@@ -196,7 +196,8 @@ import {
 } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
 import { copySourceForTier } from './quality'
-import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC, RENDER_ENCODER_OPTIONS } from '@core/compose/codecs'
+import { AUDIO_BITRATE, RENDER_ENCODER_OPTIONS } from '@core/compose/codecs'
+import { keyframeIntervalSec } from '@core/compose/keyframeInterval'
 import {
   constantQualityCodec,
   constantQualityQp,
@@ -305,7 +306,8 @@ export interface Calibration {
  * against. It costs twice the frames on a 60 fps take, and that is what pricing
  * twice the frames costs.
  */
-const GOP_SECONDS = KEYFRAME_INTERVAL_SEC
+/** Read, never frozen: the estimate has to model the grid the render will use. */
+const gopSeconds = (): number => keyframeIntervalSec()
 
 /**
  * IS THE PROBE'S TEN SECONDS THE TAKE'S TEN SECONDS? (B1b, 2026-09-04)
@@ -459,7 +461,7 @@ async function chooseWindow(
   // blank surface, and the file's own encoder is still warming through its
   // first GOP, so those seconds cost the RENDER more than they cost a probe
   // opening a fresh encoder on them.
-  const firstStart = Math.min(GOP_SECONDS, lastStart)
+  const firstStart = Math.min(gopSeconds(), lastStart)
   let bestStart = Math.round(middle)
   let bestMean = takeMean
   let bestGap = Number.POSITIVE_INFINITY
@@ -596,7 +598,7 @@ export async function calibrateSteps(
      */
     // F15: the take's own rate, so a window is a GOP whatever the rate is.
     const rate = takeRate(recording)
-    const windowFrames = Math.round(GOP_SECONDS * rate)
+    const windowFrames = Math.round(gopSeconds() * rate)
     const totalFrames = warmPass ? 2 * windowFrames : windowFrames
     const windowSec = totalFrames / rate
     // WHERE, decided by the take's own activity rather than by the clock.
@@ -933,7 +935,7 @@ export function estimateFromCalibration(
   const seconds = Math.max(0, outputDurationMs / 1000)
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const audioBytes = hasAudio ? (AUDIO_BITRATE / 8) * seconds : 0
-  const gopSec = KEYFRAME_INTERVAL_SEC
+  const gopSec = gopSeconds()
   const firstSec = Math.min(seconds, gopSec)
   const laterSec = Math.max(0, seconds - gopSec)
   const perGop = (keyBytes: number, deltaBytes: number, spanSec: number): number => {

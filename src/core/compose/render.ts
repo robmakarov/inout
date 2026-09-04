@@ -39,6 +39,7 @@ import {
   type VideoSample,
 } from 'mediabunny'
 import { frameScale } from '@core/frame'
+import { keyframeIntervalSec } from './keyframeInterval'
 import { blobStore } from '@core/store'
 
 /**
@@ -92,7 +93,6 @@ import {
 import {
   AUDIO_BITRATE,
   AUDIO_SAMPLE_RATE,
-  KEYFRAME_INTERVAL_SEC,
   VIDEO_BITRATE,
   pickEncodingTarget,
 } from './codecs'
@@ -369,7 +369,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     : null
   const { width, height, fps } = settings
   const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
-  const gopSec = settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC
+  const gopSec = settings.keyFrameIntervalSec ?? keyframeIntervalSec()
 
   const report = (phase: ExportProgress['phase'], ratio: number): void => {
     onProgress?.({ phase, ratio: Math.min(1, Math.max(0, ratio)) })

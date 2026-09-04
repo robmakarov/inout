@@ -34,6 +34,7 @@ import { constantQualityQp } from './constantQuality'
 import { chunkedRenderEnabled } from './chunkedFlag'
 import { fullColourEnabled } from './fullColour'
 import { ChunkedRenderUnavailable, getLastChunkedStats, renderChunked, type ChunkedRenderStats } from './chunkedRender'
+import { keyframeIntervalSec } from './keyframeInterval'
 import { loudnessMode } from './loudnessMode'
 import { isExportScratchEnabled, setLastScratchStats } from './scratch'
 import type { ExportWorkerIn, ExportWorkerOut } from './export.worker'
@@ -242,6 +243,7 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         sourceFrame: sourceFrameEnabled(),
         chunked: chunkedRenderEnabled(),
         fullColour: fullColourEnabled(),
+        gop: keyframeIntervalSec(),
       },
       paced: !!pace,
       pace: pace?.level(),
