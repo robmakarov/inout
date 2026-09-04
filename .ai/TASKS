@@ -90,7 +90,14 @@ THE ORDER IS PART OF THE RULING: **J5 lands before J6.** BOTH LANDED 2026-09-04,
    the composite back, per the rule that the thing being replaced carries the switch.
  · O9(b) IS RE-OPENED BY THIS, not closed: the only objection to 4:4:4 by default was that it kills
    instant export. With the export pre-made while he edits there is no instant path left to kill, so the
-   colour default becomes nearly free. **J5 AND J6 HAVE BOTH LANDED — BUT DO NOT RE-ASK HIM YET, AND HERE IS WHY**
+   colour default becomes nearly free. **THE PRECONDITION IS DONE (2026-09-04) — WHAT IS LEFT BEFORE ASKING HIM IS ONE MEASUREMENT.** The
+   render flags are in `prerenderKey` and `prerenderShape` now, and choose.ts's `fullColour ? null :
+   takePrerender(...)` is deleted, so J5's and F16b's files ARE servable under 4:4:4 and a file made
+   under different flags is simply not adopted. What is still owed before the question goes to him is
+   the press cost measured AT 4:4:4 — the whole point of the ruling was that a pre-made file removes
+   the objection, so the number has to come from a 4:4:4 pre-render being served. The history below is
+   kept because it explains why the key had to change first.
+   **J5 AND J6 HAVE BOTH LANDED — AND HERE IS WHAT USED TO BLOCK THIS**
    (found while landing J5, 2026-09-04): `choose.ts` REFUSES the pre-made file whenever full colour is
    asked for — `const ready = fullColour ? null : takePrerender(...)` — because `prerenderKey` carries no
    render flag and would otherwise serve a 4:2:0 file for a 4:4:4 export. So flipping the colour default
