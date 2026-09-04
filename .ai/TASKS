@@ -93,8 +93,15 @@ THE ORDER IS PART OF THE RULING: **J5 lands before J6.** J5 LANDED 2026-09-04; J
    (it also gave up the preview and liveness) and J6 replaces it. Delete the rung when J6 lands.
  · O9(b) IS RE-OPENED BY THIS, not closed: the only objection to 4:4:4 by default was that it kills
    instant export. With the export pre-made while he edits there is no instant path left to kill, so the
-   colour default becomes nearly free. **J5 HAS LANDED — THE RE-ASK IS NOW OWED HIM** (9 ms press with the
-   render pre-made, measured), and it is his call, not a task.
+   colour default becomes nearly free. **J5 HAS LANDED — BUT DO NOT RE-ASK HIM YET, AND HERE IS WHY**
+   (found while landing J5, 2026-09-04): `choose.ts` REFUSES the pre-made file whenever full colour is
+   asked for — `const ready = fullColour ? null : takePrerender(...)` — because `prerenderKey` carries no
+   render flag and would otherwise serve a 4:2:0 file for a 4:4:4 export. So flipping the colour default
+   TODAY means every export renders from cold with no instant path and no pre-made file either, which is
+   the opposite of what the ruling assumed. THE PRECONDITION IS ONE CHANGE: put the render flags
+   (fullColour, cq, sourceframe — the same hole the G lane logs for the other two) into `prerenderKey`,
+   then J5's and F16b's files are servable under 4:4:4 and the question is worth putting to him. Ask him
+   AFTER that, with the press cost measured at 4:4:4.
 
 ONE HEADED RIG AT A TIME (8 GB M3)ONE HEADED RIG AT A TIME (8 GB M3): file-disjoint is not machine-disjoint. B13, X17 and O4 all want a headed browser; run ONE of them beside as many light lanes as you like.
 THE THREE CONTENDED PATHS after the 09-02 promotions — inside each, ONE session at a time, in this order:
