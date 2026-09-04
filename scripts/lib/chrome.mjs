@@ -70,6 +70,25 @@ export function freePort() {
  * codec, and an answer to a question nobody asked (camera-check.mjs, P9).
  */
 /**
+ * `viaOpen: true` LAUNCHES THROUGH `/usr/bin/open -na` INSTEAD OF spawn(), AND
+ * IT IS THE ONLY WAY TO CAPTURE A REAL SCREEN ON THIS MAC (measured 2026-09-04,
+ * O4 step 1).
+ *
+ * macOS attributes a TCC permission to the RESPONSIBLE process, not to the
+ * binary that asks. A Chrome spawned from node inherits node's responsibility,
+ * node has no Screen Recording grant, and `getDisplayMedia` fails instantly
+ * with `NotAllowedError: Permission denied by system` — the same probe, same
+ * flags, same profile, launched with `open -na` (launchd is responsible, so the
+ * grant is Chrome's own) answers `OK 4096x4096@30`. That is why every screen
+ * rig here settled for tab capture; the wall was the launcher, not the picker.
+ *
+ * The costs, so nobody is surprised: `open` returns as soon as it has asked
+ * launchd, so there is no child handle — no stderr, and the kill goes through
+ * `pkill -f <profile>` (which is exact: the profile path is a throwaway mkdtemp
+ * name that appears in every process of that tree and in no other). Use it only
+ * for a lane that needs a real display; spawn stays the default.
+ */
+/**
  * `throttled: true` LEAVES CHROME'S BACKGROUND THROTTLING ON — the three
  * `--disable-*` flags below are dropped. Every rig here wants them off (a
  * throttled compositor would measure a take nobody records), with exactly one
@@ -85,6 +104,7 @@ export async function launchChrome({
   scriptsOff = false,
   extraArgs = [],
   throttled = false,
+  viaOpen = false,
 }) {
   const port = await freePort()
   const args = [
@@ -112,11 +132,39 @@ export async function launchChrome({
   ]
   if (!headed) args.unshift('--headless=new')
   args.push(scriptsOff ? 'about:blank' : url)
-  const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true })
   const stderr = []
-  proc.stderr.on('data', (d) => {
-    if (stderr.length < 200) stderr.push(String(d).trim())
-  })
+  let proc = null
+  let kill = null
+  if (viaOpen) {
+    if (process.platform !== 'darwin') throw new Error('chrome: viaOpen is macOS only')
+    // .../Google Chrome.app/Contents/MacOS/Google Chrome -> .../Google Chrome.app
+    const app = bin.replace(/\/Contents\/MacOS\/[^/]+$/, '')
+    execFileSync('/usr/bin/open', ['-na', app, '--args', ...args])
+    stderr.push('launched via `open -na` — no child handle, so no stderr from this Chrome')
+    kill = () => {
+      try {
+        execFileSync('/usr/bin/pkill', ['-f', profile], { stdio: 'ignore' })
+      } catch {
+        /* nothing matched: already gone */
+      }
+    }
+  } else {
+    proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'], detached: true })
+    proc.stderr.on('data', (d) => {
+      if (stderr.length < 200) stderr.push(String(d).trim())
+    })
+    kill = () => {
+      try {
+        process.kill(-proc.pid, 'SIGKILL')
+      } catch {
+        try {
+          proc.kill('SIGKILL')
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+  }
 
   let ws = null
   for (let i = 0; i < 250 && !ws; i++) {
@@ -187,7 +235,7 @@ export async function launchChrome({
   await send('Runtime.enable')
   await send('Page.enable')
 
-  return { proc, port, send, evaluate, evalJson, consoleLines, stderr, url }
+  return { proc, kill, port, send, evaluate, evalJson, consoleLines, stderr, url }
 }
 
 /** Launch, with one retry: a Chrome that never exposes a debug target is a
@@ -205,15 +253,7 @@ export async function launchChromeRetrying(opts) {
 /** SIGKILL the whole group and wait until nothing of it answers. */
 export async function sigkillChrome(session) {
   const killWall = Date.now()
-  try {
-    process.kill(-session.proc.pid, 'SIGKILL')
-  } catch {
-    try {
-      session.proc.kill('SIGKILL')
-    } catch {
-      /* already gone */
-    }
-  }
+  session.kill()
   const killWallAfter = Date.now()
   for (let i = 0; i < 100; i++) {
     try {
@@ -228,11 +268,7 @@ export async function sigkillChrome(session) {
 
 export async function quitChrome(session) {
   if (!session) return
-  try {
-    process.kill(-session.proc.pid, 'SIGKILL')
-  } catch {
-    /* gone */
-  }
+  session.kill()
   await sleep(500)
 }
 

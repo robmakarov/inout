@@ -94,7 +94,14 @@ export interface GLCompositor {
   ): void
   /** Blocks until the GPU has finished the drawing issued so far. Measurement
    *  only — every draw call above is asynchronous, so timing the JS call times
-   *  nothing but the enqueue. */
+   *  nothing but the enqueue.
+   *
+   *  AND `gl.finish()` ALONE DOES NOT DO THIS, measured 2026-09-04 (O4 step 1,
+   *  scripts/gpu-residency.mjs): in a worker on this Chrome, a fragment shader
+   *  doing 64 texture fetches per pixel over 5.9 Mpx cost the same 0.03 ms as
+   *  one doing 16 — i.e. finish() returned before the GPU had done the work, so
+   *  anything it "fenced" was still only the enqueue. Reading one pixel back
+   *  cannot return early: the byte has to exist. */
   finish(): void
   dispose(): void
 }
@@ -146,6 +153,10 @@ export function createGLCompositor(width: number, height: number): GLCompositor 
   const uBorder = gl.getUniformLocation(program, 'u_borderPx')
   const uFlip = gl.getUniformLocation(program, 'u_flipY')
   const uTex = gl.getUniformLocation(program, 'u_tex')
+
+  /** Scratch for finish()'s one-pixel readback; allocated once so the fence
+   *  never allocates on a capture frame's path. */
+  const fencePx = new Uint8Array(4)
 
   const texture = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, texture)
@@ -199,6 +210,9 @@ export function createGLCompositor(width: number, height: number): GLCompositor 
     },
     finish() {
       gl.finish()
+      // The part that actually waits. One pixel, so the readback itself is
+      // noise next to what it is measuring.
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, fencePx)
     },
     dispose() {
       gl.deleteTexture(texture)

@@ -1073,3 +1073,57 @@ paraphrases of it had already drifted back to the wrong one.
 GATES: 1,182 unit tests + typecheck green · oracle PASS on v2 AND v1 · the before/after above · every
 step below max byte-identical (pinned by test: mode auto, refusal allowed, ladder allowed).
 NOTHING WAS TURNED ON. `?maxladder=` and `?floor=` are untouched and still off, waiting on his word.
+
+session 2026-09-04 — "GO O4": STEP 1 ANSWERED. THE TRANSFERRED CAPTURE FRAME IS NOT READ BACK, AND THE
+35.6 ms THIS TASK QUOTES WAS THE RIG MEASURING ITS OWN SYNTHETIC SOURCE.
+THE QUESTION, open since 2026-08-24: are transferred capture frames GPU-resident in the compositor
+worker, or is every `texImage2D` a readback? It gated the backend by the task's own words.
+THE ANSWER, and it needs no calibration because it is an inequality: a readback followed by an upload
+can never be CHEAPER than uploading the same bytes, in the same format, at the same size, straight
+from CPU memory — that is the same upload with a readback added in front. Production's exact shape
+(real getDisplayMedia → MediaStreamTrackProcessor on the main thread → the VideoFrame TRANSFERRED to a
+worker → texImage2D into WebGL2, one sync per 24 uploads so the sync is amortised), against a control
+that is those same bytes from a JS ArrayBuffer: 3024x1964 NV12, 8.9 MB — upload 0.72-0.80 ms against
+the CPU control's 3.23-3.41 ms = 0.22-0.23x. At the shipped 1080p rung, 1662x1078 NV12, 2.7 MB —
+0.27-0.49 ms against 1.29-1.35 ms = 0.20-0.38x. FIVE runs, two screen sizes. NOT A READBACK.
+WHAT IT IS INSTEAD: on Apple Silicon the frame is an IOSurface in unified memory, so the binary the
+task posed does not exist — the same frame is GPU-texturable at 0.20-0.38x a CPU upload AND
+CPU-mappable at 0.82-1.79x a CPU-resident frame's memcpy (`copyTo`). Both, at once.
+THE 4K NUMBER, which every O4 gate is written against. Paint = upload + a full-size draw, amortised
+and GPU-synced: the real screen path costs 0.29-0.31 ms/Mpx, so 4K (8.29 Mpx) projects to 2.4-2.6 ms
+per frame — 7-8 % of the 33 ms budget at 30 fps, 15 % at 60. The quoted 35.6 ms is wrong by ~14x for
+screen capture. WHERE IT CAME FROM: o4step2 fed an uncapped 4K CANVAS captureStream. Measured here,
+that source is BGRA at 33.2 MB/frame and costs 2.03 ms/Mpx — 16.8-17.1 ms per 4K frame, 6.6x the real
+screen path per pixel and the same order as 35.6. The rig was measuring itself (note 10, fifth time).
+CAPTURERS DIFFER AND THE SYNTHETIC ONE IS THE OUTLIER — this is the reusable part: real screen NV12
+0.29-0.31 ms/Mpx and upload 0.20-0.23x a CPU upload · real TAB capture I420 0.68 ms/Mpx and upload
+0.95x, i.e. tab capture is NOT GPU-cheap and is a different pixel path from screen capture · canvas
+captureStream BGRA 0.89-0.95 ms/Mpx at 1080p and 2.03 at 4K, upload 0.96-3.36x. Every composite number
+this repo has taken through `?synthetic=1` was taken on the most expensive of the three.
+WHAT WEBGPU CAN STILL RECLAIM, stated so it is never overstated again: `importExternalTexture` removes
+the upload, and the upload is 40-50 % of the paint — 0.27 ms at the 1080p rung, 0.73 ms at 3024x1964,
+~1.1 ms projected at 4K, per frame. Against a 16.7 ms budget at 60 fps that is 1.6-6.6 %; against the
+export loop, where draw is already measured at 1.95 %, under 1 %. Robert's ruling stands that a 2 %
+lever is a lever (robert (20)); the size of this one is now measured rather than assumed, and the
+"whole compositor throughput gap" alternative is dead — the 2026-08-24 paradox (169 fps in the encoder
+yet 101 frames finding six outstanding) is NOT a readback and stays unexplained; the encoder remains
+the measured wall.
+TWO DEFECTS FOUND IN THE INSTRUMENTS, both fixed here:
+(1) `gl.finish()` DOES NOT WAIT FOR THE GPU in a Chrome worker. A fragment shader doing 64 texture
+fetches per pixel over 5.9 Mpx cost the same 0.03 ms as one doing 16 — 12 tera-fetches/s, i.e. finish()
+returned early and every number it "fenced" was an enqueue cost. Reading one pixel back cannot return
+early. `compositorGL.finish()` documented itself as blocking and did not; it now reads a pixel. It is
+measurement-only and inert on the shipped path (PROBE_GPU = false), so no behaviour moved — but
+`?probegpu`'s `gpuMs` and any future GPU reading would have been a lie.
+(2) A NODE-SPAWNED CHROME CANNOT CAPTURE A REAL SCREEN ON THIS MAC, and that is why no rig here ever
+did. macOS attributes a TCC permission to the RESPONSIBLE process: Chrome spawned from node inherits
+node's, node has no Screen Recording grant, and getDisplayMedia fails instantly with
+`NotAllowedError: Permission denied by system` — the SAME probe, same flags, same profile, launched
+with `open -na` (launchd responsible, so the grant is Chrome's own) answers OK. `launchChrome({viaOpen})`
+in scripts/lib/chrome.mjs, opt-in, spawn still the default. Every screen-capture rig in this repo can
+now measure a real display instead of settling for a tab.
+GATES: 1,182 unit tests + typecheck green · the rig carries its own lever (heavy64/heavy16 must exceed
+1.5x or it prints that its numbers are void; measured 1.76-1.77x) · four runs on two screen sizes ·
+evidence docs/qa/o4-gpu-residency.json · NOTHING IN THE PRODUCT CHANGED except compositorGL's
+measurement-only fence.
+OPEN AND ROBERT'S: whether the backend is still worth building at 0.27-1.1 ms/frame.
