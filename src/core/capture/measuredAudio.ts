@@ -36,6 +36,15 @@ const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
 /** Anchor min-filter window; at 50ppm clock skew the bias stays < 0.2ms. */
 const ANCHOR_WINDOW_S = 3
+
+/** Nearest-rank quantile over an unsorted sample. Copies, so the caller's
+ *  array keeps its order (X11a reads two quantiles off one sample). */
+function quantile(xs: number[], q: number): number {
+  if (xs.length === 0) return 0
+  const s = [...xs].sort((a, b) => a - b)
+  const i = Math.min(s.length - 1, Math.max(0, Math.ceil(q * s.length) - 1))
+  return s[i]!
+}
 /**
  * G6(g). How soon after a tap rebuild returning sound still counts as THAT
  * rebuild having recovered it. A fresh tap on a live source sees signal in the
@@ -697,6 +706,17 @@ export async function startMeasuredAudioCapture(opts: {
   /** Bumped on every revival; a retiring pump's batches are ignored. */
   let tapGeneration = 0
   let tapEndedResolve: (() => void) | null = null
+  /**
+   * X11a — MAIN-THREAD RECEIPT MINUS THE WORKER'S OWN STAMP, per batch.
+   *
+   * The measurement of the correction this path exists to need: how late the
+   * page is to a batch the worker finished. It is the whole of what moving the
+   * reader could do to the anchor, and it can only ever run one way — the
+   * stamp precedes its own delivery — so a small reading here is the evidence
+   * that the sound did not move. Kept unsummarised (a take is ~43 batches a
+   * second, ~2,600 a minute of Float64) and reduced once at stop.
+   */
+  const tapHandoffMs: number[] = []
 
   const onBatch = (
     frames: number,
@@ -1043,14 +1063,12 @@ export async function startMeasuredAudioCapture(opts: {
           // reset does, because a swap's seam is `revivals` and not a drop.
           tapGapUs = msg.tapGapUs
           if (msg.tapMaxGapUs > tapMaxGapUs) tapMaxGapUs = msg.tapMaxGapUs
-          onBatch(
-            msg.frames,
-            msg.channels,
-            msg.lastChunkTimeS,
-            msg.planar,
-            // The worker's clock, in this thread's frame. See AudioTapBatch.
-            msg.stampMs - performance.timeOrigin,
-          )
+          // The worker's clock, in this thread's frame. See AudioTapBatch.
+          const stampedMs = msg.stampMs - performance.timeOrigin
+          // Read BEFORE onBatch: everything that batch triggers (interleave,
+          // loudness, the encoder) would otherwise be charged to the hand-off.
+          tapHandoffMs.push(performance.now() - stampedMs)
+          onBatch(msg.frames, msg.channels, msg.lastChunkTimeS, msg.planar, stampedMs)
         }
         const open: AudioTapMsg = {
           cmd: 'open',
@@ -1292,6 +1310,13 @@ export async function startMeasuredAudioCapture(opts: {
           // Zeros are the finding on a healthy take, so they are written.
           tapGapMs: Math.round(tapGapUs / 1000),
           tapMaxGapMs: Math.round(tapMaxGapUs / 1000),
+          // X11a: absent on the main pump, where the stamp IS the receipt.
+          ...(tapHandoffMs.length > 0
+            ? {
+                tapHandoffMs: Math.round(quantile(tapHandoffMs, 0.5) * 100) / 100,
+                tapHandoffP95Ms: Math.round(quantile(tapHandoffMs, 0.95) * 100) / 100,
+              }
+            : {}),
           // `lastArrivalMs` is the anchor's own arrival stamp, in take time:
           // when PCM last reached this thread. Nothing else here can say that
           // the tap simply stopped.

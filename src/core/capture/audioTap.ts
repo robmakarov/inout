@@ -147,18 +147,54 @@ export function trackTapBufferChunks(sampleRate: number, ms = trackTapBufferMs()
  * reader was handed all 21.1 s both times, gap 0.70 s with a worst step of
  * 3 ms — which is the SOURCE's own floor, the same 33 ms/s B12's undosed
  * control reads, and not a loss at all.
+ *
+ * THE HAND-OFF IT COSTS IS MEASURED, not argued (`scripts/x11a-anchor.mjs`,
+ * six paired cells on a quiet machine, both audio channels): the page receives
+ * a batch **0.05 ms** after the worker stamped it, worst p95 **1 ms** — so the
+ * anchor, which dates sample 0 from arrival, cannot move by more than that.
+ * The first build had no stamp and placed the take 14 ms late.
+ *
+ *   ?audiotapthread=main | worker              (URL, this take)
+ *   localStorage['inout.capture.audioTapThread'] (sticky, the /?test row)
  */
 export type AudioTapThread = 'main' | 'worker'
+
+const THREAD_KEY = 'inout.capture.audioTapThread'
+let threadOverride: AudioTapThread | null = null
 
 function isThread(v: string | null): v is AudioTapThread {
   return v === 'main' || v === 'worker'
 }
 
-/** `?audiotapthread=main` puts the reader back on the main thread. */
+/**
+ * Where the PCM reader runs on the NEXT take. `main` is A1's pump — every take
+ * before X11a — and it is what the panel's switch turns back on; the URL still
+ * wins for the load it is on, exactly as every other flag here behaves.
+ */
 export function audioTapThreadChoice(): AudioTapThread {
-  if (typeof location === 'undefined') return 'worker'
-  const v = new URLSearchParams(location.search).get('audiotapthread')
-  return isThread(v) ? v : 'worker'
+  if (typeof location !== 'undefined') {
+    const v = new URLSearchParams(location.search).get('audiotapthread')
+    if (isThread(v)) return v
+  }
+  if (threadOverride) return threadOverride
+  try {
+    const v = localStorage.getItem(THREAD_KEY)
+    if (isThread(v)) return v
+  } catch {
+    /* storage refused — the default stands */
+  }
+  return 'worker'
+}
+
+/** The panel's writer. `null` clears the choice back to the shipped default. */
+export function setAudioTapThread(t: AudioTapThread | null): void {
+  threadOverride = t
+  try {
+    if (t === null) localStorage.removeItem(THREAD_KEY)
+    else localStorage.setItem(THREAD_KEY, t)
+  } catch {
+    /* memory-only */
+  }
 }
 
 /**

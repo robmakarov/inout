@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   TRACK_TAP_BUFFER_MS,
   audioTapChoice,
+  audioTapThreadChoice,
+  setAudioTapThread,
   canReadTrackPcm,
   trackPcmSampleRate,
   trackTapBufferChunks,
@@ -139,5 +141,67 @@ describe('track tap buffer (B12)', () => {
   it('a track with no rate buys no buffer', () => {
     search('')
     expect(trackTapBufferChunks(0)).toBe(0)
+  })
+})
+
+/**
+ * X11a. WHICH THREAD READS THE PCM is now a switch Robert can press (the panel
+ * writes storage), so the read has three sources and an order between them —
+ * and the order is the whole point: a link wins for the load it is on, a
+ * pressed row persists, and the default is what ships. The transfer itself is
+ * still the capability gate; nothing here can promise a worker.
+ */
+describe('audio tap thread (X11a)', () => {
+  afterEach(() => {
+    search(null)
+    delete g.localStorage
+  })
+
+  it('defaults to the worker, with no location and no storage at all', () => {
+    expect(audioTapThreadChoice()).toBe('worker')
+  })
+
+  it('?audiotapthread=main puts the reader back on the main thread', () => {
+    search('?audiotapthread=main')
+    expect(audioTapThreadChoice()).toBe('main')
+  })
+
+  it('ignores a value that is not a thread', () => {
+    search('?audiotapthread=banana')
+    expect(audioTapThreadChoice()).toBe('worker')
+  })
+
+  it('reads the panel’s storage, and the URL still outranks it', () => {
+    const store: Record<string, string> = { 'inout.capture.audioTapThread': 'main' }
+    g.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => {
+        store[k] = v
+      },
+      removeItem: (k: string) => {
+        delete store[k]
+      },
+    }
+    search('')
+    expect(audioTapThreadChoice()).toBe('main')
+    search('?audiotapthread=worker')
+    expect(audioTapThreadChoice()).toBe('worker')
+    // The panel's own writer, and its reset back to the shipped default.
+    search('')
+    setAudioTapThread('worker')
+    expect(store['inout.capture.audioTapThread']).toBe('worker')
+    setAudioTapThread(null)
+    expect(store['inout.capture.audioTapThread']).toBeUndefined()
+    expect(audioTapThreadChoice()).toBe('worker')
+  })
+
+  it('storage that throws is not an opinion — the default stands', () => {
+    g.localStorage = {
+      getItem: () => {
+        throw new Error('storage refused')
+      },
+    }
+    search('')
+    expect(audioTapThreadChoice()).toBe('worker')
   })
 })

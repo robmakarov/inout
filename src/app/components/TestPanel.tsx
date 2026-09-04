@@ -13,6 +13,7 @@ import {
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { painterChoice, setPainterChoice, type PainterChoice } from '@core/capture/painterChoice'
 import { intakeChoice, setIntakeChoice, type IntakeChoice } from '@core/capture/frameIntake'
+import { audioTapThreadChoice, setAudioTapThread } from '@core/capture/audioTap'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
 import { chunkedRenderEnabled, setChunkedRenderEnabled } from '@core/compose/chunkedFlag'
@@ -207,6 +208,19 @@ export function TestPanel() {
           redraw()
         }}
       />
+      {/* X11a. The reader that keeps the sound: a stalled page used to make the
+          platform THROW PCM AWAY, and this row is how yesterday's take comes
+          back — the thing being replaced carries the switch. */}
+      <Choice
+        label="Where the sound is read"
+        hint="background is on by default and is the row to leave alone: it keeps the sound when the app is busy. Measured on a page frozen for 32 seconds — reading on the page lost 26.7 s of real audio and repaid it as silence, reading in the background lost none. page is how every take before this one worked; switch to it only to check whether this row is what changed something you can hear. Sound is placed the same either way — the batch carries the moment it was read, 0.05 ms before the page sees it."
+        value={audioTapThreadChoice() === 'worker' ? 'background' : 'page'}
+        options={['background', 'page']}
+        set={(v) => {
+          setAudioTapThread(v === 'background' ? 'worker' : 'main')
+          redraw()
+        }}
+      />
       {/* O9(b). SIZE-CODEC: the codec is never a user word, so the row says what
           he GETS. Opt-in and staying opt-in — the file is blind-shared and no
           probe can ask a recipient what they can play. */}
@@ -258,6 +272,7 @@ export function TestPanel() {
           setGlueRung(null)
           setChunkedRenderEnabled(null)
           setFullColourEnabled(null)
+          setAudioTapThread(null)
           redraw()
         }}
       >

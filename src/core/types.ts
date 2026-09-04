@@ -65,6 +65,28 @@ export interface ChannelDiagnostics {
    * the take's own length it says whether audio was still arriving at the stop.
    */
   lastArrivalMs?: number
+  /**
+   * X11a — WHAT MOVING THE PCM READER OFF THE MAIN THREAD COSTS THE ANCHOR, ms.
+   *
+   * The audio anchor dates sample 0 from when a batch ARRIVES, so a reader one
+   * `postMessage` away would place the whole take late by the cost of that
+   * message — and a min-filter strips jitter but never a constant. The batch
+   * therefore carries the moment the worker COMPLETED it
+   * (`performance.timeOrigin + performance.now()`, converted with the page's own
+   * origin), and this is what that correction is worth: main-thread receipt
+   * minus the worker's own stamp, per batch, median and p95.
+   *
+   * It is the direct reading of the one number the arm A/B could not resolve —
+   * the anchor's own cell-to-cell spread is 19-95 ms on an idle machine, which
+   * is far wider than the effect. Structurally the correction can only ever
+   * make the arrival EARLIER (the worker's stamp precedes the page's receipt of
+   * it), so this bounds how far the worker path could ever move the sound, and
+   * in which direction. Track tap on the worker thread only; absent on the main
+   * pump, where the stamp IS the receipt and the quantity does not exist.
+   */
+  tapHandoffMs?: number
+  /** The p95 of the same, ms — a burst against a steady cost. */
+  tapHandoffP95Ms?: number
   /** Times the audio source tap was rebuilt after sustained digital silence. */
   revivals?: number
   /** Track/context life events (mute, unmute, ended, ctx state, revive…), ms from epoch. */
