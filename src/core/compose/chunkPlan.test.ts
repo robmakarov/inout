@@ -484,3 +484,30 @@ describe('THE RULING — no length heuristic anywhere in the export', () => {
     expect(ms).toBeLessThan(4000)
   })
 })
+
+describe('a render flag that changes the SAMPLES changes the audio key', () => {
+  /**
+   * O10c, and this test exists because the bug was nearly shipped. The gate
+   * rewrites the audio, and a gated export still takes the chunked path — so an
+   * audio artifact made with the gate OFF must never be handed to an export
+   * made with it ON. `RenderFlagPrint` was updated and `audioDescriptorOf`,
+   * which lists its flags one at a time, was not: exactly the shape of the
+   * defect O10b left and the pre-render key carried for four flags.
+   */
+  it('the noise gate invalidates the audio artifact and nothing else does', () => {
+    const r = take(60_000, { audio: true })
+    const e = defaultEditState(r)
+    const off = planChunks({ recording: r, edit: e, settings: SETTINGS, flags: FLAGS })
+    const on = planChunks({
+      recording: r,
+      edit: e,
+      settings: SETTINGS,
+      flags: { ...FLAGS, noiseGate: true },
+    })
+    expect(planReuse(off, on).audioReused).toBe(false)
+    // The PICTURE is untouched by it: a gated export re-renders no video.
+    expect(planReuse(off, on).rerendered).toBe(0)
+    // And the same flag twice is a hit, or every export would redo the audio.
+    expect(planReuse(on, on).audioReused).toBe(true)
+  })
+})

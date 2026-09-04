@@ -426,6 +426,19 @@ export function audioDescriptorOf(input: ChunkPlanInput): string {
     n6(outputDurationMs(edit)),
     audio,
     flags.loudness,
+    /**
+     * O10c. THE GATE CHANGES THESE SAMPLES, so an audio artifact made with it
+     * OFF must never be handed to an export made with it ON — and this key is
+     * the only thing standing between those two, because a gated export still
+     * takes the chunked path (unlike separate tracks, which declines chunking
+     * outright and therefore needs no entry here).
+     *
+     * It is written down because it was nearly missed: `RenderFlagPrint` was
+     * updated and this descriptor, which lists its flags one at a time, was
+     * not. That is the same shape as the defect O10b left and the pre-render
+     * key carried for four flags.
+     */
+    flags.noiseGate,
     // The CONTAINER decides the audio codec (aac in mp4, opus in webm), and the
     // container is chosen from the video geometry — so it belongs here too.
     [settings.width, settings.height],
