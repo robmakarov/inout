@@ -169,6 +169,21 @@ export interface CompositorStartMsg {
    */
   painter?: 'webgpu' | 'webgl2' | '2d'
   /**
+   * J6 — IS THE GLUED COPY A FILE, OR ONLY A PICTURE?
+   *
+   * `false` is the J6 default (`core/glue.ts`): paint every frame, blit the
+   * preview, keep the source-liveness beat — and open no encoder, no muxer and
+   * no file. Robert 2026-09-04 (27): "kill the glued copy encoding". The
+   * compositor was the only thing that both PAINTED and ENCODED, and the two
+   * were never separable before this field; `?singlegen=capture` could only
+   * stop the whole engine, which took the preview and the frozen-screen
+   * detector with it.
+   *
+   * Absent means `true`, so every rig that drives this worker directly — and
+   * `?glue=record` — gets exactly the take it got yesterday.
+   */
+  record?: boolean
+  /**
    * P9 — the MAIN THREAD'S `performance.timeOrigin`, so this worker can put a
    * frame it read ITSELF on the main thread's clock.
    *
@@ -627,6 +642,13 @@ let videoEncoder: VideoEncoder | null = null
 let audioEncoder: AudioEncoder | null = null
 let muxChain: Promise<void> = Promise.resolve()
 let fatal: string | null = null
+/**
+ * J6 — does this take's composite become a FILE? See CompositorStartMsg.record.
+ * When false there is no encoder, no muxer and no OPFS handle in this worker;
+ * `composeFrame` paints and blits and nothing else. Defaults to the behaviour
+ * every take had before J6, so a worker that is never told stays unchanged.
+ */
+let recordFile = true
 
 let W = 1920
 let H = 1080
@@ -1167,7 +1189,53 @@ async function reconfigureEncoder(): Promise<void> {
   }
 }
 
+/**
+ * J6 — THE PAINT WITHOUT THE FILE.
+ *
+ * Everything `encodeComposite` does up to and including the draw, and nothing
+ * after it: no VideoFrame is constructed, no encoder is asked, no packet is
+ * muxed, no byte is written. The preview and the source-liveness beat are both
+ * downstream of the DRAW, which is why Robert's "we need preview" survives the
+ * ruling that killed the encode.
+ *
+ * The cadence bookkeeping is deliberately identical to the encoding path's —
+ * `lastEncodedMs` gates arrivals to the output rate, `lastEncodedTsUs` is what
+ * `stop()` reports a duration from, `framesEncoded` is what the watchdog and
+ * O6's ladder read as delivery. A painted frame IS this take's output now, so
+ * it is counted in the same field rather than in a parallel one nothing reads.
+ */
+function paintOnly(atMs: number, keepAlive: boolean): void {
+  if (stopped || fatal || !canvas) return
+  if (startedAtMs === null) {
+    startedAtMs = atMs
+    stats.originAtMs = atMs
+  }
+  const relMs = Math.max(0, atMs - startedAtMs)
+  const timestampUs = Math.max(lastEncodedTsUs + 1, Math.round(relMs * 1000))
+  lastEncodedTsUs = timestampUs
+  lastEncodedMs = atMs
+  const tPaint = performance.now()
+  paint()
+  // WebGPU records into a command buffer; nothing is on the canvas until the
+  // pass is ended and submitted, and blitPreview below reads that canvas.
+  gl?.end?.()
+  if (PROBE_GPU) gl?.finish()
+  const tDone = performance.now()
+  if (PROBE_GPU) stats.gpuMs += tDone - tPaint
+  stats.paintMs += tDone - tPaint
+  stats.framesEncoded++
+  const gapMs = lastEncodeOkMs === -Infinity ? 0 : atMs - lastEncodeOkMs
+  if (gapMs > stats.maxEncodeGapMs) stats.maxEncodeGapMs = gapMs
+  lastEncodeOkMs = atMs
+  if (keepAlive) stats.keepAliveFrames++
+  blitPreview()
+}
+
 function encodeComposite(atMs: number, keepAlive: boolean): void {
+  if (!recordFile) {
+    paintOnly(atMs, keepAlive)
+    return
+  }
   const enc = videoEncoder
   if (!enc || stopped || fatal || enc.state !== 'configured' || !canvas) return
   // F13: mid-reconfigure. One frame at the old geometry is a second SPS in the
@@ -1259,14 +1327,22 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   startedWorkerAtMs = performance.now()
   shapeSettled = false
   if (!followSource) settleShape()
+  // J6: absent means yesterday's take, for every rig that drives this worker
+  // directly and for `?glue=record`.
+  recordFile = msg.record !== false
 
-  const root = await navigator.storage.getDirectory()
-  const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
-  const file = await dir.getFileHandle(msg.key, { create: true })
-  handle = await (
-    file as FileSystemFileHandle & { createSyncAccessHandle(): Promise<SyncAccessHandle> }
-  ).createSyncAccessHandle()
-  handle.truncate?.(0)
+  // J6: the file is opened only if there is going to be one. A take that paints
+  // without encoding never touches OPFS, which is the write-bandwidth half of
+  // what the ruling frees.
+  if (recordFile) {
+    const root = await navigator.storage.getDirectory()
+    const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
+    const file = await dir.getFileHandle(msg.key, { create: true })
+    handle = await (
+      file as FileSystemFileHandle & { createSyncAccessHandle(): Promise<SyncAccessHandle> }
+    ).createSyncAccessHandle()
+    handle.truncate?.(0)
+  }
 
   // THE PAINTER (O4). WebGPU binds the capture frame's planes where they are;
   // WebGL2 uploads them into an RGBA texture first; 2D drags them back across
@@ -1297,6 +1373,14 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   // …and the preview, if one was handed over before the composite existed.
   sizePreviewToComposite()
 
+  // ---- J6: EVERYTHING BELOW HERE IS THE FILE ------------------------------
+  //
+  // The muxer, the OPFS sink, the video encoder, the audio encoder and the
+  // burst absorber that sizes itself against the encoder's queue. On the
+  // shipped default none of them are built: the take's composite is a picture
+  // on a canvas and nowhere else. Everything ABOVE — the painter, the canvas,
+  // the preview bitmap — is untouched, because that is what Robert kept.
+  if (recordFile) {
   const { config, hardware } = await pickVideoConfig(W, H, msg.videoBitrate, msg.fps)
   stats.codec = config.codec
   stats.hardware = hardware
@@ -1393,6 +1477,8 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     })
     audioEncoder.configure(audioConfig)
   }
+  }
+  // ---- end of the file half (J6) ------------------------------------------
 
   // Push stats so the main-thread watchdog can see the encoder falling behind
   // while degrading is still possible, rather than discovering it at stop.
@@ -1418,6 +1504,17 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   // 733 and 1167 ms against 200-333 ms on every green run, and 7/7 green on the
   // same machine without it. The delay costs nothing that could be wanted, and
   // it removes the only window in which the instrument could be the subject.
+  //
+  // J6 — AND IT DOES NOT RUN AT ALL WHEN THERE IS NO ENCODER HERE. Every
+  // leading signal this sampler reads is the video encoder's: queue depth at
+  // submit, encode→output latency, the per-frame cost of the encode call. A
+  // paint-only worker would post readings whose encoder block is `unmeasured`
+  // and whose cpu block is the cost of a 0.4 ms draw — a detector fed that
+  // would call a drowning machine nominal, which is worse than not looking
+  // (pressureSampler.ts: a null is not a zero). The reading moves to the
+  // encoder that IS running: session.ts arms the raw SCREEN channel's sampler
+  // and feeds it to this composite's ladder through `notePressure`.
+  if (recordFile)
   pressureStartTimer = setTimeout(() => {
   // M1 — the sampler is core/capture/pressureSampler.ts now, shared with
   // rawVideo.worker.ts, because max opens no composite and the emergency floor

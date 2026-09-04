@@ -522,10 +522,29 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   {
     const stalled = recording.stalled ?? []
     const comp = recording.composite
-    const machinery = !comp
+    /**
+     * J6 — THE SAME EVIDENCE, FROM WHICHEVER PLACE THE TAKE PUT IT.
+     *
+     * The glued copy is painted and not encoded on the shipped default, so most
+     * takes now have no CompositeRecording at all — and the rung/backend that
+     * this dimension exists to name would silently disappear with it. The
+     * session writes them into `stopStats.glue` instead, and a take that opened
+     * no compositor at all has neither, which reads here as no machinery line
+     * rather than as a missing field.
+     */
+    const glue = recording.stopStats?.glue
+    const made = comp
+      ? { intake: comp.intake, painter: comp.painter, recorded: true, framesPainted: undefined }
+      : glue
+        ? { intake: glue.intake, painter: glue.painter, recorded: glue.recorded, framesPainted: glue.framesPainted }
+        : null
+    const machinery = !made
       ? null
-      : `composite by ${comp.intake ?? 'an unrecorded intake'} into ` +
-        `${comp.painter ?? 'an unrecorded painter'}`
+      : `composed by ${made.intake ?? 'an unrecorded intake'} into ` +
+        `${made.painter ?? 'an unrecorded painter'}` +
+        (made.recorded
+          ? ''
+          : `, painted only (${made.framesPainted ?? 0} frames) — no composite file was written (J6)`)
     const detail = stalled.length
       ? `${stalled.map((k) => LABEL[k]).join(' & ')} froze mid-take — those stretches are a still image`
       : `${video.length} video channel${video.length === 1 ? '' : 's'}, none stalled`

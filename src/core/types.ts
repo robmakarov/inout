@@ -601,6 +601,36 @@ export interface TakeStopStats {
    * rather than passing them.
    */
   lateness?: LatenessSummary
+  /**
+   * J6 — HOW THE GLUED COPY WAS MADE, ON A TAKE THAT HAS NO COMPOSITE FILE.
+   *
+   * `CompositeRecording` used to be the only place a take said which intake and
+   * which painter actually ran, and both of those are chosen at runtime by
+   * probe and both fall through — so a card that cannot name them cannot notice
+   * one rung behaving differently from another (P9/O4's whole point). With the
+   * composite painted and not encoded there IS no CompositeRecording, so the
+   * same evidence comes out here instead. Absent on a take that opened no
+   * compositor at all, and on every take made before J6.
+   */
+  glue?: TakeGlue
+}
+
+/**
+ * J6 — what the compositor did for this take, when it did not leave a file
+ * behind to say so. Written at stop from the engine's own report.
+ */
+export interface TakeGlue {
+  /** False on the shipped default: painted for the preview and the
+   *  frozen-screen detector, never encoded, no file. */
+  recorded: boolean
+  engine: 'v1' | 'v2'
+  /** P9's rung and O4's backend — the fields CompositeRecording carries when
+   *  there is a file. Absent where the engine does not choose one (v1). */
+  intake?: FrameIntakeKind
+  painter?: 'webgpu' | 'webgl2' | '2d'
+  /** Frames the compositor actually composed. The delivery number a take with
+   *  no file would otherwise not have. */
+  framesPainted?: number
 }
 
 /**

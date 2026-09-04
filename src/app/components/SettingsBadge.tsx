@@ -1,5 +1,6 @@
 import { sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { sourceRateEnabled } from '@core/rate'
+import { glueRecorded } from '@core/glue'
 import { singleGenRung } from '@core/singleGen'
 import { captureQualityMode, rateLadderAllowed } from '@core/capture/captureQuality'
 import { encoderBudgetEnabled } from '@core/capture/encoderBudget'
@@ -41,5 +42,9 @@ export function SettingsBadge() {
   if (resolutionStepEnabled()) on.push('res step')
   const rung = singleGenRung()
   if (rung !== 'export') on.push(`singlegen ${rung}`)
+  // J6: the default is PAINTED and not encoded, so the line only speaks when
+  // the second encoder is back on — a take that is slower than the shipped one
+  // must say why on its face.
+  if (glueRecorded()) on.push('glued copy RECORDED')
   return <div className="editor__settings">Settings: {on.join(' · ')}</div>
 }

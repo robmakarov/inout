@@ -1,0 +1,547 @@
+{
+ "task": "J6 \u2014 the glued copy is painted and never encoded",
+ "ruling": "robert 2026-09-04 (27): \"kill the glued copy encoding and do background render while editing\". J5 landed first, which was part of the ruling.",
+ "date": "2026-09-04",
+ "flag": "?glue=paint (shipped) | ?glue=record (the take that was recorded yesterday); localStorage inout.compose.glue; /?test row \"The glued picture while recording\". ?singlegen=capture DELETED.",
+ "camera_take": {
+  "notes": [
+   "The camera take is the one this ruling is about: it opens three encoders and its unedited export has nothing to packet-copy once the composite stops being written."
+  ],
+  "takeMs": 10000,
+  "lanes": [
+   {
+    "rung": "record",
+    "dead": false,
+    "durationMs": 9957,
+    "hasComposite": true,
+    "compositeBytes": 1660012,
+    "glue": {
+     "recorded": true,
+     "engine": "v2",
+     "intake": "main-processor",
+     "painter": "webgpu",
+     "framesPainted": 291
+    },
+    "encoderPlan": "[capture] encoder plan \u2014 3 encoder(s): camera 640x480@30 + screen 1280x720@30 + composite 1920x1080@30 = 99.1 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+    "encoderCount": 3,
+    "previewFromCompositor": true,
+    "lost": [],
+    "livenessLines": [],
+    "channels": [
+     {
+      "kind": "camera",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "bytes": 303362
+     },
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "bytes": 1087628
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "width": null,
+      "height": null,
+      "fps": null,
+      "bytes": 165244
+     }
+    ],
+    "bytesPerSec": 323014,
+    "pressPath": "instant",
+    "pressMs": 101.5,
+    "pressBytes": 1688779,
+    "coldPressMs": null
+   },
+   {
+    "rung": "paint",
+    "dead": false,
+    "durationMs": 10007,
+    "hasComposite": false,
+    "compositeBytes": 0,
+    "glue": {
+     "recorded": false,
+     "engine": "v2",
+     "intake": "main-processor",
+     "painter": "webgpu",
+     "framesPainted": 288
+    },
+    "encoderPlan": "[capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1280x720@30 = 36.9 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+    "encoderCount": 2,
+    "previewFromCompositor": true,
+    "lost": [],
+    "livenessLines": [],
+    "channels": [
+     {
+      "kind": "camera",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "bytes": 306731
+     },
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "bytes": 1080625
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "width": null,
+      "height": null,
+      "fps": null,
+      "bytes": 165567
+     }
+    ],
+    "bytesPerSec": 155184,
+    "pressPath": "render",
+    "pressMs": 0.3,
+    "pressBytes": 1464234,
+    "coldPressMs": 74.5
+   }
+  ],
+  "gates": {
+   "THE FILE: the shipped rung writes no composite, and the control does": {
+    "pass": true,
+    "detail": "?glue=paint: composite absent, 0 B \u00b7 ?glue=record: present, 1660012 B"
+   },
+   "THE ENCODER: the plan loses the composite and keeps every raw channel": {
+    "pass": true,
+    "detail": "?glue=record plan: [capture] encoder plan \u2014 3 encoder(s): camera 640x480@30 + screen 1280x720@30 + composite 1920x1080@30 = 99.1 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over) \u00b7 ?glue=paint plan: [capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1280x720@30 = 36.9 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)"
+   },
+   "THE PAINT: it happened, and it is on the take\u2019s own record": {
+    "pass": true,
+    "detail": "stopStats.glue: recorded=false engine=v2 intake=main-processor painter=webgpu framesPainted=288"
+   },
+   "THE PREVIEW: unchanged \u2014 the compositor\u2019s own canvas still takes it over": {
+    "pass": true,
+    "detail": "?glue=paint preview from the compositor: true \u00b7 ?glue=record: true (both must be true \u2014 the paint is what Robert kept)"
+   },
+   "THE FILES: the take\u2019s own channels are the same take": {
+    "pass": true,
+    "detail": "identical: camera/video/video/mp4/640x480@30 \u00b7 mic/audio/audio/webm;codecs=opus/nullxnull@null \u00b7 screen/video/video/mp4/1280x720@30"
+   },
+   "WRITE BANDWIDTH: the composite was a real share of it": {
+    "pass": true,
+    "detail": "0.32 MB/s with the composite \u00b7 0.16 MB/s without \u2014 52 % less written per second of take"
+   },
+   "THE PRESS: an UNEDITED camera take still exports without a wait": {
+    "pass": true,
+    "detail": "?glue=paint press 0.3 ms via render against 74.5 ms with the pre-made file cleared (the wait without J5) \u00b7 the control pressed 101.5 ms via instant"
+   }
+  },
+  "verdict": "THE GLUED COPY IS PAINTED AND NEVER ENCODED, AND NOTHING THE PAINT CARRIES WAS LOST. The camera take drops from 3 encoders to 2 and from 0.32 to 0.16 MB/s, the compositor's own canvas still paints the preview, and the unedited press costs 0.3 ms against 74.5 ms with nothing pre-made."
+ },
+ "max_camera_take": {
+  "notes": [
+   "asked for screen 2560x1440, quality max"
+  ],
+  "takeMs": 10000,
+  "lanes": [
+   {
+    "rung": "record",
+    "dead": false,
+    "durationMs": 9914,
+    "hasComposite": false,
+    "compositeBytes": 0,
+    "glue": null,
+    "encoderPlan": "[capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1920x1080@30 = 71.4 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+    "encoderCount": 2,
+    "previewFromCompositor": false,
+    "lost": [],
+    "livenessLines": [],
+    "channels": [
+     {
+      "kind": "camera",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "bytes": 302178
+     },
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "bytes": 1666714
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "width": null,
+      "height": null,
+      "fps": null,
+      "bytes": 157680
+     }
+    ],
+    "bytesPerSec": 214502,
+    "pressPath": "render",
+    "pressMs": 0.9,
+    "pressBytes": 1533043,
+    "coldPressMs": 87.6
+   },
+   {
+    "rung": "paint",
+    "dead": false,
+    "durationMs": 9977,
+    "hasComposite": false,
+    "compositeBytes": 0,
+    "glue": null,
+    "encoderPlan": "[capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1920x1080@30 = 71.4 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+    "encoderCount": 2,
+    "previewFromCompositor": false,
+    "lost": [],
+    "livenessLines": [],
+    "channels": [
+     {
+      "kind": "camera",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "bytes": 303456
+     },
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "bytes": 1667774
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "width": null,
+      "height": null,
+      "fps": null,
+      "bytes": 161923
+     }
+    ],
+    "bytesPerSec": 213807,
+    "pressPath": "render",
+    "pressMs": 0.2,
+    "pressBytes": 1531950,
+    "coldPressMs": 78.6
+   }
+  ],
+  "gates": {
+   "THIS CONFIGURATION ALREADY HAD NO COMPOSITE BEFORE J6 \u2014 nothing to free, and nothing changed": {
+    "pass": true,
+    "detail": "both rungs: [capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1920x1080@30 = 71.4 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over) \u00b7 composited preview false on both \u00b7 0.21 against 0.21 MB/s. The composite was refused by singleGenerationTake before the glue rung was ever consulted."
+   }
+  },
+  "verdict": "MAX ALREADY HAD NO GLUED COPY. J6 frees an encoder on every take that still opened one \u2014 which is every take below max \u2014 and changes nothing here, including the preview and the frozen-screen detector, which max gave up in 2026-08-30 and J6 did not give back."
+ },
+ "dead_screen_drill": {
+  "lane": {
+   "rung": "paint",
+   "dead": true,
+   "durationMs": 10026,
+   "hasComposite": false,
+   "compositeBytes": 0,
+   "glue": {
+    "recorded": false,
+    "engine": "v2",
+    "intake": "main-processor",
+    "painter": "webgpu",
+    "framesPainted": 246
+   },
+   "encoderPlan": "[capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1280x720@30 = 36.9 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+   "encoderCount": 2,
+   "previewFromCompositor": true,
+   "lost": [
+    {
+     "kind": "screen",
+     "reason": "never-delivered"
+    }
+   ],
+   "livenessLines": [
+    "[capture] screen source dead"
+   ],
+   "channels": [
+    {
+     "kind": "camera",
+     "media": "video",
+     "mimeType": "video/mp4",
+     "width": 640,
+     "height": 480,
+     "fps": 30,
+     "bytes": 304327
+    },
+    {
+     "kind": "screen",
+     "media": "video",
+     "mimeType": "video/mp4",
+     "width": 1280,
+     "height": 720,
+     "fps": 30,
+     "bytes": 208
+    },
+    {
+     "kind": "mic",
+     "media": "audio",
+     "mimeType": "audio/webm;codecs=opus",
+     "width": null,
+     "height": null,
+     "fps": null,
+     "bytes": 164610
+    }
+   ],
+   "bytesPerSec": 46793,
+   "pressPath": "render",
+   "pressMs": 0.5,
+   "pressBytes": 893293,
+   "coldPressMs": 73.3
+  },
+  "gates": {
+   "THE LIVENESS: a screen that delivers nothing is still called dead": {
+    "pass": true,
+    "detail": "console said: [capture] screen source dead"
+   },
+   "THE TAKE CARRIES IT: Recording.lost names the screen (H4)": {
+    "pass": true,
+    "detail": "lost: screen/never-delivered"
+   },
+   "AND THE COMPOSITE STILL WAS NOT WRITTEN": {
+    "pass": true,
+    "detail": "composite absent, 0 B"
+   }
+  },
+  "verdict": "THE FROZEN-SCREEN DETECTOR SURVIVES J6. It lives on the compositor\u2019s AudioWorklet tick, and the tick is upstream of the encode that was removed."
+ },
+ "screen_only_take": {
+  "notes": [
+   "both takes are SCREEN ONLY at exactly 1920x1080 \u2014 the one shape O3b is about. A camera makes the compositor do real work, and any other size makes its contain-fit a resample rather than the identity",
+   "the two copy sources are compared ON THE SAME TAKE (lanes A-instant-*), so nothing but the source differs; take B exists to price the capture rung, not to compare pictures",
+   "CPU is whole-browser and belongs to the sampler: run `npm run exp -- o3b --cpu --query=singlegen=capture` against `--query=singlegen=off`. Bytes-on-disk per second of take is the same encoder seen from the other end and IS measured here",
+   "the chroma instrument is R1-hardened: the reference is rasterized through capture/synthetic.ts\u2019s own context factory, the mask is built once from it, and a stage that cannot be measured reads SKIPPED instead of scoring itself"
+  ],
+  "takeMs": 8000,
+  "engine": "v2",
+  "takes": [
+   {
+    "label": "composite encoded (?glue=record)",
+    "rung": "record",
+    "durationMs": 7945,
+    "hasComposite": true,
+    "compositeBytes": 1336600,
+    "channelBytes": [
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "bytes": 1429729
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "bytes": 131210
+     }
+    ],
+    "writeBytesPerSec": 364700,
+    "compositeBytesPerSec": 168232,
+    "screenChannel": {
+     "mimeType": "video/mp4",
+     "width": 1920,
+     "height": 1080
+    }
+   },
+   {
+    "label": "composite painted only (?glue=paint, shipped)",
+    "rung": "paint",
+    "durationMs": 7989,
+    "hasComposite": false,
+    "compositeBytes": 0,
+    "channelBytes": [
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "bytes": 1411273
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "bytes": 132501
+     }
+    ],
+    "writeBytesPerSec": 193237,
+    "compositeBytesPerSec": 0,
+    "screenChannel": {
+     "mimeType": "video/mp4",
+     "width": 1920,
+     "height": 1080
+    }
+   }
+  ],
+  "pairPsnrDb": 39,
+  "gates": {
+   "the paint rung writes NO composite (console + the take itself)": {
+    "pass": true,
+    "detail": "?glue=paint take: composite absent, 0 composite bytes on disk \u00b7 console said PAINTED, NOT ENCODED"
+   },
+   "every lane took the path AND the copy source it was asked for": {
+    "pass": false,
+    "detail": "A-instant-composite \u2192 instant/composite \u00b7 A-instant-single-gen \u2192 instant/single-generation \u00b7 A-smartcut-composite \u2192 smartcut/composite \u00b7 A-smartcut-single-gen \u2192 render/n/a \u00b7 B-instant-no-composite \u2192 instant/single-generation \u00b7 B-smartcut-no-composite \u2192 smartcut/single-generation"
+   },
+   "CHROMA: the single-generation file keeps MORE colour than the two-generation one": {
+    "pass": true,
+    "detail": "single generation keeps green 79.1 % / blue 88.4 % against the composite's green 70.3 % / blue 75.2 % \u2014 a gain of 8.8 / 13.2 points. Chain: raw channel green 79.1/blue 88.4 \u00b7 composite green 70.3/blue 75.2"
+   },
+   "\u2026and it is not a WORSE PICTURE against the source (colour alone cannot say that)": {
+    "pass": true,
+    "detail": "single generation 37 dB (max 82, 6.1 % off by >8, fringe 8.81, contrast kept 0.98) against the composite's 35.5 dB (max 59, 6.4 %, fringe 10.24, contrast 1), both against the source canvas"
+   },
+   "the instant export is NO SLOWER than it is today": {
+    "pass": true,
+    "detail": "single generation 66 ms / 1.52 MB against the composite's 87 ms / 1.36 MB (15 % tolerance \u2014 this is a byte copy either way, and the two files are different sizes)"
+   },
+   "THE TRADE: the better picture is not paid for in a materially bigger file": {
+    "pass": true,
+    "detail": "single generation is +11.4 % of the composite copy's size (1.52 against 1.36 MB), for +1.8 dB against the source and 10-14 points of colour. Bound: 25 %"
+   },
+   "CAPTURE WRITE BANDWIDTH: the composite is a real share of it, and J6 stops paying it": {
+    "pass": true,
+    "detail": "with the composite 0.36 MB/s (of which the composite is 0.17 MB/s, 46.1 %) \u00b7 without it 0.19 MB/s \u2014 47 % less written per second of take, and one hardware encoder that never runs"
+   }
+  },
+  "verdict": "ONE GENERATION BEATS TWO ON A SCREEN-ONLY TAKE. The unedited export keeps green 79.1 % / blue 88.4 % of the source's saturation by copying the raw channel, against 70.3 / 75.2 % by copying the composite \u2014 the same picture, one 4:2:0 generation earlier, for strictly less work. THE ONE COST, AND IT IS NOT IN THE TASK'S \"free\" FRAMING: the download grows 11.4 % (1.52 against 1.36 MB on this take). The COLOUR win is structural and not bought with those bytes \u2014 X15(b) measured 3x the bitrate buying 4 % of the fringe on 4:2:0 \u2014 but part of the luma dB is. And J6 stops writing 0.17 MB/s \u2014 a whole hardware encoder that never runs \u2014 while the preview and the frozen-screen detector keep running off the paint."
+ },
+ "screen_only_take_baseline_on_main": {
+  "notes": [
+   "both takes are SCREEN ONLY at exactly 1920x1080 \u2014 the one shape O3b is about. A camera makes the compositor do real work, and any other size makes its contain-fit a resample rather than the identity",
+   "the two copy sources are compared ON THE SAME TAKE (lanes A-instant-*), so nothing but the source differs; take B exists to price the capture rung, not to compare pictures",
+   "CPU is whole-browser and belongs to the sampler: run `npm run exp -- o3b --cpu --query=singlegen=capture` against `--query=singlegen=off`. Bytes-on-disk per second of take is the same encoder seen from the other end and IS measured here",
+   "the chroma instrument is R1-hardened: the reference is rasterized through capture/synthetic.ts\u2019s own context factory, the mask is built once from it, and a stage that cannot be measured reads SKIPPED instead of scoring itself"
+  ],
+  "takeMs": 8000,
+  "engine": "v2",
+  "takes": [
+   {
+    "label": "composite recorded (?singlegen=export)",
+    "rung": "export",
+    "durationMs": 7940,
+    "hasComposite": true,
+    "compositeBytes": 1341912,
+    "channelBytes": [
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "bytes": 1441693
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "bytes": 131540
+     }
+    ],
+    "writeBytesPerSec": 367147,
+    "compositeBytesPerSec": 169007,
+    "screenChannel": {
+     "mimeType": "video/mp4",
+     "width": 1920,
+     "height": 1080
+    }
+   },
+   {
+    "label": "no composite (?singlegen=capture)",
+    "rung": "capture",
+    "durationMs": 7990,
+    "hasComposite": false,
+    "compositeBytes": 0,
+    "channelBytes": [
+     {
+      "kind": "screen",
+      "media": "video",
+      "mimeType": "video/mp4",
+      "bytes": 1412044
+     },
+     {
+      "kind": "mic",
+      "media": "audio",
+      "mimeType": "audio/webm;codecs=opus",
+      "bytes": 132501
+     }
+    ],
+    "writeBytesPerSec": 193310,
+    "compositeBytesPerSec": 0,
+    "screenChannel": {
+     "mimeType": "video/mp4",
+     "width": 1920,
+     "height": 1080
+    }
+   }
+  ],
+  "pairPsnrDb": 38.5,
+  "gates": {
+   "the capture rung records NO composite (console + the take itself)": {
+    "pass": false,
+    "detail": "?singlegen=capture take: composite absent, 0 composite bytes on disk \u00b7 console said NOTHING (the branch was never reached)"
+   },
+   "every lane took the path AND the copy source it was asked for": {
+    "pass": false,
+    "detail": "A-instant-composite \u2192 instant/composite \u00b7 A-instant-single-gen \u2192 instant/single-generation \u00b7 A-smartcut-composite \u2192 smartcut/composite \u00b7 A-smartcut-single-gen \u2192 render/n/a \u00b7 B-instant-no-composite \u2192 instant/single-generation \u00b7 B-smartcut-no-composite \u2192 smartcut/single-generation"
+   },
+   "CHROMA: the single-generation file keeps MORE colour than the two-generation one": {
+    "pass": true,
+    "detail": "single generation keeps green 78.2 % / blue 87.8 % against the composite's green 70.3 % / blue 75.2 % \u2014 a gain of 7.9 / 12.6 points. Chain: raw channel green 78.2/blue 87.8 \u00b7 composite green 70.3/blue 75.2"
+   },
+   "\u2026and it is not a WORSE PICTURE against the source (colour alone cannot say that)": {
+    "pass": true,
+    "detail": "single generation 36.5 dB (max 64, 6.7 % off by >8, fringe 8.97, contrast kept 0.98) against the composite's 35.5 dB (max 59, 6.4 %, fringe 10.24, contrast 1), both against the source canvas"
+   },
+   "the instant export is NO SLOWER than it is today": {
+    "pass": true,
+    "detail": "single generation 67 ms / 1.53 MB against the composite's 88 ms / 1.37 MB (15 % tolerance \u2014 this is a byte copy either way, and the two files are different sizes)"
+   },
+   "THE TRADE: the better picture is not paid for in a materially bigger file": {
+    "pass": true,
+    "detail": "single generation is +11.9 % of the composite copy's size (1.53 against 1.37 MB), for +1.8 dB against the source and 10-14 points of colour. Bound: 25 %"
+   },
+   "CAPTURE WRITE BANDWIDTH: the composite is a real share of it, and the rung stops paying it": {
+    "pass": true,
+    "detail": "with the composite 0.37 MB/s (of which the composite is 0.17 MB/s, 46 %) \u00b7 without it 0.19 MB/s \u2014 47.3 % less written per second of take, and one hardware encoder that never runs"
+   }
+  },
+  "verdict": "ONE GENERATION BEATS TWO ON A SCREEN-ONLY TAKE. The unedited export keeps green 78.2 % / blue 87.8 % of the source's saturation by copying the raw channel, against 70.3 / 75.2 % by copying the composite \u2014 the same picture, one 4:2:0 generation earlier, for strictly less work. THE ONE COST, AND IT IS NOT IN THE TASK'S \"free\" FRAMING: the download grows 11.9 % (1.53 against 1.37 MB on this take). The COLOUR win is structural and not bought with those bytes \u2014 X15(b) measured 3x the bitrate buying 4 % of the fringe on 4:2:0 \u2014 but part of the luma dB is. And the CAPTURE rung stops writing 0.17 MB/s \u2014 a whole hardware encoder that never runs \u2014 at the price of source-liveness detection and the composited preview, which is Robert's call."
+ },
+ "oracles": {
+  "v2_branch": "[1/1] PASS sync=41.3/56.6ms spur=-53.1dB jump=0.063 compT0=0ms compOff=128ms made=main-processor/webgpu inst=instant/54.9ms trim=smartcut/53.3ms tail=84ms export=4.35x peakOut=0.2MB aliased=false metric=symmetric skew=124/22 (14641ms)",
+  "v1_branch": "[1/1] PASS sync=38.8/53.8ms spur=-57.0dB jump=0.035 compT0=0ms compOff=88ms made=n/a/n/a inst=instant/50.4ms trim=render/55.8ms tail=76ms export=1.36x peakOut=0.2MB aliased=false metric=symmetric skew=66/22 (14855ms)",
+  "v1_main_baseline": "[1/1] PASS sync=57.1/78.1ms spur=-63.1dB jump=0.041 compT0=0ms compOff=75ms made=n/a/n/a inst=instant/40.1ms trim=render/50.8ms tail=80ms export=1.33x peakOut=0.2MB aliased=false metric=symmetric skew=51/24 (14946ms)"
+ },
+ "notes": [
+  "The o3b routing gate \"every lane took the path AND the copy source it was asked for\" is RED on this branch and RED on main in exactly the same lane (A-smartcut-single-gen -> render/n/a). Pre-existing, measured on both, not J6.",
+  "v1 oracle trim=render is unchanged from main and is by design (CompositeRecording.engine: v1 is MediaRecorder\u2019s encoder, its decoder description is not ours to reproduce, so a boundary splice cannot be byte-checked).",
+  "The max lane is the task row\u2019s own question answered: max has opened no compositor since 2026-08-30, so both rungs produce the identical 2-encoder plan and neither has a composited preview. There was no encoder there for J6 to free."
+ ]
+}

@@ -310,9 +310,10 @@ export function frameScale(width: number, height: number): number {
  * followed anything stays the take it was, on any load, forever; only takes
  * recorded with the frame following the source come out that way.
  *
- * WITHOUT ONE (`?singlegen=capture`, a composite that never started, and the
+ * WITHOUT ONE — WHICH IS EVERY TAKE SINCE J6, because the glued copy is
+ * painted and never encoded, plus a composite that never started and the
  * capture-time question `session.compositeFrame` asks before any composite
- * exists) the SCREEN decides, because a screen-present take draws the screen
+ * exists — the SCREEN decides, because a screen-present take draws the screen
  * full-frame and the camera as a PiP: matching the screen leaves the
  * compositor's contain-fit nothing to letterbox, which is both the better
  * picture and what makes the single-generation copy possible. With no screen

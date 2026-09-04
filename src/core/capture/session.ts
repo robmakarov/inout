@@ -15,7 +15,7 @@ import {
 } from '@core/door'
 import { CAPTURE_PERIOD_MS, startLateness, type LatenessRun } from '@core/lateness'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
-import { singleGenCaptureEnabled } from '@core/singleGen'
+import { glueRecorded } from '@core/glue'
 import { captureQualityMode, preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import {
   FLOOR_FPS,
@@ -60,6 +60,7 @@ import type {
   ChannelRecording,
   CameraPose,
   CompositeRecording,
+  TakeGlue,
   DisplaySurfaceKind,
   LatenessSummary,
   MediaKind,
@@ -454,6 +455,17 @@ class Session implements CaptureSession {
   private composite: LiveCompositeHandle | null = null
   /** O3b: this take deliberately has no composite. Evidence, and a guard. */
   private singleGeneration = false
+  /**
+   * J6 — is THIS take's glued copy being encoded? Decided once in
+   * startComposite from `core/glue.ts` and kept, so the pressure reading knows
+   * where the take's encoder actually is: with the composite recording it is in
+   * the compositor's own worker, and without it the raw SCREEN channel's worker
+   * is the only encoder there is.
+   */
+  private compositeRecorded = true
+  /** J6 — what the compositor did, read at stop and written into stopStats.
+   *  Null on a take that opened no compositor at all. */
+  private glueResult: TakeGlue | null = null
   /** Filled by stopCompositeEarly, read once the raw channels have drained. */
   private compositeResult: CompositeRecording | null = null
   private compositeStarting: Promise<void> | null = null
@@ -1063,8 +1075,28 @@ class Session implements CaptureSession {
   }
 
   private invalidateComposite(reason: string): void {
-    this.compositeHardInvalid = true
     this.compositeInvalid = true
+    /**
+     * J6 — THE REASONS FOR TEARING THE COMPOSITOR DOWN WERE ALL ABOUT THE FILE.
+     *
+     * Both callers say so in their own words: a late join means "the composite
+     * was mixed WITHOUT this channel, so an unedited instant export would
+     * silently lack it", and a pause means "it is ONE CONTINUOUS FILE and
+     * cannot represent a gap". With the glued copy painted and never encoded
+     * there is no file to be wrong, and cancelling here would cost the preview
+     * and the frozen-screen detector for nothing — the two things Robert's
+     * ruling explicitly kept. So a paint-only compositor keeps running, exactly
+     * as markCompositeUnusable already leaves it running; `compositeInvalid` is
+     * still set above, which costs nothing (there was no copy path to lose).
+     */
+    if (!this.compositeRecorded) {
+      console.info(
+        `[capture] composite invalidated (${reason}) — nothing changes: it is painted, not encoded ` +
+          `(J6), so the preview and the frozen-screen detector keep running`,
+      )
+      return
+    }
+    this.compositeHardInvalid = true
     this.notePreviewLost()
     console.info(`[capture] composite invalidated (${reason}) — unedited export will render`)
     const c = this.composite
@@ -1196,6 +1228,25 @@ class Session implements CaptureSession {
    * starves a max take (core/pressure.ts's probe: the page's own main thread is
    * clamped to 1 Hz while a take runs, and cannot see any of this).
    */
+  private onScreenEncoderPressure(signals: PressureSignals): void {
+    if (this.stateInternal !== 'recording') return
+    /**
+     * J6 — THE INSTRUMENT MOVES TO THE ENCODER THAT IS STILL RUNNING.
+     *
+     * E1's ladder, E2's ledger and F16b's background-render brake all hang off
+     * `notePressure` inside the composite engine, and until J6 the reading came
+     * from the compositor's own encoder queue. With the glued copy painted and
+     * not encoded that queue does not exist — and a detector fed the cost of a
+     * 0.4 ms draw would call a drowning machine nominal, which is worse than
+     * not looking (pressureSampler.ts: a null is not a zero). So the SCREEN
+     * channel's raw encoder, which is now the only video encoder in the take,
+     * feeds the same detector through the same door. Nothing else moves: same
+     * formulas, same warmup, same rules about who may act on a reading.
+     */
+    if (!this.compositeRecorded) this.composite?.notePressure?.(signals)
+    if (this.floorArmed()) this.onFloorPressure(signals)
+  }
+
   private onFloorPressure(signals: PressureSignals): void {
     if (this.stateInternal !== 'recording') return
     const now = performance.now()
@@ -1589,30 +1640,15 @@ class Session implements CaptureSession {
     ) {
       return { yes: true, why: '' }
     }
-    if (!singleGenCaptureEnabled()) return { yes: false, why: 'not enabled (?singlegen=capture)' }
-    if (ch.width === frame.width && ch.height === frame.height) return { yes: true, why: '' }
-    // THE COMPOSITE WOULD BE A DOWNSCALE OF A PICTURE WE ALREADY HAVE (F18 +
-    // O15, 2026-08-30). The original rule asked for EQUALITY, because before
-    // F18 the export ladder stopped below the screen and the composite was the
-    // only thing shaped like the output. With `?sourceres=1` the take's own
-    // size IS an export step, delivered by the packet copy — so on a
-    // single-video take that is BIGGER than the composite, the composite is not
-    // a different picture, it is a smaller copy of this one, made by a second
-    // hardware encoder running beside the first.
-    //
-    // THIS IS THE LEVER ROBERT'S FREEZE TURNS ON. Measured 2026-08-30 from his
-    // configuration: 3024x1964@60 plus a composite asks for 481 Mpx/s across
-    // two encoders — a whole 4K60 stream's worth, while a game renders on the
-    // same GPU. Without the composite it is 356 on one. The composite is the
-    // difference between impossible and merely hard.
-    //
-    // WHAT IS GIVEN UP is what `?singlegen=capture` always gave up and is named
-    // in core/singleGen.ts: source-liveness detection, and the composited
-    // preview (the raw <video> preview takes over, and measured live it carries
-    // MORE pixels than the compositor's 960x540 canvas). NEW HERE: an export at
-    // a step SMALLER than the take now renders instead of copying the
-    // composite. That is the honest trade — a slower export on a take that
-    // would otherwise have produced nothing at all.
+    // THE `?singlegen=capture` RUNG IS GONE (J6, 2026-09-04). It was the blunt
+    // way to stop recording the composite — it stopped the whole compositor and
+    // took the preview and the frozen-screen detector with it — and J6 replaces
+    // it: the composite is no longer encoded on ANY take, and the paint stays.
+    // What is left in this method is the older and narrower question of whether
+    // to open a compositor AT ALL, which J6 deliberately does not move: a take
+    // whose raw channel is already bigger than the composite has nothing to
+    // paint that the user is not already being shown, so it opens none, exactly
+    // as it did yesterday.
     return {
       yes: false,
       why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${frame.width}x${frame.height} — the compositor's contain-fit is doing real work`,
@@ -1645,10 +1681,11 @@ class Session implements CaptureSession {
       height: c.height ?? 0,
       fps: c.fps ?? DEFAULT_FRAME_RATE,
     }))
-    // The composite is an encoder like any other, EXCEPT when single
-    // generation is going to skip it — which is exactly the branch
-    // startComposite will take, asked here from the same facts.
-    if (!this.singleGenerationTake().yes) {
+    // The composite is an encoder like any other, EXCEPT when it is not opened
+    // (single generation) or not ENCODED (J6's default) — both of which are
+    // exactly the branches startComposite will take, asked here from the same
+    // facts so the plan and the take can never disagree.
+    if (glueRecorded() && !this.singleGenerationTake().yes) {
       const frame = this.compositeFrame()
       encoders.push({ what: 'composite', width: frame.width, height: frame.height, fps: this.compositeRate() })
     }
@@ -1847,12 +1884,11 @@ class Session implements CaptureSession {
   }
 
   private startComposite(): void {
-    // O3b, the CAPTURE half: a whole hardware encoder, its worker and ~18 % of
-    // the take's write bandwidth, none of which run. WHAT IS GIVEN UP IS REAL
-    // and is why this rung is opt-in until Robert rules: the compositor owns
-    // SOURCE LIVENESS (a frozen screen stops being noticed) and the recording
-    // preview can no longer render its output. Both are named in
-    // core/singleGen.ts beside the flag.
+    // O3b: a take whose raw channel already IS the composition opens no
+    // compositor at all — there is nothing to draw that the user is not being
+    // shown directly, and the preview stays the raw <video>. J6 did not move
+    // this line, deliberately: which takes get a compositor is unchanged, and
+    // only what the compositor DOES changed.
     const single = this.singleGenerationTake()
     if (single.yes) {
       this.singleGeneration = true
@@ -1868,9 +1904,20 @@ class Session implements CaptureSession {
       )
       return
     }
-    if (singleGenCaptureEnabled()) {
-      console.info(`[capture] single generation declined — ${single.why}; recording the composite`)
-    }
+    // J6 — THE GLUED COPY IS PAINTED AND NOT ENCODED (Robert 2026-09-04 (27),
+    // "kill the glued copy encoding"). One flag, read once, handed to whichever
+    // engine starts, for the same reason the frame and the rate are: a v2→v1
+    // fallback must not change what this take writes.
+    const record = glueRecorded()
+    this.compositeRecorded = record
+    console.info(
+      record
+        ? '[capture] the glued copy is ENCODED for this take (?glue=record) — a second hardware ' +
+            'encoder and a second file, as before J6'
+        : '[capture] the glued copy is PAINTED, NOT ENCODED (J6) — the preview and the ' +
+            'frozen-screen detector come from the paint; the export is made in the background ' +
+            'instead (J5). ?glue=record puts the second encoder back.',
+    )
     const screen = this.previewStreams.screen
     const camera = this.previewStreams.camera
     const audio = [this.previewStreams.mic, this.previewStreams['system-audio']].filter(
@@ -1924,6 +1971,7 @@ class Session implements CaptureSession {
         ? startLiveComposite(inputs, key, {
             onSourceLiveness,
             epochMs,
+            record,
             width: frame.width,
             height: frame.height,
             fps: rate,
@@ -1940,6 +1988,7 @@ class Session implements CaptureSession {
       start = startLiveCompositeV2(inputs, key, {
         onSourceLiveness,
         epochMs,
+        record,
         width: frame.width,
         height: frame.height,
         fps: rate,
@@ -2085,15 +2134,20 @@ class Session implements CaptureSession {
           console.error(`[capture] ${ch.kind} ${cause}: ${err.message}`)
           void this.containSegment(ch, cause)
         },
-        // M1 — THE EMERGENCY FLOOR'S INSTRUMENT, on the screen channel only and
-        // only when the floor is armed (max, `?floor=1`, OFF by default). The
-        // screen is the encoder that decides whether a max take survives; the
-        // camera is an inset. With the floor off this is `undefined` and the
-        // worker never starts a ticker.
-        ...(this.floorArmed() && ch.kind === 'screen'
+        // M1 — THE EMERGENCY FLOOR'S INSTRUMENT, on the screen channel only.
+        // The screen is the encoder that decides whether a take survives; the
+        // camera is an inset. With nothing to read it this is `undefined` and
+        // the worker never starts a ticker.
+        //
+        // J6 ADDED THE SECOND READER. Before it, this ran only for the floor
+        // (max, `?floor=1`, OFF by default) because the composite's own encoder
+        // was the elastic ladder's instrument. The composite no longer encodes,
+        // so on every take that has a compositor this worker is where the
+        // take's encoder pressure lives — see onScreenEncoderPressure.
+        ...((this.floorArmed() || !glueRecorded()) && ch.kind === 'screen'
           ? {
               pressure: true,
-              onPressure: (signals: PressureSignals) => this.onFloorPressure(signals),
+              onPressure: (signals: PressureSignals) => this.onScreenEncoderPressure(signals),
             }
           : null),
       })
@@ -2254,11 +2308,15 @@ class Session implements CaptureSession {
     if (this.stateInternal !== 'recording') return
     this.setState('paused')
     this.pausedAtMs = performance.now()
-    // The composite is CANCELLED here, not merely marked: it is one continuous
-    // file and cannot represent a gap, and leaving it running would spend an
-    // encoder on the paused stretch as well. Cost stated plainly: a paused take
-    // has no source-liveness tick until it is stopped, and it exports through
-    // the render — the same fallback a late join takes.
+    // The composite WAS cancelled here, because it is one continuous file that
+    // cannot represent a gap and because leaving it running would spend an
+    // encoder on the paused stretch as well.
+    //
+    // J6 TOOK BOTH REASONS AWAY. There is no file to be wrong about the gap and
+    // no encoder to spend, so on the shipped default the compositor keeps
+    // painting through a pause — which also ends the cost this comment used to
+    // state, that a paused take had no source-liveness tick until it was
+    // stopped. With `?glue=record` the old behaviour returns with the file.
     this.invalidateComposite('paused')
     for (const ch of this.channels) {
       if (ch.ended) continue
@@ -3287,6 +3345,7 @@ class Session implements CaptureSession {
         if (this.compositeInvalid) {
           // Unusable but still running (it was holding the liveness tick):
           // release the encoder, audio context and orphan blob.
+          this.glueResult = this.composite?.machinery?.() ?? null
           await withTimeout(
             this.composite?.cancel() ?? Promise.resolve(),
             COMPOSITE_STOP_BUDGET_MS,
@@ -3300,6 +3359,13 @@ class Session implements CaptureSession {
           COMPOSITE_STOP_BUDGET_MS,
           'composite stop',
         )
+        // J6 — READ THE MACHINERY BEFORE THE HANDLE GOES. On a paint-only take
+        // `stop()` resolves null by design, and P9's rung and O4's backend used
+        // to travel only inside a CompositeRecording. Both fall through at
+        // runtime, so a take that cannot name them cannot be read (the oracle
+        // cells' `made=<intake>/<painter>` is exactly this). Taken AFTER stop,
+        // so the frame count is the final one.
+        this.glueResult = this.composite?.machinery?.() ?? null
         if (composite) this.compositeResult = composite
       } catch (err) {
         console.warn('[capture] live composite stop failed', err)
@@ -3722,6 +3788,12 @@ class Session implements CaptureSession {
         // G7 — MAIN-THREAD LATENESS, already measured and already stopped
         // (clearTick, at the top of the stop). Nothing is sampled here.
         ...(this.latenessSummary ? { lateness: this.latenessSummary } : null),
+        // J6 — WHAT THE COMPOSITOR DID. On the shipped default it painted and
+        // never encoded, so there is no CompositeRecording to carry P9's rung
+        // and O4's backend and this is where they live. Absent on a take that
+        // opened no compositor at all, which is itself readable: the picture
+        // dimension then says so rather than reading as a missing field.
+        ...(this.glueResult ? { glue: this.glueResult } : null),
       }
       recording.stopStats = stats
     } catch {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { sourceFrameEnabled, sourceResEnabled, setSourceFrame, setSourceRes } from '@core/frame'
 import { setSourceRate, sourceRateEnabled } from '@core/rate'
+import { setGlueRung, glueRung, type GlueRung } from '@core/glue'
 import { setSingleGenRung, singleGenRung, type SingleGenRung } from '@core/singleGen'
 import {
   captureQualityMode,
@@ -222,9 +223,21 @@ export function TestPanel() {
         label="Single generation"
         hint="Whether the composite is recorded when a raw channel already holds the picture"
         value={singleGenRung()}
-        options={['off', 'export', 'capture'] as SingleGenRung[]}
+        options={['off', 'export'] as SingleGenRung[]}
         set={(v) => {
           setSingleGenRung(v)
+          redraw()
+        }}
+      />
+      {/* J6. The row says what he GETS, not "composite encoder": glue is his own
+          word for the screen and camera drawn into one picture. */}
+      <Choice
+        label="The glued picture while recording"
+        hint="paint (normal now): while you record, the screen and camera are still drawn together for the preview and for the frozen-screen warning — but that combined picture is no longer saved as a second video. That frees a whole video chip and one file's worth of writing on every take, which is what max and 60 fps run out of. The export is made in the background while you edit instead, so pressing Export still gives you a file straight away. record: save it again, exactly like before — use this if a take that used to export instantly now makes you wait, and say so."
+        value={glueRung()}
+        options={['paint', 'record'] as GlueRung[]}
+        set={(v) => {
+          setGlueRung(v)
           redraw()
         }}
       />
@@ -242,6 +255,7 @@ export function TestPanel() {
           setEncoderBudget(null)
           setResolutionStep(null)
           setSingleGenRung(null)
+          setGlueRung(null)
           setChunkedRenderEnabled(null)
           setFullColourEnabled(null)
           redraw()

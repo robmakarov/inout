@@ -24,7 +24,7 @@
  */
 import { blobStore } from '@core/store'
 import type { CompositorMsg, CompositorReply, CompositorStats } from './compositor.worker'
-import type { CameraPose, CompositeRecording, FrameIntakeKind } from '../types'
+import type { CameraPose, CompositeRecording, FrameIntakeKind, TakeGlue } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import {
@@ -253,6 +253,16 @@ export interface LiveCompositeV2Options {
   /** Fired once the composite's shape is settled, so the UI can stop showing
    *  the guess. Called with the geometry the FILE is being written at. */
   onGeometry?: (size: { width: number; height: number }) => void
+  /**
+   * J6 — DOES THE GLUED COPY BECOME A FILE? `false` is the shipped default
+   * (`core/glue.ts`, Robert 2026-09-04 (27)): the compositor paints every
+   * frame, blits the preview and keeps the liveness beat, and opens no encoder,
+   * no muxer, no file and no audio mix. `stop()` then resolves `null`, which is
+   * the same answer the session has always handled for a take with no
+   * composite. Absent means `true` — every rig that drives this engine directly
+   * gets the engine it had.
+   */
+  record?: boolean
 }
 
 export interface LiveCompositeV2Handle {
@@ -285,6 +295,33 @@ export interface LiveCompositeV2Handle {
    * can drop its own preview without a blank flash; false means keep it.
    */
   attachPreview(canvas: HTMLCanvasElement): Promise<boolean>
+  /**
+   * J6 — ONE PRESSURE READING, FROM SOMEWHERE ELSE.
+   *
+   * E1 built one detector for many consumers and M1 lifted the sampler out of
+   * this worker so the two threads that own encoder counters could share it.
+   * This is the third move in that line: with the composite painting and not
+   * encoding, the encoder whose queue actually says whether this take is in
+   * trouble is the RAW SCREEN channel's, in `rawVideo.worker.ts` — so the
+   * session reads it there and hands it in here, where the ladder, the ledger
+   * and F16b's background-render brake all already live.
+   *
+   * Nothing else changes: the same `notePressure` the worker's own event used
+   * to call, so a `?glue=record` take and a shipped one run the identical
+   * ladder off the identical detector, and only the instrument differs.
+   */
+  notePressure(signals: PressureSignals): void
+  /**
+   * J6 — HOW THIS TAKE WAS COMPOSED, whether or not it left a file.
+   *
+   * `CompositeRecording` used to be the only carrier of P9's rung and O4's
+   * backend, and a paint-only take has no CompositeRecording. Both are runtime
+   * fall-throughs, so a take that cannot name them cannot be read — the oracle
+   * cells print `made=<intake>/<painter>` off exactly this. Readable at any
+   * time; the frame count is whatever the last stats event carried, and is
+   * exact after stop().
+   */
+  machinery(): TakeGlue
 }
 
 /**
@@ -341,6 +378,8 @@ export async function startLiveCompositeV2(
   // the chosen intake cannot pace it — never silently, and never at the press.
   const askedFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
   let outFps = askedFps
+  // J6: absent means the engine that shipped before the ruling.
+  const record = options.record !== false
   if (fault?.startFails) {
     // Before the worker, before OPFS: the shape of a real capability failure.
     throw new Error('live composite v2: injected start failure (o4wedge)')
@@ -804,7 +843,19 @@ export async function startLiveCompositeV2(
     channelCountMode: 'explicit',
     channelInterpretation: 'speakers',
   })
-  const hasAudio = inputs.audio.length > 0
+  /**
+   * J6 — THE MIX IS PART OF THE FILE, THE TICK IS NOT.
+   *
+   * The worklet above has two jobs (see TAP_SOURCE): it carries the mixed PCM
+   * into the file, and it is the take's hidden-tab-proof liveness clock. Only
+   * the first belongs to the composite's encode. With `record: false` nothing
+   * is connected to its input — no MediaStreamSource, no limiter, no gain
+   * stage — so `process()` sees an empty input and takes the branch that was
+   * written for a take with no audio at all: it ticks, and the frozen-screen
+   * detector keeps watching. The AAC encode, the batch copies and the
+   * postMessage traffic all go with the file.
+   */
+  const hasAudio = inputs.audio.length > 0 && record
   if (hasAudio) {
     if (inputs.audio.length === 1) {
       audioCtx.createMediaStreamSource(inputs.audio[0]!).connect(tap)
@@ -899,6 +950,9 @@ export async function startLiveCompositeV2(
     audioBitrate: AUDIO_BITS,
     sampleRate: hasAudio ? audioCtx.sampleRate : null,
     channelCount: 2,
+    // J6 — paint, or paint and encode. Sent always rather than conditionally so
+    // the worker never has to guess which engine asked it.
+    record,
   })
   if (!('ok' in startReply) || !startReply.ok) {
     worker.terminate()
@@ -1052,6 +1106,16 @@ export async function startLiveCompositeV2(
 
   return {
     stats: () => latestStats,
+    // J6 — the reading arrives from the raw screen encoder's worker when this
+    // composite has none of its own. Same detector, same ladder, same ledger.
+    notePressure,
+    machinery: () => ({
+      recorded: record,
+      engine: 'v2',
+      intake,
+      ...(painterBackend ? { painter: painterBackend } : null),
+      framesPainted: latestStats?.framesEncoded ?? 0,
+    }),
     pressureMarks: () => ({
       firstSeriousAtMs: firstSeriousAt,
       firstCriticalAtMs: firstCriticalAt,
@@ -1103,6 +1167,26 @@ export async function startLiveCompositeV2(
     async stop() {
       const wallMs = performance.now() - startedAt
       await teardown()
+      // J6 — THERE IS NO FILE, AND THAT IS NOT A FAILURE. `null` is the answer
+      // the session has always had for "this take has no composite"; the drain
+      // below has nothing to drain, and `blobStore.remove` would be reaching
+      // for a key nothing ever created.
+      if (!record) {
+        let painted = latestStats?.framesEncoded ?? 0
+        try {
+          const reply = await call({ cmd: 'stop' })
+          if ('ok' in reply && reply.ok && reply.cmd === 'stop') painted = reply.stats.framesEncoded
+        } catch {
+          /* the count is evidence, not the take */
+        } finally {
+          worker.terminate()
+        }
+        console.info(
+          `[capture] composite painted ${painted} frames and encoded none (J6, ?glue=record puts the ` +
+            `second encoder and its file back)`,
+        )
+        return null
+      }
       if (degraded) {
         await call({ cmd: 'cancel' }).catch(() => undefined)
         worker.terminate()
@@ -1181,7 +1265,8 @@ export async function startLiveCompositeV2(
         /* worker may already be gone */
       }
       worker.terminate()
-      await blobStore.remove(blobKey).catch(() => undefined)
+      // J6: nothing was ever written under this key on a paint-only take.
+      if (record) await blobStore.remove(blobKey).catch(() => undefined)
     },
   }
 }

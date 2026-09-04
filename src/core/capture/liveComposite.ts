@@ -9,7 +9,8 @@
 import { COMPOSITE_BITS } from './captureBitrate'
 import { adoptedFrame } from '@core/frame'
 import { blobStore } from '@core/store'
-import type { CameraPose, CompositeRecording } from '../types'
+import type { PressureSignals } from '@core/pressure'
+import type { CameraPose, CompositeRecording, TakeGlue } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 
 /**
@@ -163,6 +164,20 @@ export interface LiveCompositeOptions {
    */
   fps?: number
   onGeometry?: (size: { width: number; height: number }) => void
+  /**
+   * J6 — DOES THE GLUED COPY BECOME A FILE? `false` is the shipped default
+   * (`core/glue.ts`, Robert 2026-09-04 (27), "kill the glued copy encoding"):
+   * this engine keeps its canvas, its draw loop and its liveness ticker, and
+   * opens no MediaRecorder, no audio mix and no write stream. `stop()` then
+   * resolves `null` — the answer the session has always had for a take with no
+   * composite. Absent means `true`, so a rig driving this engine directly gets
+   * the engine it had.
+   *
+   * THE RULE IS THE SAME ON BOTH ENGINES ON PURPOSE. A v1 take that still wrote
+   * a composite while every v2 take stopped would be one product with two
+   * different files, and nothing in the take would say which one it was.
+   */
+  record?: boolean
 }
 
 export interface LiveCompositeHandle {
@@ -185,6 +200,17 @@ export interface LiveCompositeHandle {
    * keeps the default corner, which is what v1 takes have always had.
    */
   setCameraPose?(pose: CameraPose | null): void
+  /**
+   * J6 — ONE PRESSURE READING, TAKEN SOMEWHERE ELSE. OPTIONAL, and v1 does not
+   * implement it: v1 has no degradation ladder to feed and never had one. The
+   * v2 engine's ladder used to read its own encoder's queue; with the glued
+   * copy painted and not encoded, the session reads the raw screen channel's
+   * encoder instead and hands the reading in here.
+   */
+  notePressure?(signals: PressureSignals): void
+  /** J6 — how this take was composed, whether or not it left a file. v1 chooses
+   *  neither an intake nor a painter, so it reports only what it has. */
+  machinery?(): TakeGlue
 }
 
 /** v1 also reports what it did. Kept off the shared handle so the engine
@@ -325,6 +351,8 @@ export async function startLiveComposite(
   let outH = options.height && options.height > 0 ? options.height : H
   // F15: the caller's rate, same contract as the frame above.
   const outFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
+  // J6: absent means the engine that shipped before the ruling.
+  const record = options.record !== false
   if (options.followSource) {
     const primary = screenEl ?? cameraEl
     const dims = primary ? await firstDims(primary, ADOPT_BUDGET_MS) : null
@@ -357,7 +385,11 @@ export async function startLiveComposite(
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.audioWorklet.addModule(tickerModuleUrl())
   let audioTrack: MediaStreamTrack | null = null
-  if (inputs.audio.length > 0) {
+  // J6: the mix exists to be encoded into the composite file. With no file
+  // there is nothing to mix — the raw channels are tapped elsewhere and always
+  // were. The worklet TICKER below is a separate node with no inputs, so the
+  // draw loop and the liveness detector are untouched by this.
+  if (record && inputs.audio.length > 0) {
     const dest = audioCtx.createMediaStreamDestination()
     if (inputs.audio.length === 1) {
       // Single source can't exceed ±1 — any dynamics stage here only damages
@@ -384,35 +416,39 @@ export async function startLiveComposite(
   }
   await audioCtx.resume()
 
-  const canvasStream = canvas.captureStream(outFps)
-  if (audioTrack) canvasStream.addTrack(audioTrack)
+  // ---- J6: EVERYTHING FROM HERE TO recorder.start IS THE FILE --------------
+  const canvasStream = record ? canvas.captureStream(outFps) : null
+  if (audioTrack && canvasStream) canvasStream.addTrack(audioTrack)
 
-  const writable = await blobStore.createWriteStream(blobKey)
-  const writer = writable.getWriter()
+  const writable = record ? await blobStore.createWriteStream(blobKey) : null
+  const writer = writable ? writable.getWriter() : null
   let writeChain = Promise.resolve()
   let bytes = 0
   let writeFailed = false
 
-  const mime = pickCompositeMime()
-  if (!mime) throw new Error('live composite: no supported mp4 mime')
-  const recorder = new MediaRecorder(canvasStream, {
-    mimeType: mime,
-    videoBitsPerSecond: COMPOSITE_BITS,
-    audioBitsPerSecond: 128_000,
-  })
+  const mime = record ? pickCompositeMime() : null
+  if (record && !mime) throw new Error('live composite: no supported mp4 mime')
+  const recorder =
+    canvasStream && mime
+      ? new MediaRecorder(canvasStream, {
+          mimeType: mime,
+          videoBitsPerSecond: COMPOSITE_BITS,
+          audioBitsPerSecond: 128_000,
+        })
+      : null
   let chunks = 0
   let lastChunkAt = 0
   /** Bytes the recorder has HANDED US, counted synchronously. `bytes` only
    *  moves once the durable write resolves, which is too late to steer the
    *  drain by. */
   let emittedBytes = 0
-  recorder.ondataavailable = (e) => {
+  if (recorder) recorder.ondataavailable = (e) => {
     if (!e.data.size || writeFailed) return
     chunks++
     emittedBytes += e.data.size
     lastChunkAt = performance.now()
     writeChain = writeChain.then(() =>
-      writer.write(e.data).then(
+      (writer?.write(e.data) ?? Promise.resolve()).then(
         () => {
           bytes += e.data.size
         },
@@ -550,7 +586,7 @@ export async function startLiveComposite(
   ticker.port.onmessage = () => {
     if (!torndown && !aborted) draw()
   }
-  recorder.start(CHUNK_MS)
+  recorder?.start(CHUNK_MS)
   /**
    * THE FILE'S OWN ZERO (P0-instant-sync). Everything above this line —
    * elements, canvas, audio graph, durable write stream — is time the take had
@@ -581,7 +617,7 @@ export async function startLiveComposite(
    * budget. `drainTimedOut` is the honest signal that the file is short.
    */
   const drainEncoder = async (): Promise<void> => {
-    if (recorder.state !== 'recording') return
+    if (!recorder || recorder.state !== 'recording') return
     const t0 = performance.now()
     const bytesAtStart = emittedBytes
     let idle = 0
@@ -620,7 +656,7 @@ export async function startLiveComposite(
     // user actually wants at the end of their take. Discarding takes never
     // wait — there is nothing to save.
     if (!discard) await drainEncoder()
-    if (recorder.state !== 'inactive') {
+    if (recorder && recorder.state !== 'inactive') {
       await new Promise<void>((resolve) => {
         recorder.onstop = () => resolve()
         try {
@@ -633,13 +669,14 @@ export async function startLiveComposite(
     }
     await writeChain
     try {
-      await writer.close()
+      await writer?.close()
     } catch {
       /* already failed */
     }
     for (const el of [screenEl, cameraEl]) if (el) el.srcObject = null
     if (audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)
-    if (discard) await blobStore.remove(blobKey).catch(() => undefined)
+    // J6: on a paint-only take nothing was ever written under this key.
+    if (discard && record) await blobStore.remove(blobKey).catch(() => undefined)
   }
 
   const snapshotStats = (): LiveCompositeStats => {
@@ -660,6 +697,15 @@ export async function startLiveComposite(
       if (aborted) return null
       await teardown(false)
       snapshotStats()
+      // J6 — no file, and that is not a failure: `null` is what the session has
+      // always been handed for a take with no composite.
+      if (!record) {
+        console.info(
+          `[capture] composite v1 painted ${stats.drawnFrames} frames and encoded none ` +
+            `(J6, ?glue=record puts the recorder and its file back)`,
+        )
+        return null
+      }
       // One line, always: this is how a short tail becomes loud instead of
       // silent. drainTimedOut means the encoder was still behind when we ran
       // out of patience, i.e. the end of this take did not make it into the file.
@@ -676,7 +722,7 @@ export async function startLiveComposite(
       const composite: CompositeRecording = {
         blobKey,
         engine: 'v1',
-        mimeType: recorder.mimeType || mime,
+        mimeType: recorder?.mimeType || mime || 'video/mp4',
         durationMs: Math.round(durationMs),
         width: outW,
         height: outH,
@@ -698,6 +744,7 @@ export async function startLiveComposite(
       await teardown(true)
       snapshotStats()
     },
+    machinery: () => ({ recorded: record, engine: 'v1', framesPainted: drawnFrames }),
     stats: snapshotStats,
   }
 }

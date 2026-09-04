@@ -720,10 +720,35 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'j6',
+    title: 'J6 — the glued copy is painted and never encoded: what came off, and what stayed?',
+    detail:
+      'Records TWO screen+camera takes through the shipped capture session — `?glue=record` (the take before the ruling) and `?glue=paint` (shipped) — and asserts each gate the task row named, as a difference between the two rather than against memory: the ENCODER PLAN loses the composite and keeps every raw channel · the take’s own channels are the same kinds, containers, geometry and rate · the compositor’s own canvas still takes the recording preview over (attachCompositePreview resolves true only once a frame has landed, so a paint that had quietly stopped would fail here) · the take carries stopStats.glue saying it painted and did not encode · write bandwidth · and the UNEDITED press, which has nothing to packet-copy any more and must be served by the file F16b/J5 makes at stop, against the same press with that file cleared. `{\"max\":true,\"width\":2560,\"height\":1440}` asks the task row\u2019s own question about a MAX + camera take. {\"takeSec\":10}.',
+    run: async (args) => {
+      const { runGlueCopy } = await import('../perf/glueCopy')
+      return runGlueCopy({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        max: args?.max === true,
+      })
+    },
+  },
+  {
+    id: 'j6dead',
+    title: 'J6 — does the frozen-screen detector survive the encode coming out?',
+    detail:
+      'H4’s own drill on the shipped rung. MUST be run with `--query="synthetic=1&dead=screen"`: the screen track arms live, unmuted and correctly sized and delivers ZERO frames, which is the one case only source-liveness can name. The detector lives on the compositor’s AudioWorklet tick — upstream of the encode J6 removed — and this proves the tick still runs and the take still carries the loss, on a take that wrote no composite. {"takeSec":10}.',
+    run: async (args) => {
+      const { runGlueLiveness } = await import('../perf/glueCopy')
+      return runGlueLiveness({ takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined })
+    },
+  },
+  {
     id: 'o3b',
     title: 'O3b — single-generation export: is one 4:2:0 generation better than two, and what does skipping the second cost?',
     detail:
-      'records TWO screen-only 1080p takes through the shipped capture session — one with the live composite, one with `?singlegen=capture` where it never starts — and exports the FIRST one twice, from the composite and from the raw channel, so the two copy sources are compared with nothing else different. Measures colour against the canvas the synthetic screen actually painted (R1’s hardened instrument), luma PSNR against the same canvas (colour alone cannot say "better": X6 measured the raw AVC lane undershooting its bitrate on screen content), export wall clock, and bytes written per second of take. Also proves a TRIMMED take still smart-cuts over the raw channel — without that the capture rung would quietly send every trim to the full render. `{"crops":true}` writes magnified before/after glyph crops.',
+      'records TWO screen-only 1080p takes through the shipped capture session — one with the composite ENCODED (`?glue=record`, the take before J6) and one on the shipped default (`?glue=paint`, where the compositor paints for the preview and the frozen-screen detector and never encodes) — and exports the FIRST one twice, from the composite and from the raw channel, so the two copy sources are compared with nothing else different. Measures colour against the canvas the synthetic screen actually painted (R1’s hardened instrument), luma PSNR against the same canvas (colour alone cannot say "better": X6 measured the raw AVC lane undershooting its bitrate on screen content), export wall clock, and bytes written per second of take. Also proves a TRIMMED take still smart-cuts over the raw channel — without that J6 would quietly send every trim to the full render. `{"crops":true}` writes magnified before/after glyph crops.',
     run: async (args) => {
       const { runSingleGen } = await import('../perf/singleGen')
       return runSingleGen({

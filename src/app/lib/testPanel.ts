@@ -74,6 +74,7 @@ export function urlOverrides(): string[] {
     'encoderbudget',
     'resstep',
     'singlegen',
+    'glue',
     'rawcodec',
     'engine',
     'chunked',

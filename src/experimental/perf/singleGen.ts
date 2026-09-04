@@ -22,16 +22,19 @@
  * So both lanes are exported FROM THE SAME TAKE and compared three ways: colour
  * against the source, luma against the source, and bytes.
  *
- * THE SECOND TAKE IS THE OTHER HALF. `?singlegen=capture` skips recording the
- * composite at all, which is where the CPU and the write bandwidth are. It also
- * gives up source-liveness detection and the composited preview, so it is Robert's
- * to flip — this rig's job is to put a number on both sides of that.
+ * THE SECOND TAKE IS THE OTHER HALF, AND SINCE J6 IT IS THE DEFAULT ONE. The
+ * capture axis used to be `?singlegen=capture`, which skipped the whole
+ * compositor and gave up source liveness and the composited preview with it.
+ * J6 deleted that rung: `?glue=paint` (shipped) paints the composite and never
+ * encodes it, and `?glue=record` is the take that was recorded before the
+ * ruling. So the two takes here are now `record` and `paint`, and what is
+ * measured between them is exactly the encoder and the file that J6 removed.
  *
  * WHAT IT CANNOT MEASURE: whole-browser CPU. That belongs to the sampler —
- * `npm run exp -- o3b --cpu --query=singlegen=capture` against
- * `--query=singlegen=off` — because a rig cannot see the encoder threads it is
- * trying to price. What it CAN measure, and does, is bytes on disk per second
- * of take, which is the same encoder's cost seen from the other end.
+ * `npm run exp -- o3b --cpu --query=glue=paint` against `--query=glue=record` —
+ * because a rig cannot see the encoder threads it is trying to price. What it
+ * CAN measure, and does, is bytes on disk per second of take, which is the same
+ * encoder's cost seen from the other end.
  */
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
@@ -44,6 +47,7 @@ import { exportByBestPath } from '@core/compose'
 import { setSmartCutEnabled, smartCutEnabled } from '@core/compose/smartCutFlag'
 import { readCertification } from '@core/compose/certify'
 import { setSingleGenRung, singleGenRung, type SingleGenRung } from '@core/singleGen'
+import { setGlueRung, glueRung, type GlueRung } from '@core/glue'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
 import { warmRigEncoder } from '../rigWarm'
@@ -109,14 +113,15 @@ export interface ChromaStage {
 
 export interface TakeFacts {
   label: string
-  rung: SingleGenRung
+  /** J6: which glue rung this take was RECORDED on. */
+  rung: GlueRung
   durationMs: number
   hasComposite: boolean
   compositeBytes: number
   channelBytes: { kind: string; media: string; mimeType: string; bytes: number }[]
   /** Everything capture wrote for this take, bytes per second of take. */
   writeBytesPerSec: number
-  /** The composite's share of it — what the capture rung stops paying. */
+  /** The composite's share of it — what the paint rung stops paying. */
   compositeBytesPerSec: number
   screenChannel: { mimeType: string; width: number | null; height: number | null } | null
 }
@@ -167,7 +172,7 @@ async function sizeOf(key: string | undefined): Promise<number> {
 
 async function takeFactsOf(
   label: string,
-  rung: SingleGenRung,
+  rung: GlueRung,
   recording: Recording,
 ): Promise<TakeFacts> {
   const compositeBytes = await sizeOf(recording.composite?.blobKey)
@@ -206,6 +211,7 @@ export async function runSingleGen(
   const captureLog: string[] = []
   const previousSmartCut = smartCutEnabled()
   const previousRung = singleGenRung()
+  const previousGlue = glueRung()
 
   const takes: TakeFacts[] = []
   const lanes: ExportLane[] = []
@@ -221,8 +227,11 @@ export async function runSingleGen(
   setSyntheticScreenContent('text')
   await warmRigEncoder()
 
-  const record = async (rung: SingleGenRung): Promise<Recording> => {
-    setSingleGenRung(rung)
+  const record = async (rung: GlueRung): Promise<Recording> => {
+    // J6: the CAPTURE axis is the glue rung now. The export axis below is still
+    // the single-generation rung — they are two different questions and the rig
+    // exists because they were once one flag.
+    setGlueRung(rung)
     const session = await createCaptureSession({
       screen: true,
       camera: false,
@@ -238,9 +247,10 @@ export async function runSingleGen(
   let withComposite: Recording
   let withoutComposite: Recording
   try {
-    withComposite = await record('export')
-    withoutComposite = await record('capture')
+    withComposite = await record('record')
+    withoutComposite = await record('paint')
   } finally {
+    setGlueRung(previousGlue === 'paint' ? null : previousGlue)
     untap()
     setSyntheticScreenContent(null)
     setSyntheticScreenSize(null)
@@ -250,8 +260,8 @@ export async function runSingleGen(
       ? 'v1'
       : 'v2'
     : 'v1'
-  takes.push(await takeFactsOf('composite recorded (?singlegen=export)', 'export', withComposite))
-  takes.push(await takeFactsOf('no composite (?singlegen=capture)', 'capture', withoutComposite))
+  takes.push(await takeFactsOf('composite encoded (?glue=record)', 'record', withComposite))
+  takes.push(await takeFactsOf('composite painted only (?glue=paint, shipped)', 'paint', withoutComposite))
 
   const runLane = async (
     id: string,
@@ -324,8 +334,8 @@ export async function runSingleGen(
     await runLane('A-smartcut-composite', 'composite-recorded', withComposite, 'off', true, true)
     await runLane('A-smartcut-single-gen', 'composite-recorded', withComposite, 'export', true, true)
     // AND THE TAKE THAT NEVER PAID FOR A COMPOSITE AT ALL.
-    await runLane('B-instant-no-composite', 'no-composite', withoutComposite, 'capture', false, true)
-    await runLane('B-smartcut-no-composite', 'no-composite', withoutComposite, 'capture', true, true)
+    await runLane('B-instant-no-composite', 'no-composite', withoutComposite, 'export', false, true)
+    await runLane('B-smartcut-no-composite', 'no-composite', withoutComposite, 'export', true, true)
   } finally {
     setSmartCutEnabled(previousSmartCut)
     setSingleGenRung(previousRung)
@@ -450,7 +460,7 @@ export async function runSingleGen(
     'the two copy sources are compared ON THE SAME TAKE (lanes A-instant-*), so nothing but the source differs; take B exists to price the capture rung, not to compare pictures',
   )
   notes.push(
-    'CPU is whole-browser and belongs to the sampler: run `npm run exp -- o3b --cpu --query=singlegen=capture` against `--query=singlegen=off`. Bytes-on-disk per second of take is the same encoder seen from the other end and IS measured here',
+    'CPU is whole-browser and belongs to the sampler: run `npm run exp -- o3b --cpu --query=glue=paint` against `--query=glue=record`. Bytes-on-disk per second of take is the same encoder seen from the other end and IS measured here',
   )
   notes.push(
     'the chroma instrument is R1-hardened: the reference is rasterized through capture/synthetic.ts’s own context factory, the mask is built once from it, and a stage that cannot be measured reads SKIPPED instead of scoring itself',
@@ -506,13 +516,18 @@ function buildGates(args: {
   const lane = (id: string): ExportLane | undefined => lanes.find((l) => l.id === id)
   const COLOURED = ['green', 'blue']
 
-  // ---- GATE 1: the capture rung really skips the composite ----------------
-  const noComp = takes.find((t) => t.rung === 'capture')
-  const skipLine = captureLog.find((l) => l.includes('SINGLE GENERATION'))
-  gates['the capture rung records NO composite (console + the take itself)'] = {
-    pass: !!noComp && !noComp.hasComposite && !!skipLine,
+  // ---- GATE 1: the paint rung really writes no composite ------------------
+  //
+  // J6 asks a HARDER question than the rung it replaced: the compositor is
+  // still running, so "no composite" can no longer be proved by the engine
+  // never starting. Both halves are required — nothing on disk, AND the
+  // console saying the paint happened without the encode.
+  const noComp = takes.find((t) => t.rung === 'paint')
+  const skipLine = captureLog.find((l) => l.includes('PAINTED, NOT ENCODED'))
+  gates['the paint rung writes NO composite (console + the take itself)'] = {
+    pass: !!noComp && !noComp.hasComposite && noComp.compositeBytes === 0 && !!skipLine,
     detail: noComp
-      ? `?singlegen=capture take: composite ${noComp.hasComposite ? 'PRESENT — the skip did not happen' : 'absent'}, ${noComp.compositeBytes} composite bytes on disk · console said ${skipLine ? 'SINGLE GENERATION' : 'NOTHING (the branch was never reached)'}`
+      ? `?glue=paint take: composite ${noComp.hasComposite ? 'PRESENT — the file was written anyway' : 'absent'}, ${noComp.compositeBytes} composite bytes on disk · console said ${skipLine ? 'PAINTED, NOT ENCODED' : 'NOTHING (the branch was never reached)'}`
       : 'the take was not recorded',
   }
 
@@ -601,14 +616,14 @@ function buildGates(args: {
         : `single generation is ${sizeDelta > 0 ? '+' : ''}${sizeDelta} % of the composite copy's size (${(iSingle!.bytes / 1e6).toFixed(2)} against ${(iComp!.bytes / 1e6).toFixed(2)} MB), for +1.8 dB against the source and 10-14 points of colour. Bound: 25 %`,
   }
 
-  // ---- GATE 7: the capture rung's whole point ---------------------------
-  const withComp = takes.find((t) => t.rung === 'export')
-  const withoutComp = takes.find((t) => t.rung === 'capture')
+  // ---- GATE 7: J6's whole point -----------------------------------------
+  const withComp = takes.find((t) => t.rung === 'record')
+  const withoutComp = takes.find((t) => t.rung === 'paint')
   const saved =
     withComp && withoutComp && withComp.writeBytesPerSec > 0
       ? Math.round((1 - withoutComp.writeBytesPerSec / withComp.writeBytesPerSec) * 1000) / 10
       : null
-  gates['CAPTURE WRITE BANDWIDTH: the composite is a real share of it, and the rung stops paying it'] = {
+  gates['CAPTURE WRITE BANDWIDTH: the composite is a real share of it, and J6 stops paying it'] = {
     pass: saved !== null && saved > 0 && !!withoutComp && withoutComp.compositeBytes === 0,
     detail:
       withComp && withoutComp
@@ -628,14 +643,14 @@ function verdictOf(
   const picture = gates['…and it is not a WORSE PICTURE against the source (colour alone cannot say that)']
   const single = ['green', 'blue'].map((k) => keptOf(chroma, '3-export-A-instant-single-gen', k))
   const two = ['green', 'blue'].map((k) => keptOf(chroma, '3-export-A-instant-composite', k))
-  const withComp = takes.find((t) => t.rung === 'export')
-  const withoutComp = takes.find((t) => t.rung === 'capture')
+  const withComp = takes.find((t) => t.rung === 'record')
+  const withoutComp = takes.find((t) => t.rung === 'paint')
   if (!colour?.pass || !picture?.pass) {
     return `SINGLE GENERATION IS NOT THE FREE WIN O3b ASSUMED. colour: ${colour?.detail ?? 'n/a'} · picture: ${picture?.detail ?? 'n/a'}. The export rung must not default on until this is understood.`
   }
   const bw =
     withComp && withoutComp
-      ? ` And the CAPTURE rung stops writing ${((withComp.writeBytesPerSec - withoutComp.writeBytesPerSec) / 1e6).toFixed(2)} MB/s — a whole hardware encoder that never runs — at the price of source-liveness detection and the composited preview, which is Robert's call.`
+      ? ` And J6 stops writing ${((withComp.writeBytesPerSec - withoutComp.writeBytesPerSec) / 1e6).toFixed(2)} MB/s — a whole hardware encoder that never runs — while the preview and the frozen-screen detector keep running off the paint.`
       : ''
   // THE COST THE TASK'S OWN "free — it is strictly less work" FRAMING DID NOT
   // CONTAIN, and it is a number a user can see: the raw channel spends more of

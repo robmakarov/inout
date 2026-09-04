@@ -17,28 +17,21 @@
  * same colours through the same encoder keep 99-101 %, thin glyphs 80-82 % —
  * so this is 4:2:0 on glyph edges, and one generation of it beats two.
  *
- * THE THREE RUNGS, and they are separate because their risks are not alike:
+ * THE TWO RUNGS:
  *
- *   off      exactly today. Both copy paths read the composite.
+ *   off      the copy paths read the composite, where a take still has one.
  *   export   the copy paths prefer the raw channel when the take qualifies.
- *            The composite is still RECORDED and is still the fallback, so
- *            nothing is lost if the take turns out not to qualify. This is a
- *            better file for the same work.
- *   capture  ALSO skip recording the composite on a qualifying take. This is
- *            the CPU and write-bandwidth half — a whole encoder that never
- *            runs — and it is the rung that gives something up:
- *              · SOURCE LIVENESS lives inside the compositor, so "your screen
- *                froze" detection goes with it (capture/sourceLiveness.ts);
- *              · the recording PREVIEW can no longer render the compositor's
- *                own output and falls back to the raw <video> preview;
- *              · a take whose measured-video start FALLS BACK to MediaRecorder
- *                mid-start has neither a composite nor a copyable channel, so
- *                its unedited export renders.
- *            Each is a real capability, so this rung is Robert's to flip on
- *            evidence — the same shape X6 shipped in, and X6's flip is the
- *            precedent. `npm run exp -- o3b` prices it.
+ *            This is a better file for the same work.
  *
- *   ?singlegen=off|export|capture   (this load only)
+ * THERE WAS A THIRD, `capture`, AND J6 DELETED IT (2026-09-04). It ALSO skipped
+ * recording the composite on a qualifying take — the CPU and write-bandwidth
+ * half — but it did so by stopping the whole compositor, which took source
+ * liveness ("your screen froze") and the composited preview with it. That is
+ * why it was never flipped on. J6 does the same saving without the losses: the
+ * compositor keeps painting and simply never encodes, on EVERY take, so there
+ * is nothing left for this rung to turn on. See `core/glue.ts` and `?glue=`.
+ *
+ *   ?singlegen=off|export   (this load only)
  *   localStorage['inout.compose.singlegen']   (sticky)
  * A URL parameter wins, then a runtime setSingleGenRung, then storage, then
  * the default.
@@ -51,17 +44,15 @@ const STORAGE_KEY = 'inout.compose.singlegen'
 /**
  * DEFAULT: `export`.
  *
- * It is the rung that takes nothing away — the composite keeps being recorded
- * and keeps being the fallback for every take that does not qualify — and the
- * evidence for it is in `npm run exp -- o3b`: on a screen-only 1080p take the
- * single-generation file keeps the source's colour where the composite loses a
- * second helping of it, at no extra work and no extra bytes. `capture` stays
- * opt-in until Robert rules, because that one gives capabilities up.
+ * It is the rung that takes nothing away, and the evidence for it is in
+ * `npm run exp -- o3b`: on a screen-only 1080p take the single-generation file
+ * keeps the source's colour where the composite loses a second helping of it,
+ * at no extra work and no extra bytes.
  */
 const DEFAULT_RUNG: SingleGenRung = 'export'
 
 function isRung(v: string | null): v is SingleGenRung {
-  return v === 'off' || v === 'export' || v === 'capture'
+  return v === 'off' || v === 'export'
 }
 
 function fromSearch(): SingleGenRung | null {
@@ -112,9 +103,4 @@ export function setSingleGenRung(rung: SingleGenRung | null): void {
 /** May an EXPORT copy the raw channel instead of the composite? */
 export function singleGenExportEnabled(): boolean {
   return singleGenRung() !== 'off'
-}
-
-/** May CAPTURE skip the live composite entirely on a qualifying take? */
-export function singleGenCaptureEnabled(): boolean {
-  return singleGenRung() === 'capture'
 }

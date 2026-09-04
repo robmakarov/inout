@@ -586,7 +586,33 @@ describe('the picture line names what made the composite', () => {
 
   it('names the rung and the backend that ran', () => {
     const detail = picture(withComposite({ intake: 'element-sampler', painter: 'webgpu' }))
-    expect(detail).toContain('composite by element-sampler into webgpu')
+    expect(detail).toContain('composed by element-sampler into webgpu')
+  })
+
+  /**
+   * J6 — THE SAME LINE ON A TAKE WITH NO FILE.
+   *
+   * The glued copy is painted and not encoded on the shipped default, so most
+   * takes carry no CompositeRecording at all. The rung and the backend would
+   * have disappeared with it; they come out of `stopStats.glue` instead, and
+   * the line says the file was never written rather than implying one.
+   */
+  it('names the rung and the backend on a painted-only take', () => {
+    const take = fiftyMinuteTake()
+    take.stopStats = {
+      ...take.stopStats,
+      glue: {
+        recorded: false,
+        engine: 'v2',
+        intake: 'main-processor',
+        painter: 'webgpu',
+        framesPainted: 1234,
+      },
+    }
+    const detail = picture(take)
+    expect(detail).toContain('composed by main-processor into webgpu')
+    expect(detail).toContain('painted only (1234 frames)')
+    expect(detail).toContain('no composite file was written')
   })
 
   it('says a take was recorded before the fields existed instead of guessing', () => {
@@ -595,7 +621,7 @@ describe('the picture line names what made the composite', () => {
     expect(detail).toContain('an unrecorded painter')
   })
 
-  it('says nothing about machinery on a take with no composite', () => {
-    expect(picture(fiftyMinuteTake())).not.toContain('composite by')
+  it('says nothing about machinery on a take that opened no compositor', () => {
+    expect(picture(fiftyMinuteTake())).not.toContain('composed by')
   })
 })

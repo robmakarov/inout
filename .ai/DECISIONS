@@ -1337,3 +1337,54 @@ cache, and by the fact that only an edit he MADE can start it.
 NEXT, AND BOTH ARE OWED HIM: J6 (the glued copy stops being encoded) is unblocked and is the ruling's
 second half; O9(b)'s colour default is re-opened by this — its only objection was that 4:4:4 kills
 instant export, and there is no instant path left to kill.
+
+J6 2026-09-04 — THE GLUED COPY IS PAINTED AND NEVER ENCODED, AND EVERYTHING THE PAINT CARRIES STAYED.
+Robert's ruling (robert (27)) finished: "kill the glued copy encoding and do background render while
+editing". The order was part of the ruling and was obeyed — J5 landed first, then the encoder came out.
+ONE FLAG, `core/glue.ts`: `paint` (shipped) and `record` (the take that was recorded yesterday, second
+encoder and second file, unchanged), with a `/?test` row in plain words. `?singlegen=capture` is DELETED
+— it was the blunt way to do this and it stopped the whole compositor, taking the preview and the
+frozen-screen detector with it.
+WHAT MOVED IN THE CODE: `CompositorStartMsg.record` splits paint from encode inside the worker (no OPFS
+handle, no muxer, no video encoder, no audio encoder, no audio mix — the AudioWorklet tap keeps ticking
+because it is the liveness clock, on the branch already written for a take with no audio). v1 takes the
+same rung. `stop()` resolves `null`, which is the answer the session has always handled. Two things that
+were about the FILE stopped happening for want of one: a late join and a PAUSE used to cancel the
+compositor — "it is one continuous file and cannot represent a gap" — and now leave it painting, so a
+paused take keeps its preview and its frozen-screen detector, which it never had.
+AND THE ELASTIC INSTRUMENT MOVED WITH THE ENCODER, which is the part that was not in the task row and
+would have been a silent regression: E1's ladder, E2's ledger and F16b's brake all read pressure from the
+COMPOSITE's encoder queue, and there is no longer one. A detector fed the cost of a 0.4 ms draw would
+call a drowning machine nominal — worse than not looking (pressureSampler.ts: a null is not a zero) — so
+the compositor's sampler does not run at all on the shipped rung and the raw SCREEN channel's sampler
+does instead, through M1's shared seam, into the same `notePressure`. Same formulas, same warmup, same
+rules about who may act on a reading; only the instrument is now the encoder that is actually there.
+MEASURED, `npm run exp -- j6` (screen 1280x720 + camera + mic, 10 s, `?glue=record` control recorded in
+the same process against the same sources) — every gate the task row named:
+  · THE ENCODER: **3 encoders → 2, 99.1 → 36.9 Mpx/s.** The composite was 1920x1080@30 = 62.2 of them.
+  · WRITE BANDWIDTH: **0.32 → 0.16 MB/s, 52 % less written per second of take.** Screen-only says the
+    same from the other end (`npm run exp -- o3b`): 0.36 → 0.19 MB/s, 47 % less, the composite having
+    been 46.1 % of everything that take wrote.
+  · THE PREVIEW, UNCHANGED: the compositor's own canvas takes it over on BOTH rungs (`attachPreview`
+    resolves true only after a frame has landed on the page, so this is the paint and not the message).
+  · THE PAINT HAPPENED: `stopStats.glue` = recorded=false, v2, main-processor/webgpu, **288 frames
+    painted** against the control's 291.
+  · THE FILES: the take's own channels identical in kind, container, geometry and rate.
+  · THE FROZEN SCREEN (`npm run exp -- j6dead --query='synthetic=1&dead=screen'`): `screen source dead`
+    on the console and `Recording.lost` naming it, on a take that wrote no composite. H4's own drill.
+  · THE PRESS, which is the cost the ruling created: an unedited CAMERA take has nothing to packet-copy
+    any more. **0.3 ms** off the file F16b makes at stop, against **74.5 ms** with that file cleared —
+    and the control's instant packet copy was **101.5 ms**, so the press got FASTER, not slower.
+  · BOTH ORACLES PASS: v2 sync 41.3/56.6 ms, inst instant/54.9 ms, trim smartcut/53.3 ms, export 4.35x,
+    made=main-processor/webgpu · v1 sync 38.8/53.8 ms, inst instant/50.4 ms (v1's `trim=render` is
+    unchanged — main reads the same, and CompositeRecording.engine says why).
+MAX IS UNTOUCHED, MEASURED AND NOT ARGUED (`npm run exp -- j6 '{"max":true,...}'`): a max take has opened
+NO compositor since 2026-08-30 — `singleGenerationTake` refuses one when the raw screen channel is
+already bigger than the composite would be — so both rungs produce the identical 2-encoder plan, the
+identical bytes and no composited preview on either. There was no encoder there for J6 to free, and J6
+did not give max back the preview or the detector it gave up; which takes open a compositor is exactly
+what J6 did NOT move, which is what keeps "the preview is unchanged" literally true.
+WHAT IT TAKES AWAY: an unedited take with a camera is no longer a packet copy. It is a render, made
+before he asks for it, and on the measurement above that is faster than the copy was — but it is a
+render, so it costs a machine that is doing something else more than a copy did, and a take he never
+exports had work done for it. The pre-made file is J5's, so everything J5 gives up is given up here too.

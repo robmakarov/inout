@@ -533,15 +533,17 @@ export function CaptureScreen() {
     let cancelled = false
     void (async () => {
       try {
-        const [{ recordingsRepo }, preflight, { singleGenCaptureEnabled }] = await Promise.all([
+        const [{ recordingsRepo }, preflight, { glueRecorded }] = await Promise.all([
           import('@core/store'),
           import('@app/lib/diskPreflight'),
-          import('@core/singleGen'),
+          import('@core/glue'),
         ])
         const takes = await recordingsRepo.list()
         const verdict = await preflight.readPreflight(takes, step, {
           ...effectiveConfig,
-          composite: !singleGenCaptureEnabled(),
+          // J6: the composite is painted, not written, so the minutes-left
+          // figure must stop pricing a file that no longer exists.
+          composite: glueRecorded(),
         })
         if (cancelled) return
         setDiskNotice(verdict?.level === 'low' ? verdict.message : null)
