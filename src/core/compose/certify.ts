@@ -11,6 +11,7 @@
  * an engineering guarantee, labelled as one, not a per-file measurement.
  */
 import type { ExportSettings, Recording } from '@core/types'
+import { noiseGateActive } from './gateFlag'
 
 /** Kept in step with scripts/oracle-gate.mjs MAX_SYNC_ABS_SYMMETRIC_MS. */
 export const CERTIFIED_SYNC_BOUND_MS = 90
@@ -65,6 +66,16 @@ export interface CertifiedExport {
     peak?: number
     /** True when the stats came from capture rather than a decode pass. */
     fromCaptureStats?: boolean
+    /**
+     * O10c — TRUE WHEN THE NOISE GATE MADE THIS FILE. Absent means it did not,
+     * which is every file before it existed and every file since, by default.
+     *
+     * It is here for the same reason `capture.gaveUp` is: a shared file has
+     * left the recording behind, and "this sound was processed" is not
+     * something a listener can hear reliably or a session should have to infer.
+     * A/B pairs are judged by ear, and an ear needs to know which is which.
+     */
+    noiseGate?: true
   }
   capture: {
     stalled?: string[]
@@ -125,6 +136,7 @@ export function buildCertification(args: {
       loudRms: args.loudRms === undefined ? undefined : Math.round(args.loudRms * 1e5) / 1e5,
       peak: args.peak === undefined ? undefined : Math.round(args.peak * 1e4) / 1e4,
       fromCaptureStats: args.fromCaptureStats,
+      ...(noiseGateActive() ? { noiseGate: true as const } : null),
     },
     capture: {
       stalled: recording.stalled?.length ? recording.stalled : undefined,

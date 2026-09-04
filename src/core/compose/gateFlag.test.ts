@@ -128,3 +128,13 @@ describe('the copying paths decline when the gate is on', () => {
     expect(choose).toContain('fullColour || wantSeparate || wantGate ? null : copy.source')
   })
 })
+
+describe('a gated file says so in its own certificate', () => {
+  it('carries audio.noiseGate only when the gate is on', () => {
+    const certify = SOURCE['/src/core/compose/certify.ts']!
+    expect(certify).toContain("...(noiseGateActive() ? { noiseGate: true as const } : null)")
+    // Absent, not `false`: every file before this existed has no such field,
+    // and a default export must stay byte-identical in its comment tag too.
+    expect(certify).toContain('noiseGate?: true')
+  })
+})
