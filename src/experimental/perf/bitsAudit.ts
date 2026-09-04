@@ -125,7 +125,7 @@ export function motionSource(width: number, height: number): Source {
 }
 
 /** A webcam: a head-and-shoulders blob that drifts, on a flat backdrop. */
-function cameraSource(): Source {
+export function cameraSource(): Source {
   const canvas = document.createElement('canvas')
   canvas.width = 1280
   canvas.height = 720

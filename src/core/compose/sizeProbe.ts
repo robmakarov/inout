@@ -111,9 +111,79 @@
  *      0.54 MB (7.96x). Neither instrument dominates; the probe's worst case is
  *      now 1.5x where the model's is 8x.
  *
+ *   7. THE 1.50x WAS NEVER IN THE ENCODE — IT WAS THE TEN SECONDS IT PICKED
+ *      (B1b, 2026-09-04, `npm run exp -- b1b`). Every earlier comparison scored
+ *      the probe's WINDOW against the whole FILE's mean, which cannot tell a
+ *      wrong encode from an unrepresentative sample. Measuring the file's own
+ *      mean delta INSIDE the probe's window separates them, and it is not the
+ *      encode: on the gate's own fixture (160 s, the code-editor page +
+ *      camera, 1440p) the probe charges 0.98-1.10x what the render charges for
+ *      the very same seconds. (One chosen-window run read 0.68x there, and it
+ *      is the comparison that bends, not the probe: that window sat at 10 s,
+ *      where the FILE is still paying for its own first GOPs while the probe
+ *      opens a fresh encoder on them. `firstStart` keeps the choice off the
+ *      take's opening for the same reason "take the middle" used to.) What
+ *      varies is the seconds — the RENDERED file's
+ *      mean delta ran 824-1,770 B by ten-second bucket, a factor of two inside
+ *      one take of one content, and the middle ten seconds are not the take.
+ *      SO THE WINDOW IS CHOSEN, NOT TAKEN: `chooseWindow` bins the raw
+ *      channels' own packet sizes per output second (`metadataOnly` — the
+ *      container index, no decode, no payload, 91-366 ms, and budgeted) and
+ *      takes the stretch whose mean is nearest the take's. Measured at the
+ *      fixture's own length, probe ÷ produced, every run listed:
+ *                              window CHOSEN      window taken from the MIDDLE
+ *        text + camera         0.96 / 0.91        0.97 / 0.98 / 1.03
+ *        motion + camera       1.03 / 0.94        0.98 / 1.00 / 1.06
+ *        bimodal               0.54 / 0.43        6.00 / 5.68
+ *      The ladder is monotonic in pixel count on all three with no flooring.
+ *      Run-to-run spread is ±6 points on the same fixture and the same machine,
+ *      so read the band, not a single number.
+ *      THE BIMODAL FIXTURE IS DELIBERATE and it is what is left: still text
+ *      with a band of motion straddling the middle, i.e. a take that is quiet
+ *      while someone reads and busy while they scroll. One window cannot price
+ *      two contents, so the probe now under-promises there instead of promising
+ *      six times the file — the safe direction (B1's whole point is never to
+ *      show a size the export will not deliver), and not yet the right answer.
+ *      TWO CHEAPER FIXES WERE BUILT, MEASURED AND REFUSED, so nobody re-walks
+ *      them: (a) SCALING the measured delta by the source's activity ratio —
+ *      the source is encoded at a bitrate TARGET, which spends its budget
+ *      evenly and compresses the dynamic range, so it called the busy window
+ *      0.448x the take's average where the exported file called it 0.132x, 3.4x
+ *      apart; it only ever gets a third of the way. Only the ORDERING of the
+ *      source's bytes survives that compression, which is exactly what
+ *      choosing a window needs and scaling one does not. (b) FEEDING THE LANES
+ *      SIDE BY SIDE (`Promise.all` instead of one at a time) — three runs each:
+ *      12,986 / 11,139 / 11,098 ms in turn against 14,118 / 16,999 / 15,607 ms
+ *      in parallel, 40 % SLOWER, four hardware encoder sessions contending on
+ *      an 8 GB machine.
+ *      THE WALL, and it is the one gate this task did not meet. Split by
+ *      `wallMs`/`composeMs`/`encodeMs`: the encode is 70-80 % of it, and it is
+ *      the hardware encoder, not scheduling. A probe encodes a whole GOP at
+ *      every step: 300 frames x (0.52 + 0.92 + 2.07 + 3.69 Mpx) = 2.16 Gpx,
+ *      against the ~385 Mpx/s this machine measures for its own AVC encoder at
+ *      mount (B14) — a 5.6 s floor, 4.1 s in the product's usual three-lane
+ *      shape where the 1080p step packet-copies. The <2 s budget is therefore
+ *      not reachable while the probe encodes a GOP per step, and the measured
+ *      lever is ONE GOP instead of two (`warmPass: false`): wall 13.5 -> 3.4 s,
+ *      residual text 0.96 -> 0.91x, motion 1.03 -> 1.00x, bimodal 0.54 -> 0.50x.
+ *      It is not taken here because it spends the accuracy this whole task was
+ *      about on a budget nothing in the product derives — the panel opens
+ *      instantly and the number lands late — but it is one flag away if the
+ *      budget ever earns itself.
+ *
  * Everything is in memory (BufferTarget), so a probe leaves nothing on disk.
  */
-import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
+import {
+  ALL_FORMATS,
+  BlobSource,
+  BufferTarget,
+  CanvasSource,
+  EncodedPacketSink,
+  Input,
+  Mp4OutputFormat,
+  Output,
+  type VideoSample,
+} from 'mediabunny'
 import { frameAspectFor, frameForAspect, frameScale } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { blobStore } from '@core/store'
@@ -175,6 +245,24 @@ export interface Calibration {
   sampledAtSec: number[]
   /** What the probe cost, ms — this is a budget, and budgets get measured. */
   wallMs: number
+  /**
+   * WHERE THE WALL WENT (B1b). The budget is under two seconds and the whole
+   * of this task's remaining work is spending less, so the split is measured
+   * rather than argued: `composeMs` is decoding the channels and drawing the
+   * output frame, `encodeMs` is handing that frame to every step's encoder.
+   */
+  composeMs: number
+  encodeMs: number
+  /**
+   * How much busier the take is than the seconds the probe encoded, from the
+   * raw channels' own packet sizes. 1.00 means the window it chose is the
+   * take's average one. REPORTED, NEVER APPLIED — see `chooseWindow`.
+   */
+  activity: number
+  /** 'activity' when the profile chose the window, 'middle' when it could not. */
+  chosenBy: 'activity' | 'middle'
+  /** What reading the index cost, ms — it is part of the budget too. */
+  activityMs: number
 }
 
 /**
@@ -218,6 +306,191 @@ export interface Calibration {
  * twice the frames costs.
  */
 const GOP_SECONDS = KEYFRAME_INTERVAL_SEC
+
+/**
+ * IS THE PROBE'S TEN SECONDS THE TAKE'S TEN SECONDS? (B1b, 2026-09-04)
+ *
+ * The probe encodes ONE window and prices the whole file from it, and that is
+ * the last thing in it that can be wrong: a still page's cost is not constant.
+ * Measured on the 160 s text fixture, the RENDERED file's own mean delta by
+ * ten-second bucket ran 824 to 1,770 B — a factor of two across one take of one
+ * content. A window landing at the top of that band prices the file half again
+ * too high, which is exactly the 1.50x this task was authored on.
+ *
+ * The correction costs no encoding at all, because the take already carries a
+ * measurement of its own activity: the RAW channels are encoded streams, and
+ * how many bytes each of their frames took is readable from the container index
+ * with `metadataOnly` — no decode, no payload read. So compare what the source
+ * spent in the probe's window with what it spent over the whole take, and scale
+ * the measured delta by the ratio.
+ *
+ * IT IS A RATIO OF ONE ENCODER AGAINST ITSELF, which is why it is allowed to
+ * exist while "predict the export's bytes from the composite's bytes" (F7b) was
+ * not: nothing here claims the source's bytes and the export's bytes are the
+ * same, only that when the source's frames get twice as expensive, so do the
+ * export's. And it is CLAMPED — a correction that can multiply by five is a new
+ * failure mode wearing a fix's clothes.
+ */
+/** Output seconds per activity bin — the grid the window is chosen on. */
+const ACTIVITY_BIN_SEC = 1
+
+/**
+ * AND IT IS BOUNDED, because the walk is per PACKET and a take is not.
+ * 160 s of 30 fps costs 91-366 ms here; Robert's own 124-minute take is 46x
+ * that many packets, and a profile nobody waited for is worse than no profile.
+ * Past this budget the walk is abandoned and the window goes back to the middle
+ * of the take — exactly what it was before, said out loud in `chosenBy`.
+ */
+const ACTIVITY_BUDGET_MS = 500
+
+interface WindowChoice {
+  /** Where to start the probe's window, output seconds. */
+  atSec: number
+  /** takeMean / windowMean of the chosen window, from the source's own bytes. */
+  activity: number
+  /** What the walk cost. */
+  ms: number
+  /** 'activity' when the profile decided it, 'middle' when it could not. */
+  chosenBy: 'activity' | 'middle'
+}
+
+/**
+ * WHERE THE WINDOW GOES, and it used to be "the middle of the take" for no
+ * reason but symmetry.
+ *
+ * A still page's cost is not constant: on the 160 s text fixture the RENDERED
+ * file's own mean delta ran 824-1,770 B by ten-second bucket, a factor of two
+ * inside one take of one content, and a window landing at the top of that band
+ * prices the whole file half again too high. That is the 1.50x this task was
+ * authored on, and it is a SAMPLING error — the probe's encode of its own
+ * seconds matches the render's to 1.00-1.09x (B1b, 2026-09-04).
+ *
+ * So choose the seconds instead of taking the middle ones, using a measurement
+ * the take already carries and no encoding at all: the raw channels ARE encoded
+ * streams, and what each of their frames cost is in the container index,
+ * readable with `metadataOnly` — no decode, no payload. Bin those bytes per
+ * output second, and take the window whose mean is CLOSEST TO THE TAKE'S.
+ *
+ * ONLY THE ORDERING IS TRUSTED, and that is the point. The source is encoded at
+ * a bitrate TARGET, which spends its budget evenly and so compresses the
+ * dynamic range: on a deliberately bimodal fixture the source called a busy
+ * window 0.448x the take's average where the exported file called it 0.132x —
+ * 3.4x apart. Scaling the measured delta by that ratio was built, measured and
+ * REFUSED for exactly this reason. What survives the compression is which
+ * stretch is busier than which, and picking a middling one needs nothing more.
+ */
+async function chooseWindow(
+  recording: Recording,
+  edit: EditState,
+  durationSec: number,
+  windowSec: number,
+): Promise<WindowChoice> {
+  const t0 = performance.now()
+  const middle = Math.max(0, Math.min(Math.max(0, durationSec / 2 - windowSec / 2), durationSec - windowSec))
+  const bins = Math.max(1, Math.ceil(durationSec / ACTIVITY_BIN_SEC))
+  const bytes = new Float64Array(bins)
+  const frames = new Float64Array(bins)
+  let any = false
+  let overBudget = false
+  for (const channel of recording.channels) {
+    if (channel.media !== 'video') continue
+    if (overBudget) break
+    let input: Input | null = null
+    try {
+      const blob = await blobStore.read(channel.blobKey)
+      input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+      const track = await input.getPrimaryVideoTrack()
+      if (!track) continue
+      // Local time → bytes, one pass. Keyframes are excluded: the probe prices
+      // keyframes with its own, and a source keyframe is a cadence artefact of
+      // the recorder rather than a statement about the content.
+      const localBytes = new Map<number, { b: number; n: number }>()
+      const sink = new EncodedPacketSink(track)
+      let seen = 0
+      for await (const p of sink.packets(undefined, undefined, { metadataOnly: true })) {
+        // The clock is read once every 512 packets, not once per packet: the
+        // budget must not cost more than the thing it is bounding.
+        if ((seen++ & 511) === 0 && performance.now() - t0 > ACTIVITY_BUDGET_MS) {
+          overBudget = true
+          break
+        }
+        if (p.type === 'key') continue
+        const sec = Math.floor(p.timestamp / ACTIVITY_BIN_SEC)
+        const row = localBytes.get(sec) ?? { b: 0, n: 0 }
+        row.b += p.byteLength ?? 0
+        row.n++
+        localBytes.set(sec, row)
+      }
+      // A PARTIAL PROFILE IS NOT A CHEAP PROFILE, it is a profile of the take's
+      // first seconds — which would pick a window from wherever the walk
+      // happened to stop. Throw it away rather than choose from it.
+      if (overBudget || localBytes.size === 0) continue
+      // …and local time is not output time the moment there is a trim, so every
+      // output bin asks the timeline where it came from.
+      for (let i = 0; i < bins; i++) {
+        const localMs = channelSourceTimeAt(recording, edit, channel.id, i * ACTIVITY_BIN_SEC * 1000)
+        if (localMs === null) continue
+        const row = localBytes.get(Math.floor(localMs / 1000 / ACTIVITY_BIN_SEC))
+        if (!row) continue
+        bytes[i] += row.b
+        frames[i] += row.n
+        any = true
+      }
+    } catch {
+      /* an unreadable channel simply does not vote */
+    } finally {
+      input?.dispose()
+    }
+  }
+  const ms = Math.round(performance.now() - t0)
+  const span = Math.max(1, Math.round(windowSec / ACTIVITY_BIN_SEC))
+  if (overBudget || !any || bins < span + 1) return { atSec: middle, activity: 1, ms, chosenBy: 'middle' }
+  let totalB = 0
+  let totalN = 0
+  for (let i = 0; i < bins; i++) {
+    totalB += bytes[i]!
+    totalN += frames[i]!
+  }
+  if (!(totalN > 0) || !(totalB > 0)) return { atSec: middle, activity: 1, ms, chosenBy: 'middle' }
+  const takeMean = totalB / totalN
+  const lastStart = Math.max(0, Math.floor(durationSec - windowSec))
+  // AWAY FROM THE START WHERE THERE IS ROOM, which is the one thing the old
+  // "take the middle" rule got right: the first frames of a capture are often a
+  // blank surface, and the file's own encoder is still warming through its
+  // first GOP, so those seconds cost the RENDER more than they cost a probe
+  // opening a fresh encoder on them.
+  const firstStart = Math.min(GOP_SECONDS, lastStart)
+  let bestStart = Math.round(middle)
+  let bestMean = takeMean
+  let bestGap = Number.POSITIVE_INFINITY
+  let winB = 0
+  let winN = 0
+  for (let i = 0; i < bins; i++) {
+    winB += bytes[i]!
+    winN += frames[i]!
+    if (i >= span) {
+      winB -= bytes[i - span]!
+      winN -= frames[i - span]!
+    }
+    if (i < span - 1) continue
+    const start = (i - span + 1) * ACTIVITY_BIN_SEC
+    if (start > lastStart) break
+    if (start < firstStart || winN <= 0) continue
+    const mean = winB / winN
+    const gap = Math.abs(mean - takeMean)
+    if (gap < bestGap) {
+      bestGap = gap
+      bestStart = start
+      bestMean = mean
+    }
+  }
+  return {
+    atSec: Math.max(0, Math.min(bestStart, lastStart)),
+    activity: bestMean > 0 ? takeMean / bestMean : 1,
+    ms,
+    chosenBy: 'activity',
+  }
+}
 
 /** One step's encoder, fed frames as they are composed. */
 interface TierLane {
@@ -326,9 +599,9 @@ export async function calibrateSteps(
     const windowFrames = Math.round(GOP_SECONDS * rate)
     const totalFrames = warmPass ? 2 * windowFrames : windowFrames
     const windowSec = totalFrames / rate
-    // Away from both ends where it can be: the first frames of a capture are
-    // often a blank surface and the last are the stop itself.
-    const atSec = Math.max(0, Math.min(Math.max(0, durationSec / 2 - windowSec / 2), durationSec - windowSec))
+    // WHERE, decided by the take's own activity rather than by the clock.
+    const choice = await chooseWindow(recording, edit, durationSec, windowSec)
+    const atSec = choice.atSec
     sampledAtSec.push(Math.round(atSec * 100) / 100)
 
     for (const tier of tiers) {
@@ -363,6 +636,8 @@ export async function calibrateSteps(
     for (const lane of lanes) await lane.output.start()
 
     let composed = 0
+    let composeMs = 0
+    let encodeMs = 0
     for (let f = 0; f < totalFrames; f++) {
       if (aborted()) return null
       const t = atSec + f / rate
@@ -371,11 +646,24 @@ export async function calibrateSteps(
       // diluted by however much of the window fell off the end, which is exactly
       // the defect the spike shipped with.
       if (t > durationSec - 0.01) break
+      const c0 = performance.now()
       const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
+      composeMs += performance.now() - c0
       if (!bitmap) break
+      const e0 = performance.now()
       try {
+        // ONE LANE AT A TIME, AND THAT IS THE FAST WAY — measured, against the
+        // obvious guess (B1b, 2026-09-04). The lanes share nothing but the
+        // frame, so feeding all four with `Promise.all` looks free and reads
+        // like the wall should fall from the SUM of their backpressure to the
+        // longest of them. It does the opposite: three runs each, same fixture,
+        // same machine, encode 12,986 / 11,139 / 11,098 ms in turn against
+        // 14,118 / 16,999 / 15,607 ms side by side — 40 % SLOWER. Four hardware
+        // encoder sessions contending on an 8 GB machine cost more than they
+        // save. Do not re-try it without re-measuring it.
         for (const lane of lanes) await addFrame(lane, bitmap, f % windowFrames === 0)
       } finally {
+        encodeMs += performance.now() - e0
         bitmap.close()
       }
       composed = f + 1
@@ -396,7 +684,8 @@ export async function calibrateSteps(
     // actually measured has to be readable from a real take's console.
     console.info(
       `[quality] size probe: ${composed} frames from ${atSec.toFixed(1)}s of ${durationSec.toFixed(1)}s ` +
-        `in ${wallMs} ms — ` +
+        `in ${wallMs} ms (compose ${Math.round(composeMs)} + encode ${Math.round(encodeMs)} + window ${choice.ms}) ` +
+        `· window by ${choice.chosenBy}, the take is ${choice.activity.toFixed(2)}x as busy as it — ` +
         Object.values(steps)
           .map(
             (m) =>
@@ -407,7 +696,16 @@ export async function calibrateSteps(
           ? ` · not encoded (their size is the file, not an estimate): ${skippedExact.join(', ')}`
           : ''),
     )
-    return { steps, sampledAtSec, wallMs }
+    return {
+      steps,
+      sampledAtSec,
+      wallMs,
+      composeMs: Math.round(composeMs),
+      encodeMs: Math.round(encodeMs),
+      activity: choice.activity,
+      chosenBy: choice.chosenBy,
+      activityMs: choice.ms,
+    }
   } catch (err) {
     console.warn('[quality] size calibration failed, falling back to the estimate', err)
     return null

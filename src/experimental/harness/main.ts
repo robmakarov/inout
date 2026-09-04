@@ -363,6 +363,24 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'b1b',
+    title: 'B1b — the size probe against the file, and against its own ten seconds',
+    detail:
+      "records the still-text page and the motion source, runs the SHIPPED probe and the SHIPPED export on each, then demuxes the produced file and reports its mean delta over the whole file AND inside the exact window the probe encoded. Two ratios: if they agree, the probe's encode differs from the render's; if the window ratio is 1, the probe encodes correctly and its ten seconds are not the take's average. A per-10 s profile and the file's keyframe count come with it.",
+    run: async (args) => {
+      const { runSizeResidual } = await import('../perf/sizeResidual')
+      return runSizeResidual({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        tier: typeof args?.tier === 'string' ? args.tier : undefined,
+        contents: Array.isArray(args?.contents)
+          ? (args.contents as ('text' | 'screen' | 'motion' | 'burst')[])
+          : undefined,
+        camera: typeof args?.camera === 'boolean' ? args.camera : undefined,
+        render: typeof args?.render === 'boolean' ? args.render : undefined,
+      })
+    },
+  },
+  {
     id: 'f5b',
     title: 'F5b — per-segment speed',
     detail:
