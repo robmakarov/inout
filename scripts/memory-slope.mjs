@@ -74,6 +74,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   chromeRss,
   launchChromeRetrying,
@@ -202,22 +203,29 @@ function takeUrl(url) {
  * about.
  */
 const TAB_TITLE = 'INOUT SOAK TONE'
-const TONE_PAGE =
-  'data:text/html,' +
-  encodeURIComponent(
-    `<title>${TAB_TITLE}</title><body style="margin:0;background:#111;color:#eee;font:14px system-ui">` +
-      `<p id=s style="padding:12px">soak tone: waiting for the take</p><script>` +
-      // The oscillator is started on the first frame; a tab with no user
-      // gesture may have its context suspended, so it is resumed on a timer
-      // until it runs. The moving text is deliberate: a still page is a
-      // compressible one, and this lane is meant to cost the encoder something.
-      `const c=new (window.AudioContext||window.webkitAudioContext)();` +
-      `const o=c.createOscillator(),g=c.createGain();` +
-      `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c.destination);o.start();` +
-      `setInterval(()=>{if(c.state!=='running')c.resume();` +
-      `document.getElementById('s').textContent='soak tone '+c.state+' '+new Date().toISOString();},1000);` +
-      `<\/script></body>`,
-  )
+
+/**
+ * THE PAGE IS WRITTEN TO A FILE AND OPENED WITH `file://`, NOT HANDED OVER AS A
+ * `data:` URL. Chrome has refused top-level navigation to `data:` since 60, and
+ * `Target.createTarget` goes through the same navigation path — so the tab would
+ * have come up blank, the picker would have matched nothing, and the run would
+ * have died an hour in for a reason that has nothing to do with the take. Same
+ * reason `proto/style.html` is opened off disk (CLAUDE.md).
+ */
+const TONE_HTML =
+  `<!doctype html><meta charset=utf-8><title>${TAB_TITLE}</title>` +
+  `<body style="margin:0;background:#111;color:#eee;font:14px system-ui">` +
+  `<p id=s style="padding:12px">soak tone: starting</p><script>` +
+  // A 440 Hz sine at -26 dBFS: audible to the tap, quiet enough that an hour of
+  // it is not a torture test of the limiter.
+  `const c=new AudioContext();` +
+  `const o=c.createOscillator(),g=c.createGain();` +
+  `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c.destination);o.start();` +
+  // The text moves every second on purpose: a still page is a compressible one,
+  // and this lane is meant to cost the encoder something.
+  `setInterval(()=>{if(c.state!=='running')c.resume();` +
+  `document.getElementById('s').textContent='soak tone '+c.state+' '+new Date().toISOString();},1000);` +
+  `<\/script></body>`
 
 /** Chrome's own picker automation, so `getDisplayMedia` is answered by a switch
  *  rather than by a native dialog nothing can reach. Same recipe, same reasons,
@@ -227,7 +235,15 @@ const realArgs = () => [
   // The tab-specific switch is newer than the desktop one and is what actually
   // answers the picker with a TAB on current Chrome; an unknown switch is
   // ignored, so passing both costs the screen lane nothing.
-  ...(opts.tab ? [`--auto-select-tab-capture-source-by-title=${opts.source}`] : []),
+  ...(opts.tab
+    ? [
+        `--auto-select-tab-capture-source-by-title=${opts.source}`,
+        // An AudioContext with no user gesture behind it comes up SUSPENDED, so
+        // the tone tab would be silent and this lane would be a more elaborate
+        // way of failing the same `channels` gate it exists to pass.
+        '--autoplay-policy=no-user-gesture-required',
+      ]
+    : []),
   '--auto-accept-this-tab-capture',
   '--disable-features=InfiniteSessionRestore,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma,ThumbnailCapturerMac',
 ]
@@ -339,8 +355,14 @@ try {
      * display's own pixels — Chrome's own bounds, not CSS, which is why this
      * goes through Browser.setWindowBounds rather than window.resizeTo.
      */
-    const { targetId } = await session.send('Target.createTarget', { url: TONE_PAGE, background: true })
+    const tonePath = join(profile, 'soak-tone.html')
+    writeFileSync(tonePath, TONE_HTML)
+    const { targetId } = await session.send('Target.createTarget', {
+      url: pathToFileURL(tonePath).href,
+      background: true,
+    })
     report.toneTab = targetId
+    report.tonePage = tonePath
     try {
       const { windowId } = await session.send('Browser.getWindowForTarget', {})
       const screen = await session.evalJson(
@@ -359,6 +381,15 @@ try {
     }
     await sleep(2000)
     step(`tone tab open as "${TAB_TITLE}" — the picker is answered with its title`)
+    /**
+     * IT IS OPENED IN THE BACKGROUND ON PURPOSE: the APP tab has to stay
+     * foreground, because a hidden tab has its timers clamped to 1 Hz and a
+     * take in one is a 2 fps take, not a soak (CLAUDE.md's pane rule, and the
+     * same physics). The tone tab being hidden is fine — being CAPTURED keeps a
+     * tab rendering, and audio is not throttled either way. If a rehearsal ever
+     * shows a frozen picture out of this lane, that assumption is where to look
+     * first.
+     */
   }
 
   // The idle page, before a take exists — every later sample is read against it.
