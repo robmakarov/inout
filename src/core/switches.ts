@@ -282,16 +282,6 @@ export const SWITCHES: readonly SwitchSpec[] = [
     label: 'Measure main-thread lateness',
     hint: 'On. `?lateness=0` switches the sampler off when you are measuring the cost of measuring.',
   },
-  {
-    id: 'latebeat',
-    verdict: 'harness',
-    storageKey: null,
-    kind: 'number',
-    fallback: null,
-    group: 'Recording',
-    label: 'Lateness sample period, ms',
-    hint: 'Between 4 and 1000. Only for measuring the sampler’s own cost curve (16 vs 32 vs 64 ms).',
-  },
 
   // ───────────────────────────── Engine ─────────────────────────────
   {
@@ -403,6 +393,17 @@ export const SWITCHES: readonly SwitchSpec[] = [
     group: 'Sound',
     label: 'Band-limited resampling',
     hint: 'On. Off uses the cheap resampler — audible as aliasing on tones, which is how the difference is proved.',
+  },
+  {
+    id: 'noisegate',
+    verdict: 'answered',
+    storageKey: 'inout.compose.noisegate',
+    kind: 'choice',
+    options: ['off', 'on'],
+    fallback: 'off',
+    group: 'Sound',
+    label: 'Take the steady hiss out',
+    hint: 'Off. On removes a steady noise bed from the export only — the recording is never touched. A/B it before it moves.',
   },
   {
     id: 'audiotracks',
@@ -646,7 +647,7 @@ export const DYNAMIC_READS: ReadonlyMap<string, string> = new Map([
   ['src/app/lib/testPanel.ts', 'the panel switch itself, `test` and `text` — both in NOT_SWITCHES'],
   ['src/core/capture/faultInject.ts', 'the three fault knobs, resolved from the FaultKnob union'],
   ['src/core/capture/synthetic.ts', 'parseSizeParam/parseFpsParam, whose four names are rows above'],
-  ['src/core/lateness.ts', '`lateness` and `latebeat`, both rows above'],
+  ['src/core/lateness.ts', '`lateness`, the row above (`latebeat` was retired 2026-09-04)'],
 ])
 
 /**

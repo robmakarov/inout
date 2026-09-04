@@ -104,6 +104,13 @@ import { fullColourActive, fullColourCodec, noteFullColourDeclined } from './ful
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
 import { audioTrackGroups, separateAudioTracks } from './audioTracks'
+import { noiseGateActive } from './gateFlag'
+import {
+  GATE_DEFAULTS,
+  StreamingGate,
+  noiseProfile,
+  profileWindowFrames,
+} from './spectralGate'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { createPaceGate } from './paceGate'
@@ -765,6 +772,137 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
     stats.prepareMs = performance.now() - t0
 
+    /**
+     * O10c — THE NOISE GATE, WIRED. Off by default and off in every number this
+     * project has published; `?noisegate=on` is what turns it on.
+     *
+     * TWO THINGS MAKE THIS HARDER THAN "call gate() on the chunk", and both are
+     * why an earlier attempt at this wiring was written and backed out:
+     *
+     * 1. THE GATE HAS LATENCY. It holds `frame - hop` = 768 samples (16 ms at
+     *    48 kHz) until their windows close. Writing its output at the CURRENT
+     *    chunk's own position therefore shifts the whole soundtrack 16 ms late
+     *    against the video, silently, on every gated export — a sync error, and
+     *    sync is Robert's. So every sample here is written AT ITS OWN ABSOLUTE
+     *    POSITION (`lane.emitted`), which is the alternative the design named:
+     *    what is ready goes out with its own timestamps, and the tail comes out
+     *    of `flush()` at the end. Nothing is delayed, nothing is discarded, and
+     *    no compensation is applied to anything.
+     * 2. THE PROFILE NEEDS QUIET FRAMES BEFORE IT CAN GATE, and the render is a
+     *    forward stream. So the first `PROFILE_BUDGET_SEC` of mixed audio is
+     *    HELD (not written), the profile is built from it, and then that held
+     *    audio is fed through the gate in order — so the opening seconds are
+     *    gated by the same profile as everything else rather than escaping it.
+     *
+     * The profile is built from the MONO SUM of the lane: a bed sits in both
+     * ears, and one profile per lane keeps a separate-track export from gating
+     * the microphone against the system audio's floor.
+     */
+    interface GateLane {
+      hold: { left: Float32Array; right: Float32Array }[]
+      held: number
+      left: StreamingGate | null
+      right: StreamingGate | null
+      /** Absolute output frame of the next sample this lane will write. */
+      emitted: number
+      triggers: number
+      bins: number
+    }
+    const gateOn = wantAudio && noiseGateActive()
+    const profileFrames = profileWindowFrames(AUDIO_SAMPLE_RATE)
+    const gateLanes: GateLane[] = []
+    const gateLane = (i: number): GateLane =>
+      (gateLanes[i] ??= { hold: [], held: 0, left: null, right: null, emitted: 0, triggers: 0, bins: 0 })
+
+    /** Build the profile out of what is held, then start the two gates. */
+    const armGate = (lane: GateLane): void => {
+      // EXACTLY the budget, never "whatever the chunk that crossed the line
+      // happened to bring". Held audio arrives a second at a time, so taking
+      // all of it would make the profile — and therefore the whole gated
+      // export — depend on the chunk size, which is not a parameter of this
+      // product and must not become one.
+      const total = Math.min(lane.held, profileFrames)
+      const mono = new Float32Array(total)
+      let at = 0
+      for (const piece of lane.hold) {
+        for (let k = 0; k < piece.left.length && at + k < total; k++) {
+          mono[at + k] = (piece.left[k]! + piece.right[k]!) / 2
+        }
+        at += piece.left.length
+        if (at >= total) break
+      }
+      const profile = noiseProfile(mono)
+      lane.left = new StreamingGate(profile, GATE_DEFAULTS)
+      lane.right = new StreamingGate(profile, GATE_DEFAULTS)
+    }
+
+    /** Write whatever the gate has finished, each sample in its own place. */
+    const emitGated = async (
+      lane: GateLane,
+      i: number,
+      sink: AudioSampleSource,
+      wantPeaks: boolean,
+      left: Float32Array,
+      right: Float32Array,
+    ): Promise<void> => {
+      if (left.length === 0) return
+      if (left.length !== right.length) {
+        throw new Error(
+          `[compose] noise gate: lane ${i} returned ${left.length} left and ${right.length} right ` +
+            'samples — the two ears must stay the same length or the file goes out of sync',
+        )
+      }
+      const startFrame = lane.emitted
+      lane.emitted += left.length
+      if (waveformMode && wantPeaks) {
+        collectPeaks(peaks, left, right, startFrame, AUDIO_SAMPLE_RATE)
+      }
+      const sample = makeStereoSample(left, right, startFrame / AUDIO_SAMPLE_RATE)
+      try {
+        await sink.add(sample)
+      } finally {
+        sample.close()
+      }
+    }
+
+    /**
+     * End of input: gate whatever is still held (a take shorter than the
+     * profile window never armed), then hand back the gate's own tail. Without
+     * this the last 16 ms of every gated export would be missing.
+     */
+    const finishGate = async (): Promise<void> => {
+      if (!gateOn) return
+      const lanes = groupSources.length
+        ? groups.map((_g, i) => ({ sink: groupSources[i]!, peaks: i === 0 }))
+        : audioSource
+          ? [{ sink: audioSource, peaks: true }]
+          : []
+      for (let i = 0; i < lanes.length; i++) {
+        const lane = gateLanes[i]
+        if (!lane) continue
+        const { sink, peaks: wantPeaks } = lanes[i]!
+        if (!lane.left) {
+          if (lane.held === 0) continue
+          armGate(lane)
+        }
+        for (const piece of lane.hold) {
+          await emitGated(lane, i, sink, wantPeaks, lane.left!.push(piece.left), lane.right!.push(piece.right))
+        }
+        lane.hold = []
+        lane.held = 0
+        await emitGated(lane, i, sink, wantPeaks, lane.left!.flush(), lane.right!.flush())
+        lane.triggers = lane.left!.triggers + lane.right!.triggers
+        lane.bins = lane.left!.bins + lane.right!.bins
+      }
+      const triggers = gateLanes.reduce((n, l) => n + (l?.triggers ?? 0), 0)
+      const bins = gateLanes.reduce((n, l) => n + (l?.bins ?? 0), 0)
+      console.info(
+        `[compose] noise gate ON: ${triggers} of ${bins} bins pulled down ` +
+          `(${bins ? ((100 * triggers) / bins).toFixed(3) : '0'} %), profile from the first ` +
+          `${(profileFrames / AUDIO_SAMPLE_RATE).toFixed(1)}s`,
+      )
+    }
+
     const writeAudioChunk = async (chunkIndex: number): Promise<void> => {
       if (!audioSource && groupSources.length === 0) return
       const tAudio = performance.now()
@@ -780,7 +918,8 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       const lanes = groupSources.length
         ? groups.map((g, i) => ({ mixers: g.mixers, sink: groupSources[i]!, peaks: i === 0 }))
         : [{ mixers: audioMixers, sink: audioSource!, peaks: true }]
-      for (const lane of lanes) {
+      for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
+      const lane = lanes[laneIndex]!
       const left = new Float32Array(frames)
       const right = new Float32Array(frames)
       for (const mixer of lane.mixers) await mixer.mixInto(left, right, chunkOutStartSec)
@@ -805,6 +944,26 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // The waveform lane draws ONE picture, so it is fed by the first lane
       // only — a separate-track export must not draw two waveforms on top of
       // each other where a flat one drew the sum.
+      if (gateOn) {
+        // O10c. Held until the profile window is full, then gated and written
+        // at each sample's OWN position — see the note above finishGate.
+        const g = gateLane(laneIndex)
+        if (!g.left) {
+          g.hold.push({ left, right })
+          g.held += frames
+          if (g.held >= profileFrames) {
+            armGate(g)
+            for (const piece of g.hold) {
+              await emitGated(g, laneIndex, lane.sink, lane.peaks, g.left!.push(piece.left), g.right!.push(piece.right))
+            }
+            g.hold = []
+            g.held = 0
+          }
+        } else {
+          await emitGated(g, laneIndex, lane.sink, lane.peaks, g.left.push(left), g.right!.push(right))
+        }
+        continue
+      }
       if (waveformMode && lane.peaks) collectPeaks(peaks, left, right, startFrame, AUDIO_SAMPLE_RATE)
       const sample = makeStereoSample(left, right, chunkOutStartSec)
       try {
@@ -891,6 +1050,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           if (pace) await pace.wait()
           if (yieldEveryFrames) await yieldToUi()
         }
+        await finishGate()
         closeAudio()
       }
       const base = audioSource || groupSources.length ? 0.5 : 0.05
@@ -918,6 +1078,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         if (pace) await pace.wait()
         if (yieldEveryFrames) await yieldToUi()
       }
+      await finishGate()
       closeAudio()
     } else if (!wantAudio) {
       /** J1 — ONE CHUNK: the window's frames, and nothing else. */
@@ -960,6 +1121,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         throwIfAborted()
         await renderFrame(frameIndex, null)
       }
+      await finishGate()
       closeAudio()
     }
     videoSource?.close()

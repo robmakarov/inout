@@ -34,6 +34,7 @@ import { constantQualityQp } from './constantQuality'
 import { chunkedRenderEnabled } from './chunkedFlag'
 import { fullColourEnabled } from './fullColour'
 import { audioTrackMode } from './audioTracks'
+import { noiseGateEnabled } from './gateFlag'
 import { ChunkedRenderUnavailable, getLastChunkedStats, renderChunked, type ChunkedRenderStats } from './chunkedRender'
 import { keyframeIntervalSec } from './keyframeInterval'
 import { loudnessMode } from './loudnessMode'
@@ -246,6 +247,7 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         fullColour: fullColourEnabled(),
         gop: keyframeIntervalSec(),
         audioTracks: audioTrackMode(),
+        noiseGate: noiseGateEnabled(),
       },
       paced: !!pace,
       pace: pace?.level(),

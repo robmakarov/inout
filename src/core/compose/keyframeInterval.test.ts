@@ -20,7 +20,7 @@ import {
 import { defaultEditState } from '@core/timeline'
 import type { ExportSettings, Recording } from '@core/types'
 
-const FLAGS = { cq: 20, loudness: 'peak', sourceFrame: false, fullColour: false, audioTracks: 'flat' } as const
+const FLAGS = { cq: 20, loudness: 'peak', sourceFrame: false, fullColour: false, audioTracks: 'flat', noiseGate: false } as const
 /** Deliberately WITHOUT keyFrameIntervalSec — that is what the app passes. */
 const SETTINGS: ExportSettings = { width: 1920, height: 1080, fps: 30 }
 
