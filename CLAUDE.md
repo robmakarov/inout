@@ -46,8 +46,13 @@ current path as fallback); the engine never refuses a record press.
   `(async()=>{for(const r of await navigator.serviceWorker.getRegistrations())await r.unregister();for(const k of await caches.keys())await caches.delete(k)})()`
   then reload; to be certain, compare a chunk hash from `ls dist/assets` against
   `performance.getEntriesByType('resource')`.
-  **THE HIDDEN BROWSER PANE CLAMPS TIMERS TO 1 Hz**: an agent-driven `?synthetic=1` take in it is a
-  ~2 fps take, so it is never a rate, fps or elastic test — use the headed scripts (`scripts/*.mjs`).
+  **THE BROWSER PANE IS HIDDEN WHENEVER ROBERT IS NOT LOOKING AT THIS SESSION** (it was hidden in the
+  session that wrote this line while he typed). Hidden = Chrome does not composite it (a pane
+  screenshot times out at 5 s — 113 times, 4.6M tokens across sessions) and clamps its timers to 1 Hz
+  (a `?synthetic=1` take in it is a ~2 fps take, never a rate, fps or elastic test). Text, DOM,
+  console and JS all work hidden. A PICTURE comes from `node scripts/see.mjs [url] --shot=<png>` (real
+  Chrome, ~3 s, then Read the png); the pane screenshot only after `tabs_context` says displayed — the
+  global pane-guard hook (`~/.claude/hooks/pane-guard.py`) refuses it otherwise, do not fight it.
 - Local server, ONLY when a fix must be seen before it is pushed: the preview launcher cannot start
   `npm run dev` from this repo because it lives in `~/Downloads`, which macOS TCC does not grant to the
   launcher's process (`EPERM: uv_cwd`). Don't re-debug it: `node scripts/mirror-watch.mjs &` from Bash
