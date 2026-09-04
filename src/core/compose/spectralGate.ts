@@ -493,3 +493,24 @@ export class StreamingGate {
     return out
   }
 }
+
+/**
+ * THE PROFILE, FROM A BOUNDED WINDOW OF THE MIX.
+ *
+ * The gate needs the take's quiet frames before it can gate anything, and the
+ * render is a forward stream — so a window is buffered, the profile is built
+ * from it, and the gate then runs streaming over the whole take.
+ *
+ * KNOWN LIMIT, STATED RATHER THAN DISCOVERED: the window is the FIRST
+ * `budgetSec` seconds, so a take whose noise bed starts later, or changes,
+ * is profiled from material that does not contain it. B1b already solved the
+ * same problem for the size probe — `chooseWindow` picks representative
+ * seconds off the packet index without decoding — and this should use it when
+ * this path stops being opt-in. It is bounded on purpose: 20 s of mono at
+ * 48 kHz is 3.8 MB, and this machine has 8 GB with three encoders on it.
+ */
+export const PROFILE_BUDGET_SEC = 20
+
+export function profileWindowFrames(sampleRate: number, budgetSec = PROFILE_BUDGET_SEC): number {
+  return Math.max(GATE_FRAME * 4, Math.round(budgetSec * sampleRate))
+}
