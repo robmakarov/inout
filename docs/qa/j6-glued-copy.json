@@ -543,5 +543,27 @@
   "The o3b routing gate \"every lane took the path AND the copy source it was asked for\" is RED on this branch and RED on main in exactly the same lane (A-smartcut-single-gen -> render/n/a). Pre-existing, measured on both, not J6.",
   "v1 oracle trim=render is unchanged from main and is by design (CompositeRecording.engine: v1 is MediaRecorder\u2019s encoder, its decoder description is not ours to reproduce, so a boundary splice cannot be byte-checked).",
   "The max lane is the task row\u2019s own question answered: max has opened no compositor since 2026-08-30, so both rungs produce the identical 2-encoder plan and neither has a composited preview. There was no encoder there for J6 to free."
- ]
+ ],
+ "prod": {
+  "what": "The deployed build (3532b6b), driven through the real record button in a headed Chrome, screen+camera+mic+tab-audio, ?synthetic=1&qstep=1080p&screensize=1280x720. One take per rung.",
+  "paint_shipped": {
+   "plan": "[capture] encoder plan \u2014 2 encoder(s): camera 640x480@30 + screen 1280x720@30 = 36.9 Mpx/s",
+   "glue": "[capture] the glued copy is PAINTED, NOT ENCODED (J6)",
+   "painted": "[capture] composite painted 235 frames and encoded none",
+   "preview": "[capture] recording preview is the compositor\u2019s own output",
+   "compositeFile": null,
+   "card": "green, 0 dimensions off pass",
+   "picture": "composed by main-processor into webgpu, painted only (213 frames) \u2014 no composite file was written (J6)",
+   "prerender": "[compose] pre-render started AT STOP for a take whose export must render \u2014 8.9s, 1920x1080 (F16b) \u2026 pre-render ready after 3.0s \u2014 1.2 MB waiting before it was asked for"
+  },
+  "record_control": {
+   "plan": "[capture] encoder plan \u2014 3 encoder(s): camera 640x480@30 + screen 1280x720@30 + composite 1920x1080@30 = 99.1 Mpx/s",
+   "glue": "[capture] the glued copy is ENCODED for this take (?glue=record)",
+   "compositeFile": "composite v2 avc1.4D402A prefer-hardware \u2014 200 frames (47 dropped, 1 keep-alive, peak queue 9), 417 audio batches; video 1173 KB, audio 74 KB; preview 0.04 ms/frame",
+   "preview": "[capture] recording preview is the compositor\u2019s own output",
+   "card": "green, 0 dimensions off pass",
+   "picture": "composed by main-processor into webgpu"
+  },
+  "caveat": "Raw-channel drops read 62/60 on the paint take and 55/53 on the record take, one sample each on a machine that was also running this session. G8 measured that a synthetic canvas source hands the encoder BGRA where a real display hands NV12, which dominates that number; an earlier paint take on the same build read 41/36. No direction may be claimed from these. The deterministic numbers are the encoder plan, the Mpx/s and the bytes on disk, all of which the local rig measured against a same-process control."
+ }
 }

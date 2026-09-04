@@ -1384,6 +1384,14 @@ already bigger than the composite would be — so both rungs produce the identic
 identical bytes and no composited preview on either. There was no encoder there for J6 to free, and J6
 did not give max back the preview or the detector it gave up; which takes open a compositor is exactly
 what J6 did NOT move, which is what keeps "the preview is unchanged" literally true.
+VERIFIED ON PROD AT DEFAULT FLAGS, not argued from the source — the deployed build driven through the
+real record button in a headed Chrome, one take per rung: `?glue=paint` prints `encoder plan — 2
+encoder(s) … = 36.9 Mpx/s`, `the glued copy is PAINTED, NOT ENCODED`, `composite painted 235 frames and
+encoded none`, `recording preview is the compositor's own output`, no composite file, card GREEN 13/13,
+and the picture dimension reads "composed by main-processor into webgpu, painted only (213 frames) — no
+composite file was written". `?glue=record` on the same build prints `3 encoder(s) … = 99.1 Mpx/s` and a
+1,173 KB composite. And J5 picked the take up unprompted: `pre-render started AT STOP … 8.9s` →
+`pre-render ready after 3.0s — 1.2 MB waiting before it was asked for`.
 WHAT IT TAKES AWAY: an unedited take with a camera is no longer a packet copy. It is a render, made
 before he asks for it, and on the measurement above that is faster than the copy was — but it is a
 render, so it costs a machine that is doing something else more than a copy did, and a take he never
