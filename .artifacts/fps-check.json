@@ -1,6 +1,6 @@
 {
   "task": "F15 fps-follows-source",
-  "ranAt": "2026-08-30T02:31:36.697Z",
+  "ranAt": "2026-09-04T04:14:48.661Z",
   "url": "https://inout-kappa.vercel.app/",
   "platform": "darwin",
   "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -9,65 +9,94 @@
   "lanes": [
     {
       "sourceFps": 60,
-      "url": "https://inout-kappa.vercel.app/?synthetic=1&sourcefps=1&sourceframe=0&screenfps=60&screensize=3024x1964&sourceres=1&quality=max",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&sourcefps=1&screenfps=60&sourceframe=0",
       "captureLog": [
-        "[capture] native-res capture: leaving display at 3024×1964@60 (O6)",
-        "[capture:arming] armed +120ms (2 channel(s), all start together)",
-        "[capture] encoder plan — 1 encoder(s): screen 3024x1964@60 = 356.3 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
-        "[capture:arming] all start calls kicked +1ms",
-        "[capture] SINGLE GENERATION — no live composite for this take: one mp4/AVC video channel already at the export geometry, so the composite would be a second encode of a picture we already have. The unedited export packet-copies the raw channel. Source-liveness detection and the composited preview are off with it.",
-        "[capture] raw video channel on WebCodecs: avc1.640033 (prefer-hardware)",
-        "[capture] mic audio first-sample offset=107.2ms provisional (ctx=0.1200s rate=48000)",
-        "[capture:arming] measured audio mic first-sample +108ms offset=107.2ms",
-        "[capture] raw video source frame: format BGRA · coded 3024x1964 · display 3024x1964",
-        "[capture:arming] measured video screen first-frame +144ms offset=143.8ms 3024x1964@60",
-        "[capture] mic audio anchor 85.1ms − 10.0ms reported input latency → 75.1ms (baseLatency 5.333333333333333ms)",
-        "[capture] raw video channel: 10 frames encoded of 282 in, 7 keep-alive (source was static), 275 DROPPED (encoder behind) · 4 keyframes · 62 KB · avc1.640033 prefer-hardware",
-        "[capture] B7 anchors — screen off=69ms raw=143.8ms firstFrame=41.9ms · mic off=0ms raw=85.1ms inputLatency=10ms",
-        "[capture] mix loudness measured live: peak 0.500 p99win 0.500 p90rms 0.3318 p20rms 0.0250 over 377856 frames — envelope 79 windows from 32 ms",
-        "[capture] this machine's video encoder: 131 fps at 1920x1080 = 272 Mpx/s (measured at mount, idle — what a take may attempt is decided from this rather than from a constant)"
+        "[capture] native-res capture: leaving display at 1280×720@60 (O6) — 60 fps kept: 55 Mpx/s wanted, 0 Mpx/s measured at unknown (branch unmeasured, B14)",
+        "[capture:arming] armed +101ms (2 channel(s), all start together)",
+        "[capture] encoder plan — 2 encoder(s): screen 1280x720@60 + composite 1920x1080@60 = 179.7 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+        "[capture:arming] all start calls kicked +3ms",
+        "[capture] composite follows the source: 60 fps (F15, ?sourcefps=1)",
+        "[capture] live composite engine v2 (worker + WebCodecs)",
+        "[capture] mic track delivered: ec=unreported ns=unreported agc=unreported ch=2 sr=48000 latency=10ms",
+        "[capture] mic audio tap = track reader (no AudioContext) rate=48000 ch=2",
+        "[capture] composite painter: webgpu",
+        "[capture] raw video channel on WebCodecs: avc1.4D402A (prefer-hardware)",
+        "[capture] mic audio first-sample offset=438.8ms provisional (ctx=5.6304s rate=48000)",
+        "[capture:arming] measured audio mic first-sample +443ms offset=438.8ms",
+        "[capture] raw video source frame: format BGRA · coded 1280x720 · display 1280x720",
+        "[capture:arming] measured video screen first-frame +782ms offset=782.0ms 1280x720@60",
+        "[capture] recording preview is the compositor’s own output",
+        "[capture] composite v2 avc1.4D402A prefer-hardware — 188 frames (157 dropped, 0 keep-alive, peak queue 9), 354 audio batches; video 940 KB at 0.98 Mbps of 8.0 Mbps requested, keyframes 3 = 1% of video bytes, audio 55 KB; preview 0.06 ms/frame (12 ms total)",
+        "[capture] composite v2 clock starts +127ms into the take",
+        "[capture] raw video channel: 237 frames encoded of 466 in, 3 keep-alive (source was static), 232 DROPPED (encoder behind) · 5 keyframes · 1235 KB · avc1.4D402A prefer-hardware",
+        "[capture] mic audio anchor 406.5ms − 10.0ms reported input latency → 396.5ms (baseLatency 0ms)",
+        "[capture] B7 anchors — screen off=385ms raw=782ms firstFrame=462.2ms · mic off=0ms raw=406.5ms inputLatency=10ms",
+        "[capture] mix loudness measured live: peak 0.500 p99win 0.500 p90rms 0.3347 p20rms 0.0941 over 362400 frames — envelope 76 windows from 42 ms",
+        "[capture] B9 composite leads the earliest channel by 270ms — carried, not clamped",
+        "[capture] take report — rec_qxrwzprxlt1f · 7.6s · GREEN — 13 of 13 dimensions measured and inside band.",
+        "[capture] this machine's video encoder: 55 fps at 3024x1964 (avc1.640033) = 325 Mpx/s (measured while nothing was recording, AT THE SIZE A TAKE WILL ASK FOR — what a take may attempt is decided from this rather than from a constant, and Mpx/s is not the same number at every frame size (B14))",
+        "[compose] audio mix 48000 Hz → 48000 Hz: RATES EQUAL, no resampling (the sample is taken as it is)",
+        "[bits] instant copy avc from composite: video 0.96 MB @ 0.98 Mbps (12.3% of the 8.00 Mbps ceiling) · keyframes 3 = 1.2% of video bytes (3927 B vs 5139 B/delta, cadence recorder-chosen) · audio 0.08 MB @ 0.09 Mbps · 7.831s"
       ],
       "consoleErrors": [],
       "files": [
         {
-          "name": "xport-x_dk1jfd72984c",
-          "bytes": 399249,
+          "name": "xport-mtmfxde8-x_4lqilbgdhb23",
+          "bytes": 1051778,
           "container": "mp4",
           "trackId": 1,
-          "timescale": 60,
+          "timescale": 57600,
           "codedWidth": 1920,
           "codedHeight": 1080,
           "codec": "avc1",
-          "samples": 479,
-          "durationTicks": 479,
-          "minSampleTicks": 1,
-          "modalSampleTicks": 1,
-          "gridFps": 60,
-          "cadenceFps": 60,
+          "samples": 188,
+          "durationTicks": 452160,
+          "minSampleTicks": 960,
+          "modalSampleTicks": 1024,
+          "gridFps": 56.25,
+          "cadenceFps": 23.95,
           "source": "stbl/stts",
           "truncated": false
         },
         {
-          "name": "rec_faopg90rmmye_ch_ut25oqz33u0z.mp4",
-          "bytes": 63673,
+          "name": "xjob-job_we5d0mrz8wlr",
+          "bytes": 1051778,
+          "container": "mp4",
+          "trackId": 1,
+          "timescale": 57600,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "codec": "avc1",
+          "samples": 188,
+          "durationTicks": 452160,
+          "minSampleTicks": 960,
+          "modalSampleTicks": 1024,
+          "gridFps": 56.25,
+          "cadenceFps": 23.95,
+          "source": "stbl/stts",
+          "truncated": false
+        },
+        {
+          "name": "rec_qxrwzprxlt1f_screen_ch_u1tzjjnciq1c.mp4",
+          "bytes": 1264688,
           "container": "mp4",
           "trackId": 1,
           "timescale": 60,
-          "codedWidth": 3024,
-          "codedHeight": 1964,
+          "codedWidth": 1280,
+          "codedHeight": 720,
           "codec": "avc1",
-          "samples": 10,
-          "durationTicks": 447,
+          "samples": 237,
+          "durationTicks": 432,
           "minSampleTicks": 1,
           "modalSampleTicks": 1,
           "gridFps": 60,
-          "cadenceFps": 1.34,
+          "cadenceFps": 32.92,
           "source": "moof/trun",
           "truncated": false
         },
         {
-          "name": "rec_faopg90rmmye_ch_rop53itcsq7p.webm",
-          "bytes": 130849,
+          "name": "rec_qxrwzprxlt1f_mic_ch_w1r6qe25a0ez.webm",
+          "bytes": 125549,
           "container": "webm",
           "trackId": null,
           "timescale": null,
@@ -82,19 +111,42 @@
           "cadenceFps": null,
           "source": null,
           "truncated": false
+        },
+        {
+          "name": "rec_qxrwzprxlt1f_composite.mp4",
+          "bytes": 1023872,
+          "container": "mp4",
+          "trackId": 1,
+          "timescale": 60,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "codec": "avc1",
+          "samples": 188,
+          "durationTicks": 285,
+          "minSampleTicks": 1,
+          "modalSampleTicks": 1,
+          "gridFps": 60,
+          "cadenceFps": 39.58,
+          "source": "moof/trun",
+          "truncated": false
         }
       ],
       "recorded": {
-        "id": "rec_faopg90rmmye",
+        "id": "rec_qxrwzprxlt1f",
         "channels": [
           {
             "kind": "screen",
-            "w": 3024,
-            "h": 1964,
+            "w": 1280,
+            "h": 720,
             "fps": 60
           }
         ],
-        "composite": null
+        "composite": {
+          "w": 1920,
+          "h": 1080,
+          "fps": 60,
+          "engine": "v2"
+        }
       },
       "gates": {
         "boots": true,
@@ -102,13 +154,13 @@
         "windowPaints": true,
         "recorded": true,
         "reachedEditor": true,
-        "exported": true,
+        "exported": false,
         "sourceDelivered": true,
-        "compositeWrittenAtRate": false,
+        "compositeWrittenAtRate": true,
         "exportCarriesTheTakesFrames": true,
         "productRecordedRate": true,
-        "announcedOnlyWhenMoved": false,
-        "instantCopyStillFires": false,
+        "announcedOnlyWhenMoved": true,
+        "instantCopyStillFires": true,
         "noConsoleErrors": true
       },
       "chips": {
@@ -117,38 +169,70 @@
         "Mic": true,
         "Tab Audio": false
       },
-      "rafFps": 123,
-      "exportMeta": "0:08 · 390 KB · 1920×1080",
+      "rafFps": 121,
+      "throughputAtArm": null,
+      "card": {
+        "verdict": "green",
+        "line": "rec_qxrwzprxlt1f · 7.6s · GREEN — 13 of 13 dimensions measured and inside band.",
+        "dimensions": {
+          "channels": "pass",
+          "audio-continuity": "pass",
+          "audio-clock": "pass",
+          "rescue": "pass",
+          "picture": "pass",
+          "rate": "pass",
+          "elastic": "pass",
+          "decisions": "pass",
+          "sync": "pass",
+          "storage": "pass",
+          "memory": "pass",
+          "lateness": "pass",
+          "wedges": "pass"
+        },
+        "rateDetail": "asked for 60 fps · screen 60 fps · composite 60 fps — nothing degraded (no ladder step, no composite give-up)",
+        "rateDecisions": [
+          {
+            "action": "shed",
+            "outcome": "refused",
+            "what": "60 fps kept for a 1280×720 surface",
+            "branch": "unmeasured",
+            "want": 55.296,
+            "can": 0,
+            "at": "unknown"
+          }
+        ]
+      },
+      "exportMeta": null,
       "measured": {
         "exportSamples": [
-          479
+          188
         ],
-        "compositeSamples": null,
+        "compositeSamples": 188,
         "exportGridFps": [
-          60
+          56.25
         ],
         "exportCadenceFps": [
-          60
+          23.95
         ],
         "exportGeometry": [
           "1920x1080"
         ],
-        "compositeGridFps": null,
-        "compositeCadenceFps": null,
-        "rawScreenGridFps": 60,
-        "rawScreenCadenceFps": 1.34
+        "compositeGridFps": 60,
+        "compositeCadenceFps": 39.58,
+        "rawScreenGridFps": 56.25,
+        "rawScreenCadenceFps": 23.95
       },
       "throughput": {
-        "arrived": 282,
-        "rawEncoded": 10,
-        "rawDropped": 275,
-        "compositeEncoded": null,
-        "compositeDropped": 0,
-        "rawLine": "[capture] raw video channel: 10 frames encoded of 282 in, 7 keep-alive (source was static), 275 DROPPED (encoder behind) · 4 keyframes · 62 KB · avc1.640033 prefer-hardware",
-        "compLine": null
+        "arrived": 466,
+        "rawEncoded": 237,
+        "rawDropped": 232,
+        "compositeEncoded": 188,
+        "compositeDropped": 157,
+        "rawLine": "[capture] raw video channel: 237 frames encoded of 466 in, 3 keep-alive (source was static), 232 DROPPED (encoder behind) · 5 keyframes · 1235 KB · avc1.4D402A prefer-hardware",
+        "compLine": "[capture] composite v2 avc1.4D402A prefer-hardware — 188 frames (157 dropped, 0 keep-alive, peak queue 9), 354 audio batches; video 940 KB at 0.98 Mbps of 8.0 Mbps requested, keyframes 3 = 1% of video bytes, audio 55 KB; preview 0.06 ms/frame (12 ms total)"
       },
       "throughputOk": false,
-      "copyLine": null,
+      "copyLine": "[bits] instant copy avc from composite: video 0.96 MB @ 0.98 Mbps (12.3% of the 8.00 Mbps ceiling) · keyframes 3 = 1.2% of video bytes (3927 B vs 5139 B/delta, cadence recorder-chosen) · audio 0.08 MB @ 0.09 Mbps · 7.831s",
       "pass": false
     }
   ],
