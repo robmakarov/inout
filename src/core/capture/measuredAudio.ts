@@ -19,12 +19,16 @@ import {
 } from 'mediabunny'
 import {
   audioTapChoice,
+  audioTapThreadChoice,
   canReadTrackPcm,
+  canTransferReadable,
+  trackPcmReadable,
   trackPcmReader,
   trackPcmSampleRate,
   trackTapBufferChunks,
   trackTapBufferMs,
 } from './audioTap'
+import type { AudioTapMsg, AudioTapReply } from './audioTap.worker'
 import { ReviveSchedule } from './reviveSchedule'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
@@ -682,12 +686,31 @@ export async function startMeasuredAudioCapture(opts: {
   let tapPrevEndUs: number | null = null
   let tapGapUs = 0
   let tapMaxGapUs = 0
+  /**
+   * X11a — THE READER ON ITS OWN THREAD. When the readable transfers, the pump
+   * above never runs: `audioTap.worker.ts` holds the reader and posts the same
+   * batches, so a stalled main thread costs the take nothing instead of ~87 ms
+   * (measured: 20.0 s of block cost the main-thread reader 13.8-15.3 s of audio
+   * and the worker reader 0, scripts/x11a-workertap.mjs). Null = the main pump.
+   */
+  let tapWorker: Worker | null = null
+  /** Bumped on every revival; a retiring pump's batches are ignored. */
+  let tapGeneration = 0
+  let tapEndedResolve: (() => void) | null = null
 
   const onBatch = (
     frames: number,
     channels: number,
     currentTime: number,
     planar: Float32Array,
+    /**
+     * X11a. When the reader is a thread away, the batch carries the moment it
+     * was completed THERE, converted into this thread's frame. Without it the
+     * anchor dates sample 0 from a postMessage's receipt and places the whole
+     * take ~14 ms late (measured). Absent = stamp it here, which is A1's
+     * behaviour exactly.
+     */
+    arrivalOverrideMs?: number,
   ): void => {
     if (stopped || fatalError) return
     // Anchor estimation: arrival wall time minus the audio-time of the frames
@@ -696,7 +719,7 @@ export async function startMeasuredAudioCapture(opts: {
     // true wall time of sample 0 — the single-first-arrival anchor was exactly
     // the source of the +45–50ms audio-late runs. Window capped so audio-clock
     // vs performance.now drift (~50ppm) cannot bias the estimate.
-    const arrivalMs = performance.now()
+    const arrivalMs = arrivalOverrideMs ?? performance.now()
     // Spacing vs the PREVIOUS batch, taken before the stamp moves: comparing
     // against a stamp this same batch just wrote reads 0 forever, which is the
     // ordering bug that killed the wall-clock hold below for a day.
@@ -989,6 +1012,74 @@ export async function startMeasuredAudioCapture(opts: {
     }
   }
 
+  /**
+   * START THE TRACK TAP ON `clone`, on its own thread when the platform lets
+   * the stream cross one. Returns which thread got it, because the take says so
+   * in its own console line and a rig has to be able to check its premise.
+   *
+   * THE TRANSFER IS THE GATE. A platform with `Worker` and `ReadableStream`
+   * that still refuses to move a stream throws here and falls straight through
+   * to A1's main-thread pump — same audio, same file, the frozen rule kept
+   * without a capability table to maintain.
+   */
+  const startTrackTap = (clone: MediaStreamTrack): 'worker' | 'main' => {
+    const gen = ++tapGeneration
+    const bufChunks = trackTapBufferChunks(sampleRate)
+    if (audioTapThreadChoice() === 'worker' && canTransferReadable()) {
+      try {
+        const readable = trackPcmReadable(clone, bufChunks)
+        const w =
+          tapWorker ??
+          new Worker(new URL('./audioTap.worker.ts', import.meta.url), { type: 'module' })
+        w.onmessage = (ev: MessageEvent<AudioTapReply>) => {
+          const msg = ev.data
+          if (msg.generation !== tapGeneration) return
+          if (msg.type === 'ended') {
+            tapEndedResolve?.()
+            return
+          }
+          // The worker sees the chunks, so it owns B12's instrument. Cumulative
+          // per generation: a revival restarts it, exactly as the main pump's
+          // reset does, because a swap's seam is `revivals` and not a drop.
+          tapGapUs = msg.tapGapUs
+          if (msg.tapMaxGapUs > tapMaxGapUs) tapMaxGapUs = msg.tapMaxGapUs
+          onBatch(
+            msg.frames,
+            msg.channels,
+            msg.lastChunkTimeS,
+            msg.planar,
+            // The worker's clock, in this thread's frame. See AudioTapBatch.
+            msg.stampMs - performance.timeOrigin,
+          )
+        }
+        const open: AudioTapMsg = {
+          cmd: 'open',
+          readable,
+          sampleRate,
+          generation: gen,
+        }
+        w.postMessage(open, [readable as unknown as Transferable])
+        tapWorker = w
+        return 'worker'
+      } catch (err) {
+        // Not a failure worth a warning on every platform that cannot do it —
+        // but on one that was ASKED to, silence would hide the fallback.
+        console.info(
+          `[capture] ${label} audio tap could not cross a thread; reading on the main thread`,
+          err,
+        )
+        tapWorker?.terminate()
+        tapWorker = null
+      }
+    }
+    const next = trackPcmReader(clone, bufChunks)
+    const old = trackReader
+    trackReader = next
+    void old?.cancel().catch(() => undefined)
+    void pumpTrackReader(next)
+    return 'main'
+  }
+
   /** A revival hands the reader a fresh clone; the old pump retires itself. */
   const swapTrackReader = (clone: MediaStreamTrack): void => {
     // Hand over what the dying tap already delivered before the fresh one can
@@ -996,11 +1087,7 @@ export async function startMeasuredAudioCapture(opts: {
     flushTrackBatch()
     // The new clone's clock is its own; the seam across a swap is `revivals`.
     tapPrevEndUs = null
-    const next = trackPcmReader(clone, trackTapBufferChunks(sampleRate))
-    const old = trackReader
-    trackReader = next
-    void old?.cancel().catch(() => undefined)
-    void pumpTrackReader(next)
+    startTrackTap(clone)
   }
 
   let keepAlive: GainNode | null = null
@@ -1041,11 +1128,11 @@ export async function startMeasuredAudioCapture(opts: {
     trackClone(clone)
     sourceClone = clone
     const bufChunks = trackTapBufferChunks(sampleRate)
-    trackReader = trackPcmReader(clone, bufChunks)
-    void pumpTrackReader(trackReader)
+    const where = startTrackTap(clone)
     console.info(
       `[capture] ${label} audio tap = track reader (no AudioContext) rate=${sampleRate} ch=${numberOfChannels} ` +
-        `buffer=${bufChunks > 0 ? `${trackTapBufferMs()}ms (${bufChunks} quanta)` : 'platform default'}`,
+        `buffer=${bufChunks > 0 ? `${trackTapBufferMs()}ms (${bufChunks} quanta)` : 'platform default'} ` +
+        `reader=${where} thread`,
     )
   }
 
@@ -1066,9 +1153,32 @@ export async function startMeasuredAudioCapture(opts: {
       })
     }
     // The track tap's tail is already in hand — emit it before `stopped` closes
-    // the gate, or the last <=23ms of every take is dropped.
-    if (!stopped && !worklet) flushTrackBatch()
+    // the gate, or the last <=23ms of every take is dropped. On the worker path
+    // the tail is on the OTHER thread, so it is asked for and waited on, under
+    // the same 150 ms bound the worklet's flush uses: `stop()` is inside doStop's
+    // 5 s budget (H5) and no drain may put that at risk.
+    if (!stopped && tapWorker) {
+      const w = tapWorker
+      const gen = tapGeneration
+      await new Promise<void>((resolve) => {
+        tapEndedResolve = resolve
+        setTimeout(resolve, 150)
+        try {
+          const close: AudioTapMsg = { cmd: 'close', generation: gen }
+          w.postMessage(close)
+        } catch {
+          resolve()
+        }
+      })
+      tapEndedResolve = null
+    }
+    if (!stopped && !worklet && !tapWorker) flushTrackBatch()
     stopped = true
+    if (tapWorker) {
+      tapWorker.onmessage = null
+      tapWorker.terminate()
+      tapWorker = null
+    }
     const reader = trackReader
     trackReader = null
     if (reader) void reader.cancel().catch(() => undefined)

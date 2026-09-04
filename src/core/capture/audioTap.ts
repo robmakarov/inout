@@ -135,6 +135,60 @@ export function trackTapBufferChunks(sampleRate: number, ms = trackTapBufferMs()
   return Math.ceil((ms / 1000) * sampleRate / QUANTUM_FRAMES)
 }
 
+/**
+ * X11a — WHERE THE PCM READER RUNS. `worker` transfers the processor's readable
+ * into `audioTap.worker.ts`; `main` is A1's pump, unchanged, and the automatic
+ * fallback wherever the transfer is unavailable.
+ *
+ * MEASURED BEFORE IT WAS BUILT (`scripts/x11a-workertap.mjs`, prod Chrome, a
+ * 21 s window with 20.0 s of the main thread blocked, processor pinned to the
+ * platform's own 32-quantum buffer): the main-thread reader was handed 3.6 and
+ * 3.9 s of the 21 and left gaps of 13.8 and 15.3 s (worst 1730 ms); the worker
+ * reader was handed all 21.1 s both times, gap 0.70 s with a worst step of
+ * 3 ms — which is the SOURCE's own floor, the same 33 ms/s B12's undosed
+ * control reads, and not a loss at all.
+ */
+export type AudioTapThread = 'main' | 'worker'
+
+function isThread(v: string | null): v is AudioTapThread {
+  return v === 'main' || v === 'worker'
+}
+
+/** `?audiotapthread=main` puts the reader back on the main thread. */
+export function audioTapThreadChoice(): AudioTapThread {
+  if (typeof location === 'undefined') return 'worker'
+  const v = new URLSearchParams(location.search).get('audiotapthread')
+  return isThread(v) ? v : 'worker'
+}
+
+/**
+ * A cheap pre-check only. The REAL gate is the transfer itself, which is
+ * attempted in a try/catch and falls back to the main-thread pump when it
+ * throws — a platform that has these constructors but refuses to move a stream
+ * (Safari today) then records exactly as it did before, which is the frozen
+ * rule and not a special case.
+ */
+export function canTransferReadable(): boolean {
+  return typeof Worker !== 'undefined' && typeof ReadableStream !== 'undefined'
+}
+
+/** The processor's stream itself — what X11a transfers into the tap worker. */
+export function trackPcmReadable(
+  track: MediaStreamTrack,
+  maxBufferSize = 0,
+): ReadableStream<AudioData> {
+  const Processor = (
+    globalThis as unknown as {
+      MediaStreamTrackProcessor: new (o: {
+        track: MediaStreamTrack
+        maxBufferSize?: number
+      }) => { readable: ReadableStream<AudioData> }
+    }
+  ).MediaStreamTrackProcessor
+  const init = maxBufferSize > 0 ? { track, maxBufferSize } : { track }
+  return new Processor(init).readable
+}
+
 /** Narrow handle on the Chromium-only constructor (absent from the TS lib). */
 export function trackPcmReader(
   track: MediaStreamTrack,

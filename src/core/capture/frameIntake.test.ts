@@ -199,7 +199,12 @@ describe('the seam is the only way a composite frame gets in', () => {
       'src/core/capture/frameIntake.ts': 3,
       // A1's audio tap — AudioData, not VideoFrame, and it never reaches the
       // compositor. A different seam with its own fallback (the AudioWorklet).
-      'src/core/capture/audioTap.ts': 3,
+      // FOUR since X11a (2026-09-04): the reader moved to its own thread, so
+      // the stream is built twice over — once as a reader for the main-thread
+      // pump, once as the raw readable that is TRANSFERRED into
+      // audioTap.worker.ts. Both are audio, both are this file, neither is a
+      // frame; the count moved for a reason and the seam is untouched.
+      'src/core/capture/audioTap.ts': 4,
       // X6's raw video channel — its own encoder, its own file, its own worker.
       // It does not go through the composite at all.
       'src/core/capture/measuredVideo.ts': 3,
