@@ -2097,6 +2097,12 @@ body.f .filters, body.d .detail { opacity: 1; }
   <div class="col col-filters">
     <aside class="panel filters">
       <div class="panel__title"><em>INOUT</em> proto</div>
+      <!-- the proto UI's own tabs: this file, and the neon prototype beside it (proto/neon.html) -->
+      <div class="panel__group" role="tablist" aria-label="Prototype">
+        <div class="panel__label">Proto</div>
+        <button class="tab" role="tab" aria-selected="true">Style</button>
+        <a class="tab" role="tab" href="neon.html" aria-selected="false" style="text-decoration:none">Neon ↗</a>
+      </div>
       <div class="panel__group" role="tablist">
         <div class="panel__label">Screen</div>
         <button class="tab" role="tab" data-tab="idle" aria-selected="true">Idle</button>

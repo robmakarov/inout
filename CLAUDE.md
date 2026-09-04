@@ -60,9 +60,11 @@ current path as fallback); the engine never refuses a record press.
   From a second worktree run mirror-watch from THAT worktree, and replace a symlinked `node_modules`
   with a real copy (`rsync -a "<main>/node_modules/" /tmp/inout-dev/node_modules/`). Deletable the day
   the repo moves out of `~/Downloads` (Robert's call; recommended).
-- `proto/style.html` is opened off disk with `file://` and never served: one self-contained file, no
-  `<script src>`, no `<link>`, no fetch, no modules, no external assets; state persists through the URL
-  fragment first because `localStorage` can be refused on `file://`.
+- `proto/style.html` and `proto/neon.html` (the proto UI's two tabs; each links to the other) are
+  opened off disk with `file://` and never served: one self-contained file each, no `<script src>`,
+  no `<link>`, no fetch, no modules, no external assets (fonts are embedded data: URLs); state
+  persists through the URL fragment first because `localStorage` can be refused on `file://`. A
+  picture of either: `node scripts/see.mjs "file:///…/proto/neon.html#p=editor" --shot=<png>`.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
 commits the files THIS session edited, and files no live session claims only when it is the last
