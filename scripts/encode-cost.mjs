@@ -62,7 +62,26 @@
  * quality-matched HEVC cell needs the bitrate rung. vp9 and av1 answer
  * prefer-hardware=no at every size, so AVC and HEVC are the whole choice.
  *
- * THE PARALLEL NUMBERS ABOVE STILL PREDATE THE RING and were not re-run.
+ * AND THE PARALLEL CELLS, RE-RUN WITH THE RING (2026-09-04): aggregate 78.8 fps
+ * at TWO sessions and 77.7 at FOUR — the same ~78 fps ONE session reaches. The
+ * old 43.4 -> 77.2 "1.78x knee at two" was two workers escaping the rig's own
+ * painting, not the engine scaling. R1's production reading (1.04-1.07x) was
+ * right and now has a mechanism: one lane already saturates the media engine.
+ * (n=1 in the parallel protocol under-reads at 47.4 — compare its AGGREGATE
+ * against the sweep's single-lane cell, never against its own n=1 row.)
+ *
+ * WHAT THE ENCODER IS HANDED IS NOT A LEVER EITHER (2026-09-04). The render
+ * composites into a 2D canvas and hands the encoder RGBA, while VideoToolbox
+ * encodes NV12 — so every frame pays a conversion nobody chose. Measured by
+ * round-tripping the ring through encode+decode to get GPU-backed NV12 frames
+ * of the same pictures: NV12 in 72.3 fps · canvas RGBA 74.1 · RGBX (alpha
+ * discarded) 69.3. The conversion is free, and the 13.5 ms/frame is the encoder.
+ *
+ * SO EVERY AXIS AT THE ENCODER IS CLOSED, measured four ways in one night:
+ * config (±6 %), codec (HEVC −10 %), sessions (+6 % aggregate), input format
+ * (−2 %). This machine encodes AVC at 440-470 Mpx/s and a max60 take asks 356
+ * Mpx/s of output. A SECOND generation of the picture cannot be made cheap;
+ * the only lever left is not making one.
  *
  * THESE NUMBERS ARE AN UPPER BOUND ON A SYNTHETIC FRAME. THEY ARE NOT A RENDER
  * PREDICTION, and R1 paid a session to learn it: the clean 1.78x knee at two
@@ -151,6 +170,20 @@ const SWEEP = [
     label: 'HEVC bitrate 8Mbps, prefer-hardware',
     config: { family: 'hevc', bitrate: 8e6, hardwareAcceleration: 'prefer-hardware' },
   },
+  // WHAT THE ENCODER IS HANDED, which is the render's to choose and nobody
+  // ever measured: a canvas frame is RGBA and VideoToolbox encodes NV12.
+  {
+    label: 'quantizer qp20, prefer-hardware, NV12 ring',
+    config: { bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' },
+    opts: { qp: 20 },
+    ring: 'nv12',
+  },
+  {
+    label: 'quantizer qp20, prefer-hardware, alpha discarded',
+    config: { bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' },
+    opts: { qp: 20 },
+    alpha: 'discard',
+  },
 ]
 /** What the export actually configures, and so the only honest parallel cell. */
 const SHIPPED = SWEEP.find((c) => c.label.includes('what ships'))
@@ -164,8 +197,13 @@ const SHIPPED = SWEEP.find((c) => c.label.includes('what ships'))
  * over Robert's desktop.
  */
 const SOFTWARE_CEILING_PX = 1920 * 1088
-const cellsFor = (width, height) =>
-  width * height > SOFTWARE_CEILING_PX ? SWEEP.filter((c) => !c.label.includes('PREFER-SOFTWARE')) : SWEEP
+/** `--only=<substring>` runs just the cells whose label contains it. A hung
+ *  cell takes the whole sweep's output with it, so isolate before believing. */
+const ONLY = arg('only', '')
+const cellsFor = (width, height) => {
+  const base = width * height > SOFTWARE_CEILING_PX ? SWEEP.filter((c) => !c.label.includes('PREFER-SOFTWARE')) : SWEEP
+  return ONLY ? base.filter((c) => c.label.toLowerCase().includes(ONLY.toLowerCase())) : base
+}
 
 /**
  * One worker, two protocols: `sweep` runs a list of cells back to back;
@@ -247,6 +285,40 @@ function painter(canvas, ctx, width, height) {
 }
 
 /**
+ * Encode a ring and decode it straight back, to get GPU-backed NV12 frames of
+ * the SAME pictures. Near-lossless (qp10) so the content stays as expensive to
+ * encode as the canvas version — this is a FORMAT experiment, not a quality one.
+ */
+async function roundTrip(ring, width, height) {
+  const chunks = [];
+  let desc = null;
+  let err = null;
+  const enc = new VideoEncoder({
+    output: (c, meta) => {
+      if (meta && meta.decoderConfig && !desc) desc = meta.decoderConfig;
+      chunks.push(c);
+    },
+    error: (e) => { err = e.message; },
+  });
+  const codec = await resolveCodec({ codec: 'avc1.640028', width, height, framerate: 30, bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' });
+  if (!codec) return { error: 'no codec for the round trip' };
+  enc.configure({ codec, width, height, framerate: 30, bitrateMode: 'quantizer', hardwareAcceleration: 'prefer-hardware' });
+  for (const f of ring) enc.encode(f, { quantizer: 10 });
+  await enc.flush();
+  enc.close();
+  if (err) return { error: err };
+  const frames = [];
+  const dec = new VideoDecoder({ output: (f) => frames.push(f), error: (e) => { err = e.message; } });
+  dec.configure(desc || { codec, codedWidth: width, codedHeight: height });
+  for (const c of chunks) dec.decode(c);
+  await dec.flush();
+  dec.close();
+  if (err) return { error: err };
+  if (!frames.length) return { error: 'the decoder returned nothing' };
+  return { frames, format: frames[0].format };
+}
+
+/**
  * THE FRAMES ARE PAINTED ONCE, BEFORE THE CLOCK STARTS (2026-09-04).
  *
  * The loop used to paint every frame it encoded — a gradient plus 300 rects at
@@ -272,10 +344,25 @@ async function prepare(cell, width, height) {
   const { family, ...rest } = seed;
   const config = { ...rest, codec };
   // The ring: RING distinct pictures, drawn before anything is timed.
-  const ring = [];
+  let ring = [];
   for (let i = 0; i < RING; i++) {
     paint(i);
-    ring.push(new VideoFrame(canvas, { timestamp: (i * 1e6) / 30 }));
+    ring.push(new VideoFrame(canvas, { timestamp: (i * 1e6) / 30, alpha: cell.alpha || 'keep' }));
+  }
+  // WHAT THE ENCODER IS ACTUALLY HANDED. A canvas frame is RGBA; VideoToolbox
+  // encodes NV12, so Chrome converts 5.9 Mpx per frame on the way in. A
+  // decoder's output is ALREADY NV12 and GPU-backed, which is what the render
+  // would hand over if the compositor kept the capture's own format. Round-trip
+  // the ring through encode+decode to get exactly that, and the difference
+  // between the two cells IS the conversion.
+  if (cell.ring === 'nv12') {
+    // A HARDWARE DECODER'S POOL IS SMALL. Holding twelve 3024x1964 output
+    // frames open never lets it recycle a buffer and flush() never returns —
+    // that hung the whole sweep once. Four is inside every pool seen here.
+    const rt = await roundTrip(ring.slice(0, 4), width, height);
+    if (rt.error) return { error: 'nv12 ring: ' + rt.error };
+    for (const f of ring) f.close();
+    ring = rt.frames;
   }
   const box = { out: 0, bytes: 0, err: null };
   const enc = new VideoEncoder({
@@ -284,13 +371,13 @@ async function prepare(cell, width, height) {
   });
   try { enc.configure(config); } catch (e) { return { error: 'configure threw: ' + e.message }; }
   for (let i = 0; i < 6; i++) {
-    const f = ring[i % RING].clone();
+    const f = ring[i % ring.length].clone();
     enc.encode(f, qp === undefined ? undefined : { quantizer: qp });
     f.close();
   }
   await enc.flush();
   if (box.err) return { error: box.err };
-  return { enc, box, ring, codec, qp, queue, label: cell.label };
+  return { enc, box, ring, codec, qp, queue, fmt: ring[0].format, label: cell.label };
 }
 
 /** The measured loop: the same shape render.ts drives through mediabunny. */
@@ -301,7 +388,7 @@ async function run(st, frames) {
   const t0 = performance.now();
   for (let i = 0; i < frames; i++) {
     // Same picture, its own instant: a repeated timestamp is not a stream.
-    const f = new VideoFrame(ring[i % RING], { timestamp: ((i + 6) * 1e6) / 30 });
+    const f = new VideoFrame(ring[i % ring.length], { timestamp: ((i + 6) * 1e6) / 30 });
     enc.encode(f, qp === undefined ? undefined : { quantizer: qp });
     f.close();
     // What render.ts does through mediabunny: hold the queue to a small depth,
@@ -321,6 +408,7 @@ async function run(st, frames) {
   return {
     label: st.label,
     codec: st.codec,
+    fmt: st.fmt,
     fps: Math.round((frames / (ms / 1000)) * 10) / 10,
     perFrameMs: Math.round((ms / frames) * 1000) / 1000,
     waitPct: Math.round((waited / ms) * 100),
@@ -494,7 +582,7 @@ try {
 
     console.log(`\nENCODER THROUGHPUT AT ${WIDTH}x${HEIGHT}, ${FRAMES} frames per cell, in a worker\n`)
     console.log(
-      `  ${pad('config', 54)} ${pad('fps', 8)} ${pad('ms/frame', 10)} ${pad('queue-wait', 11)} ${pad('kB/frame', 10)} level`,
+      `  ${pad('config', 54)} ${pad('fps', 8)} ${pad('ms/frame', 10)} ${pad('queue-wait', 11)} ${pad('kB/frame', 10)} ${pad('in', 8)} level`,
     )
     for (const r of rows) {
       if (r.error) {
@@ -502,7 +590,7 @@ try {
         continue
       }
       console.log(
-        `  ${pad(r.label, 54)} ${pad(r.fps, 8)} ${pad(r.perFrameMs, 10)} ${pad(r.waitPct + '%', 11)} ${pad(r.kbPerFrame, 10)} ${r.codec}`,
+        `  ${pad(r.label, 54)} ${pad(r.fps, 8)} ${pad(r.perFrameMs, 10)} ${pad(r.waitPct + '%', 11)} ${pad(r.kbPerFrame, 10)} ${pad(r.fmt || '?', 8)} ${r.codec}`,
       )
     }
     const best = rows.filter((r) => !r.error).sort((a, b) => b.fps - a.fps)[0]
