@@ -23,9 +23,16 @@
  * of this answer that means anything.
  *
  *   node scripts/editor-drag-cost.mjs [--url=http://localhost:5174] [--take=25]
+ *   node scripts/editor-drag-cost.mjs --j5      # the render an EDIT started
  *
  * Needs a dev server already serving the build under test (the mirror on 5174,
  * or the deployed URL). Leaves nothing running.
+ *
+ * J5 (2026-09-04) asks the same question of a different job: the render is
+ * started by the edit rather than by the stop, so `--j5` makes one (a frame
+ * preset — a pixel edit that invalidates every chunk), waits out the 1.2 s
+ * settle, and drags against THAT. Its gate is `gate30ms`: zero ticks more than
+ * 30 ms late while the render works.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -38,9 +45,29 @@ const arg = (name, dflt) => {
   return hit ? hit.slice(name.length + 3) : dflt
 }
 const BASE = arg('url', 'http://localhost:5174')
-const TAKE_SEC = Number(arg('take', '25'))
 const DRAG_SEC = Number(arg('drag', '8'))
-const QUERY = arg('query', 'synthetic=1&qstep=max&screensize=3024x1964&prerender=1')
+/**
+ * J5 MODE — the render started by an EDIT, which is the one J5 has to answer
+ * for. The lanes are otherwise identical; what changes is what is running while
+ * the hand drags:
+ *   --j5   click a frame preset (a PIXEL edit, and one that invalidates every
+ *          chunk — J1 measured a background change at 180 of 180 — so the job
+ *          is still working right through the drag), wait out the 1.2 s settle,
+ *          then drag; then wait for the job and drag again as the control.
+ * DEFAULT SIZE, and read this before changing it: G8 (2026-09-04) measured a
+ * SYNTHETIC source at 3024x1964@60 killing the tab 14-28 s into a take, four
+ * runs of four, and this script's takes sit inside that window. So J5 mode
+ * records at 1920x1080 / 1080p, where the same rig survives.
+ */
+const J5 = args.includes('--j5')
+const TAKE_SEC_DEFAULT = J5 ? 40 : 25
+const QUERY = arg(
+  'query',
+  J5
+    ? 'synthetic=1&qstep=1080p&screensize=1920x1080&prerender=1&bgrender=1'
+    : 'synthetic=1&qstep=max&screensize=3024x1964&prerender=1',
+)
+const TAKE_SEC = Number(arg('take', String(TAKE_SEC_DEFAULT)))
 
 /** The ticker AND the drag, in the page, for a fixed window. */
 const MEASURE = (ms) => `
@@ -145,6 +172,31 @@ async function main() {
     out.sizeProbeDone = chrome.consoleLines.some((l) => l.includes('size probe'))
     await sleep(1000)
 
+    /**
+     * J5: MAKE THE EDIT, AND MEASURE THE DRAG AGAINST THE RENDER IT STARTED.
+     *
+     * A frame preset is one click, it is a PIXEL edit (so the export must
+     * render — a trim would be a smart cut and J5 correctly starts nothing for
+     * it), and it invalidates every chunk, so the job is still working right
+     * through the drag instead of finishing inside it.
+     */
+    if (J5) {
+      const clicked = await chrome.evaluate(
+        `(() => {
+           const sw = [...document.querySelectorAll('.frame-bar__swatch')];
+           if (sw.length < 2) return 'no frame swatches — is the editor open?';
+           sw[1].click();
+           return 'ok';
+         })()`,
+      )
+      if (clicked !== 'ok') throw new Error(`could not make an edit: ${clicked}`)
+      out.j5Edit = clicked
+      // The settle is 1.2 s (EDIT_SETTLE_MS); a little past it the job is running.
+      await sleep(2000)
+      out.j5JobStarted = chrome.consoleLines.some((l) => l.includes('the edit settled'))
+      if (!out.j5JobStarted) throw new Error('the edit did not start a background render (bgrender off?)')
+    }
+
     // ---- lane 1: drag WHILE the background render works ----------------------
     const linesBefore = chrome.consoleLines.length
     out.lanes.withJob = await chrome.evaluate(MEASURE(DRAG_SEC * 1000), 120_000)
@@ -172,9 +224,19 @@ async function main() {
 
     const a = out.lanes.withJob
     const b = out.lanes.noJob
+    // Phase 1's editor claim, and J5's own gate: no stall over 30 ms while the
+    // background render works. The MEASURE ticker records every one it sees.
+    out.gate30ms = {
+      withJobSpikes: a.spikes.length,
+      noJobSpikes: b.spikes.length,
+      pass: a.spikes.length === 0,
+      what: 'ticks more than 30 ms late during the drag beside the running render',
+    }
     out.verdict =
+      `${J5 ? 'J5 (edit-started render)' : 'F16b (at-stop render)'}: ` +
       `drag p95 lateness ${b.p95LateMs} ms with nothing running -> ${a.p95LateMs} ms beside the background render ` +
       `(delta ${Math.round((a.p95LateMs - b.p95LateMs) * 10) / 10} ms); worst tick ${b.maxLateMs} -> ${a.maxLateMs} ms; ` +
+      `stalls over 30 ms ${b.spikes.length} -> ${a.spikes.length}; ` +
       `ticker ${b.hz} Hz -> ${a.hz} Hz over ${b.ticks}/${a.ticks} ticks, ${b.moves}/${a.moves} pointermoves`
     console.log(JSON.stringify(out, null, 2))
     console.error(`drag-cost: ${out.verdict}`)

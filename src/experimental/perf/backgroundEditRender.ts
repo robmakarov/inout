@@ -15,9 +15,14 @@
  *   premade     one zoom edit, the settle, the background job, a QUIET MINUTE,
  *               then Export → the press, in ms, against the same edit pressed
  *               cold. This is "there is no visible wait" as a number.
- *   identical   that pre-made file, SHA-256, against a cold foreground render
- *               of the same edit. Byte-identical or the task is not landed:
- *               starting a render earlier may never change what it produces.
+ *   identical   that pre-made file against a cold foreground render of the same
+ *               edit — EVERY PACKET hashed with its timestamp, duration and
+ *               keyframe flag, plus the raw file diff and a control of two cold
+ *               renders against each other. Starting a render earlier may never
+ *               change what it produces. (The raw files are NOT equal and never
+ *               can be: mediabunny stamps `Date.now()` into mvhd/tkhd/mdhd, so
+ *               two foreground renders differ in the same 10 bytes. The control
+ *               is what makes that statement a measurement.)
  *   invalidated a second, small edit (the zoom nudged 400 ms) rendered in the
  *               background over the first one's chunks → how many chunks were
  *               RE-RENDERED against how many were reused. J1's promise, read
@@ -35,6 +40,7 @@
  * Fixture is R2's builder (nativeRender.ts), the same one J1's and J7's rigs
  * use: a manufactured take costs nothing to record and is identical run to run.
  */
+import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { defaultEditState } from '@core/timeline'
 import { exportByBestPath } from '@core/compose/choose'
@@ -90,6 +96,109 @@ async function sha256(blob: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+/**
+ * WHERE two files differ, not merely THAT they do. A hash says "not identical"
+ * and stops; a render that differs in four bytes near the start of the moov is
+ * a container timestamp, and one that differs across the mdat is a different
+ * picture. The gate is only worth having if it can tell those apart.
+ */
+interface ByteDiff {
+  differingBytes: number
+  spans: { at: number; len: number; a: string; b: string }[]
+  size: number
+}
+
+async function byteDiff(a: Blob, b: Blob): Promise<ByteDiff> {
+  const x = new Uint8Array(await a.arrayBuffer())
+  const y = new Uint8Array(await b.arrayBuffer())
+  const n = Math.min(x.length, y.length)
+  const spans: ByteDiff['spans'] = []
+  let differing = 0
+  let i = 0
+  while (i < n) {
+    if (x[i] === y[i]) {
+      i += 1
+      continue
+    }
+    const at = i
+    while (i < n && x[i] !== y[i]) i += 1
+    differing += i - at
+    if (spans.length < 12) {
+      const hex = (u: Uint8Array): string =>
+        [...u.slice(at, Math.min(i, at + 12))].map((v) => v.toString(16).padStart(2, '0')).join('')
+      spans.push({ at, len: i - at, a: hex(x), b: hex(y) })
+    }
+  }
+  differing += Math.abs(x.length - y.length)
+  return { differingBytes: differing, spans, size: x.length }
+}
+
+export interface TrackFingerprint {
+  packets: number
+  keyframes: number
+  bytes: number
+  firstTimestamp: number
+  lastTimestamp: number
+  /** SHA-256 over every packet's bytes AND its timestamp, duration and type. */
+  hash: string
+}
+
+export interface MediaFingerprint {
+  video: TrackFingerprint
+  audio: TrackFingerprint
+}
+
+const EMPTY_TRACK: TrackFingerprint = {
+  packets: 0,
+  keyframes: 0,
+  bytes: 0,
+  firstTimestamp: 0,
+  lastTimestamp: 0,
+  hash: '',
+}
+
+/**
+ * WHAT THE FILE ACTUALLY CARRIES — every packet, in order, with its timestamp,
+ * its duration and whether it is a keyframe. This is what "the same export"
+ * means; the container around it carries a wall clock (see the control below).
+ */
+async function mediaFingerprint(blob: Blob): Promise<MediaFingerprint> {
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  const readTrack = async (
+    track: Awaited<ReturnType<typeof input.getPrimaryVideoTrack>>,
+  ): Promise<TrackFingerprint> => {
+    if (!track) return { ...EMPTY_TRACK }
+    const parts: Uint8Array[] = []
+    const out: TrackFingerprint = { ...EMPTY_TRACK }
+    const sink = new EncodedPacketSink(track)
+    const enc = new TextEncoder()
+    for await (const packet of sink.packets()) {
+      if (out.packets === 0) out.firstTimestamp = packet.timestamp
+      out.lastTimestamp = packet.timestamp
+      out.packets += 1
+      if (packet.type === 'key') out.keyframes += 1
+      out.bytes += packet.data.byteLength
+      parts.push(enc.encode(`${packet.timestamp}|${packet.duration}|${packet.type}|`))
+      parts.push(packet.data)
+    }
+    const total = parts.reduce((a, p) => a + p.byteLength, 0)
+    const all = new Uint8Array(total)
+    let at = 0
+    for (const p of parts) {
+      all.set(p, at)
+      at += p.byteLength
+    }
+    const digest = await crypto.subtle.digest('SHA-256', all)
+    out.hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    return out
+  }
+  const video = await readTrack(await input.getPrimaryVideoTrack())
+  const audio = await readTrack(
+    (await input.getPrimaryAudioTrack()) as Awaited<ReturnType<typeof input.getPrimaryVideoTrack>>,
+  )
+  return { video, audio }
+}
+
 /** One zoom span — a PIXEL edit, which is what forces a render at all. */
 function withZoomAt(edit: EditState, atMs: number): EditState {
   const whole = { xFrac: 0.5, yFrac: 0.5, widthFrac: 1 }
@@ -131,7 +240,20 @@ export interface BackgroundEditRenderReport {
     bytes: number
     verdict: string
   }
-  identical: { premade: string; cold: string; same: boolean; bytesPremade: number; bytesCold: number }
+  identical: {
+    premade: string
+    cold: string
+    same: boolean
+    bytesPremade: number
+    bytesCold: number
+    /** Only when the hashes differ: exactly where, so the cause can be named. */
+    diff: ByteDiff | null
+    /** Two COLD foreground renders of the same edit, against each other. */
+    control: { hash: string; bytes: number; diff: ByteDiff } | null
+    /** Every packet on both sides — the claim the container's clock cannot touch. */
+    media: { premade: MediaFingerprint; cold: MediaFingerprint; same: boolean } | null
+    verdict: string
+  }
   invalidated: {
     rendered: number
     reused: number
@@ -223,7 +345,17 @@ export async function runBackgroundEditRender(
     untouched: { watchedMs: untouchedWatchMs, scheduled: false, jobStarted: false, chunksOnDisk: 0, verdict: '' },
     background: { readyMs: 0, chunksOnDisk: 0, state: 'never started' },
     press: { quietMs, premadeMs: 0, coldMs: 0, ratio: 0, path: '', bytes: 0, verdict: '' },
-    identical: { premade: '', cold: '', same: false, bytesPremade: 0, bytesCold: 0 },
+    identical: {
+      premade: '',
+      cold: '',
+      same: false,
+      bytesPremade: 0,
+      bytesCold: 0,
+      diff: null,
+      control: null,
+      media: null,
+      verdict: '',
+    },
     invalidated: { rendered: 0, reused: 0, total: plan.chunks.length, readyMs: 0, verdict: '' },
     notes,
     error: null,
@@ -281,8 +413,11 @@ export async function runBackgroundEditRender(
     report.press.premadeMs = r1(performance.now() - tPress)
     report.press.path = chosen.path
     report.press.bytes = chosen.result.blob.size
-    report.identical.premade = await sha256(chosen.result.blob)
-    report.identical.bytesPremade = chosen.result.blob.size
+    // Held: the scratch this blob views is the newest finished export's, and the
+    // cold render below is about to become that. Read it now, keep the bytes.
+    const premadeBlob = new Blob([await chosen.result.blob.arrayBuffer()], { type: 'video/mp4' })
+    report.identical.premade = await sha256(premadeBlob)
+    report.identical.bytesPremade = premadeBlob.size
 
     // ---- gate 3: byte-identical to a foreground render of the same edit ----
     // Cold on purpose: the chunks the background job left are cleared, so this
@@ -291,11 +426,53 @@ export async function runBackgroundEditRender(
     const tCold = performance.now()
     const cold = await renderChunked({ recording, edit: zoomEdit, settings })
     report.press.coldMs = r1(performance.now() - tCold)
-    report.identical.cold = await sha256(cold.blob)
-    report.identical.bytesCold = cold.blob.size
+    const coldBlob = new Blob([await cold.blob.arrayBuffer()], { type: 'video/mp4' })
+    report.identical.cold = await sha256(coldBlob)
+    report.identical.bytesCold = coldBlob.size
     report.identical.same =
       report.identical.premade === report.identical.cold &&
       report.identical.bytesPremade === report.identical.bytesCold
+    if (!report.identical.same) report.identical.diff = await byteDiff(premadeBlob, coldBlob)
+
+    /**
+     * THE CONTROL, and it is the whole reason this section is not one hash.
+     * `Date.now()` goes into the container: mediabunny stamps mvhd/tkhd/mdhd
+     * creation and modification times (isobmff-muxer.js, `this.creationTime =
+     * Math.floor(Date.now() / 1000)`), so ANY two renders made seconds apart
+     * differ in those bytes — two foreground renders included. A raw-hash gate
+     * would therefore be red for every export this product has ever made, which
+     * is a gate measuring the clock rather than the render.
+     *
+     * So the claim is proved twice over: the same file diff between TWO COLD
+     * FOREGROUND RENDERS (this control), and the MEDIA — every packet's bytes,
+     * timestamp, duration and keyframe flag — hashed on both sides.
+     */
+    await clearChunks()
+    const control = await renderChunked({ recording, edit: zoomEdit, settings })
+    const controlBlob = new Blob([await control.blob.arrayBuffer()], { type: 'video/mp4' })
+    report.identical.control = {
+      hash: await sha256(controlBlob),
+      bytes: controlBlob.size,
+      diff: await byteDiff(coldBlob, controlBlob),
+    }
+    const mediaPremade = await mediaFingerprint(premadeBlob)
+    const mediaCold = await mediaFingerprint(coldBlob)
+    report.identical.media = {
+      premade: mediaPremade,
+      cold: mediaCold,
+      same: mediaPremade.video.hash === mediaCold.video.hash && mediaPremade.audio.hash === mediaCold.audio.hash,
+    }
+    const diffBytes = report.identical.diff?.differingBytes ?? 0
+    const controlBytes = report.identical.control.diff.differingBytes
+    report.identical.verdict = report.identical.media.same
+      ? report.identical.same
+        ? 'PASS — the pre-made file is the cold render, byte for byte'
+        : `PASS — every packet identical (${mediaCold.video.packets} video, ${mediaCold.audio.packets} audio, ` +
+          `same timestamps, same keyframes); the files differ in ${diffBytes} container bytes, and two cold ` +
+          `foreground renders of the same edit differ in ${controlBytes} of the same (mediabunny stamps Date.now() ` +
+          `into mvhd/tkhd/mdhd)`
+      : `FAIL — the media differs: video ${mediaPremade.video.packets}/${mediaCold.video.packets} packets, ` +
+        `audio ${mediaPremade.audio.packets}/${mediaCold.audio.packets}`
     report.press.ratio = report.press.premadeMs > 0 ? r1(report.press.coldMs / report.press.premadeMs) : 0
     report.press.verdict =
       `press with the export already made ${report.press.premadeMs} ms against a cold ` +

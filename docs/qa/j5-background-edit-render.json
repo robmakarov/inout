@@ -1,0 +1,232 @@
+{
+  "source": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "mbps": 12,
+    "takeSec": 30
+  },
+  "output": {
+    "step": "1080p",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "gopSec": 2.5,
+    "chunks": 12
+  },
+  "untouched": {
+    "watchedMs": 10000,
+    "scheduled": false,
+    "jobStarted": false,
+    "chunksOnDisk": 0,
+    "verdict": "PASS — 10 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
+  },
+  "background": {
+    "readyMs": 10105.3,
+    "chunksOnDisk": 13,
+    "state": "done"
+  },
+  "press": {
+    "quietMs": 60000,
+    "premadeMs": 9,
+    "coldMs": 5855.6,
+    "ratio": 650.6,
+    "path": "render",
+    "bytes": 5194963,
+    "verdict": "press with the export already made 9 ms against a cold 5855.6 ms (650.6x), path=render"
+  },
+  "identical": {
+    "premade": "6e5ac379f8d680f917c6e733bddee1dd613366ebe3a1028a1424f6dd4797a840",
+    "cold": "bd0047683062ce88354aca76fb530a6ca1009078ebd86d431d22ee2402cb4d1e",
+    "same": false,
+    "bytesPremade": 5194963,
+    "bytesCold": 5194963,
+    "diff": {
+      "differingBytes": 10,
+      "spans": [
+        {
+          "at": 5183729,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5183733,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5183845,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5183849,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5183945,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5183949,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5188268,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5188272,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5188368,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        },
+        {
+          "at": 5188372,
+          "len": 1,
+          "a": "b7",
+          "b": "f9"
+        }
+      ],
+      "size": 5194963
+    },
+    "control": {
+      "hash": "6d644b14b2006f34799d996daffe14094f114e407fcdbecf720bae70ce6f9301",
+      "bytes": 5194963,
+      "diff": {
+        "differingBytes": 10,
+        "spans": [
+          {
+            "at": 5183729,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5183733,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5183845,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5183849,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5183945,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5183949,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5188268,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5188272,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5188368,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          },
+          {
+            "at": 5188372,
+            "len": 1,
+            "a": "f9",
+            "b": "ff"
+          }
+        ],
+        "size": 5194963
+      }
+    },
+    "media": {
+      "premade": {
+        "video": {
+          "packets": 900,
+          "keyframes": 12,
+          "bytes": 4724687,
+          "firstTimestamp": 0,
+          "lastTimestamp": 29.967,
+          "hash": "bd81cfeb9d5b776a60ae65478091f7d35c1c28b6548aab98dc5ebf9916286140"
+        },
+        "audio": {
+          "packets": 1410,
+          "keyframes": 1410,
+          "bytes": 458975,
+          "firstTimestamp": 0,
+          "lastTimestamp": 30.059,
+          "hash": "90794fc0cb58b6275fb5b71203efb1dad13a3e93b3cc7e41689699530562442e"
+        }
+      },
+      "cold": {
+        "video": {
+          "packets": 900,
+          "keyframes": 12,
+          "bytes": 4724687,
+          "firstTimestamp": 0,
+          "lastTimestamp": 29.967,
+          "hash": "bd81cfeb9d5b776a60ae65478091f7d35c1c28b6548aab98dc5ebf9916286140"
+        },
+        "audio": {
+          "packets": 1410,
+          "keyframes": 1410,
+          "bytes": 458975,
+          "firstTimestamp": 0,
+          "lastTimestamp": 30.059,
+          "hash": "90794fc0cb58b6275fb5b71203efb1dad13a3e93b3cc7e41689699530562442e"
+        }
+      },
+      "same": true
+    },
+    "verdict": "PASS — every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 10 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
+  },
+  "invalidated": {
+    "rendered": 3,
+    "reused": 9,
+    "total": 12,
+    "readyMs": 2726.9,
+    "verdict": "the zoom moved 400 ms: 3 chunk(s) re-rendered, 9 reused, of 12"
+  },
+  "notes": [
+    "the door said: scheduled 1200 ms after this edit"
+  ],
+  "error": null
+}

@@ -1300,3 +1300,35 @@ yesterday's 5 s chunks would have been concatenated onto a 2.5 s grid under keys
 carries the RESOLVED grid, pinned by keyframeInterval.test.ts.
 `?gop=` and its `/?test` row put 5 s back unchanged, per the rule that the thing being replaced carries
 the switch. Owner: src/core/compose/keyframeInterval.ts.
+
+J5 2026-09-04 — THE EXPORT IS MADE WHILE HE EDITS, AND THE EDITOR NEVER FEELS IT. Robert's ruling
+(robert (27)) executed: the edit-triggered background render is back, on J1's content-keyed chunks, ON
+by default (`?bgrender=`), and J6 is unblocked by it. What ships is ONE DOOR — `core/compose/editRender.ts`
+— because J3's gate was an absence and an absence can only be protected by a rule: opening a take renders
+nothing, an undo back to the take as it opened cancels what was pending, a packet copy or a smart cut
+starts nothing, and a real edit starts one render 1.2 s after it settles. The brake is the one that
+already existed (`?bgpace=`): trickle while a hand is on the editor, paused beside a live take.
+MEASURED, 30 s take at 1080p30, 12 chunks (`npm run exp -- j5`, docs/qa/j5-background-edit-render.json):
+  · AN OPEN, UNTOUCHED EDITOR watched for 10 s — nothing scheduled, no job, 0 chunks on disk. Robert's
+    own objection, and the one gate that must never pass by accident (born red: removing the baseline
+    rule fails 2 of editRender.test.ts's 10).
+  · THE PRESS A QUIET MINUTE LATER: **9 ms against 5,856 ms cold — 650x**. It beats J7's own floor
+    (16.7 ms + 0.5 ms/s = 38 ms at 30 s) because a finished job is JOINED rather than concatenated.
+  · THE FILE IS THE SAME FILE: packet for packet against a cold foreground render of the same edit —
+    900 video packets, 1,410 audio, same timestamps, same keyframes. The raw files differ in 10 bytes and
+    ALWAYS WILL: mediabunny stamps `Date.now()` into mvhd/tkhd/mdhd, and two cold foreground renders of
+    the same edit differ in the same 10. The rig proves that with its own control rather than asserting it.
+  · A SECOND SMALL EDIT (the zoom moved 400 ms) re-rendered **3 chunks of 12 and reused 9**, in 2.7 s.
+  · THE HAND: `node scripts/editor-drag-cost.mjs --j5` — real visible Chrome, 62.6 Hz ticker, a frame
+    preset (which invalidates every chunk) so the job works right through the drag. Drag p95 lateness
+    **1.4 ms with nothing running -> 1.3 ms beside the render**, worst tick 2.7 -> 3.3 ms, **zero stalls
+    over 30 ms on either side**, and the console shows the brake stepping to trickle (20 % duty) as the
+    hand lands. Phase 1's "no editor stall > 30 ms" is met with two orders of magnitude in hand.
+  · Both oracles PASS (v2 sync 49.8/82.0 ms inst 67.3 trim 71.0 export 4.48x; v1 sync 49.5/62.8 ms).
+NOT WIDENED, per J7's own ruling: nothing was cut from prepare, finalize or publish.
+WHAT IT TAKES AWAY: the machine now spends the export's work while he edits instead of after he presses.
+On a take he edits and never exports, that is work nobody asked for — bounded by the brake, by the chunk
+cache, and by the fact that only an edit he MADE can start it.
+NEXT, AND BOTH ARE OWED HIM: J6 (the glued copy stops being encoded) is unblocked and is the ruling's
+second half; O9(b)'s colour default is re-opened by this — its only objection was that 4:4:4 kills
+instant export, and there is no instant path left to kill.
