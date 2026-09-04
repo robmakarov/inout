@@ -214,18 +214,41 @@ const TAB_TITLE = 'INOUT SOAK TONE'
  */
 const TONE_HTML =
   `<!doctype html><meta charset=utf-8><title>${TAB_TITLE}</title>` +
-  `<body style="margin:0;background:#111;color:#eee;font:14px system-ui">` +
-  `<p id=s style="padding:12px">soak tone: starting</p><script>` +
+  `<body style="margin:0;background:#000;overflow:hidden">` +
+  `<canvas id=c style="display:block;width:100vw;height:100vh"></canvas>` +
+  `<div id=s style="position:fixed;left:8px;top:8px;color:#eee;font:14px system-ui"></div>` +
+  `<script>` +
+  // THE PICTURE HAS TO COST THE ENCODER SOMETHING, and the `--real` soak of
+  // 2026-09-05 is why this line exists: it captured a mostly-static screen and
+  // the take fell to 1.5 MB/min, so an hour of it measured memory (which is
+  // H3's subject) while barely loading the encoder at all. A soak that is meant
+  // to stand for a max60 take must give the encoder a picture that changes.
+  `const c=document.getElementById('c'),x=c.getContext('2d');` +
+  `let n=0;` +
+  `function paint(){` +
+  `if(c.width!==innerWidth||c.height!==innerHeight){c.width=innerWidth;c.height=innerHeight}` +
+  `n++;` +
+  // Noise-ish bands that move every frame: cheap to draw, expensive to encode,
+  // and nothing like a still page.
+  `for(let i=0;i<24;i++){` +
+  `const h=(n*3+i*15)%360;` +
+  `x.fillStyle='hsl('+h+',70%,'+(30+((n+i*7)%40))+'%)';` +
+  `x.fillRect(((n*7+i*97)%c.width),(i*c.height/24),c.width/6,c.height/24)}` +
+  `x.fillStyle='#fff';x.font='48px system-ui';` +
+  `x.fillText(new Date().toISOString()+' f'+n,40,c.height/2);` +
+  `}` +
+  // rAF where it runs — a CAPTURED tab keeps rendering even in the background —
+  // and a timer behind it, so a frozen picture is never silent about itself.
+  `function loop(){paint();requestAnimationFrame(loop)}requestAnimationFrame(loop);` +
+  `let lastN=0;setInterval(()=>{if(n===lastN)paint();lastN=n;` +
+  `document.getElementById('s').textContent='soak '+c1.state+' frames '+n;},250);` +
   // A 440 Hz sine at -26 dBFS: audible to the tap, quiet enough that an hour of
   // it is not a torture test of the limiter.
-  `const c=new AudioContext();` +
-  `const o=c.createOscillator(),g=c.createGain();` +
-  `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c.destination);o.start();` +
-  // The text moves every second on purpose: a still page is a compressible one,
-  // and this lane is meant to cost the encoder something.
-  `setInterval(()=>{if(c.state!=='running')c.resume();` +
-  `document.getElementById('s').textContent='soak tone '+c.state+' '+new Date().toISOString();},1000);` +
-  `<\/script></body>`
+  `const c1=new AudioContext();` +
+  `const o=c1.createOscillator(),g=c1.createGain();` +
+  `o.type='sine';o.frequency.value=440;g.gain.value=0.05;o.connect(g);g.connect(c1.destination);o.start();` +
+  `setInterval(()=>{if(c1.state!=='running')c1.resume()},1000);` +
+  `</` + `script></body>`
 
 /** Chrome's own picker automation, so `getDisplayMedia` is answered by a switch
  *  rather than by a native dialog nothing can reach. Same recipe, same reasons,
