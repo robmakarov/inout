@@ -339,6 +339,15 @@ Robert 2026-08-29: "I WANT 100% COLORS". Instrument: `sh scripts/gate.sh node sc
 (rig `exp o9draw`, src/experimental/perf/drawCeiling.ts, evidence docs/qa/o9-colour.json). The chain
 rig is still X15(c) (`exp x15c`, CHROMA_BASELINE composite 70.3 / blue 75.2).
 
+ORIGIN, so nobody re-labels this task again: O9 was born 2026-08-22 as **TEXT-PERFECT ENCODING** —
+DECISIONS robert (3), "text is important" → "4:4:4 where hw, AV1 screen-content tools, near-lossless
+static spans, text-fringe oracle metric". "I WANT 100% COLORS" (2026-08-29) is the SAME defect named
+again: 4:2:0 keeps one chroma sample per 2x2 block, which on a one-pixel glyph stroke reads as a fringe
+and a mushy edge. FRINGE IS THE TASK'S OWN METRIC and it is the one that decides it. Robert 2026-09-04,
+asked whether high quality needs this at all: the codec table answers it — 3x the BITRATE on 4:2:0 moves
+the fringe 9.45 → 9.08, i.e. nothing, and (a) proved resolution does nothing either. Fringe is a property
+of the FORMAT, not a quality dial; nothing you can turn up reaches it.
+
 (a) ALIGNED SUPERSAMPLING IN THE DRAW — **BUILT, MEASURED, REMOVED THE SAME DAY. Do not build it again.**
 The premise was that the export SAMPLES a source bigger than the file with one bilinear `drawImage`.
 It does, and it costs almost nothing: a 1:1 draw of a 3024-wide source into 1080p keeps **99.8 %** of the
@@ -378,6 +387,16 @@ G6's confirmation rule doing its job; `git diff main` on instant.ts, smartCut.ts
 EMPTY, so there is nothing in those paths that could have moved) · 1,213 unit tests + typecheck green.
 WHAT IS LEFT: Robert looks at `~/Downloads/inout-o9` and says whether the default moves, and for which
 destinations. NOTHING ELSE IN THIS TASK IS ENGINEERING.
+THE BROWSER GIVES US NO COLOUR TO RECORD — MEASURED, NOT ARGUED (2026-09-04, re-read out of O4's own
+evidence docs/qa/o4-gpu-residency.json rather than re-run; the headless probe in colourCeiling.ts CANNOT
+answer this, a desktop capture has no picker there). Real `getDisplayMedia` on Robert's screen hands us
+`display 3024x1964 NV12, allocationSize 8,908,704` = **1.5 bytes per pixel**, and a tab hands `I420`.
+Both are 4:2:0; full colour would be 3 bytes/px (the BGRX control at that size is 23,756,544). So a
+CAPTURE-SIDE 4:4:4 rung IS DEAD — there is nothing to capture — and only two levers exist in a browser:
+lose fewer GENERATIONS, and stop subsampling at the export. `?colour=all` end-to-end lands the export on
+77.8 %, the raw channel's own number, i.e. AT THE BROWSER'S CEILING. Real 100 % is P4's, and this is now
+a measurement on its ledger. STILL UNMEASURED and NOT to be quoted as fact: the "Chrome's ≈20 %, ours
+≈10 %" split — measuredVideo.ts logs the format on every real take, so one take on his machine settles it.
 THE GENERAL FINDING, so no session re-derives it: **the colour is lost to 4:2:0 subsampling, once per
 encode generation, and nowhere else.** Not in the draw, not in the painter, not in the minification. Every
 future colour lever is a chroma-format lever or it is nothing — including on the CAPTURE side, where the
