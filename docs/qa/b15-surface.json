@@ -6,20 +6,80 @@
   "question": "getDisplayMedia on a MONITOR surface: does an audio track come back?",
   "why": "All three field deaths are whole-screen takes. Every negative cell in tabAudioDeath.ts captured a TAB. If the lab cannot ask for monitor audio at all, no lab negative is evidence about the field bug.",
   "cells": [
-    { "name": "legacy", "flags": "--auto-select-desktop-capture-source=Entire screen, ScreenCaptureKit picker features disabled", "video": "3024x1964 monitor (screen:1:0)", "audio": "NONE", "ms": 620 },
-    { "name": "legacy+open", "flags": "same, launched via `open -na` so TCC blames Chrome and not the agent", "video": "3024x1964 monitor", "audio": "NONE", "ms": 525 },
-    { "name": "screen-switch", "flags": "--auto-select-screen-capture-source=Entire screen (newer than the switch every rig here uses)", "video": "3024x1964 monitor", "audio": "NONE", "ms": 530 },
-    { "name": "screen-switch-0", "flags": "--auto-select-screen-capture-source=0", "video": "3024x1964 monitor", "audio": "NONE", "ms": 427 },
-    { "name": "catap", "flags": "+ --enable-features=MacCatapLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride", "video": "3024x1964 monitor", "audio": "NONE", "ms": 437 },
-    { "name": "sck", "flags": "native macOS picker left ON", "video": null, "audio": null, "error": "PICKER NEVER ANSWERED (30s)" },
-    { "name": "fakeui", "flags": "--use-fake-ui-for-media-stream", "error": "NotReadableError: Could not start video source" },
-    { "name": "tab (control)", "flags": "--auto-accept-this-tab-capture, preferCurrentTab", "video": "1800x1220 browser", "audio": "YES — label \"Tab audio\", ch=1, sr=48000, latency 0.01", "ms": 157 }
+    {
+      "name": "legacy",
+      "flags": "--auto-select-desktop-capture-source=Entire screen, ScreenCaptureKit picker features disabled",
+      "video": "3024x1964 monitor (screen:1:0)",
+      "audio": "NONE",
+      "ms": 620
+    },
+    {
+      "name": "legacy+open",
+      "flags": "same, launched via `open -na` so TCC blames Chrome and not the agent",
+      "video": "3024x1964 monitor",
+      "audio": "NONE",
+      "ms": 525
+    },
+    {
+      "name": "screen-switch",
+      "flags": "--auto-select-screen-capture-source=Entire screen (newer than the switch every rig here uses)",
+      "video": "3024x1964 monitor",
+      "audio": "NONE",
+      "ms": 530
+    },
+    {
+      "name": "screen-switch-0",
+      "flags": "--auto-select-screen-capture-source=0",
+      "video": "3024x1964 monitor",
+      "audio": "NONE",
+      "ms": 427
+    },
+    {
+      "name": "catap",
+      "flags": "+ --enable-features=MacCatapLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride",
+      "video": "3024x1964 monitor",
+      "audio": "NONE",
+      "ms": 437
+    },
+    {
+      "name": "sck",
+      "flags": "native macOS picker left ON",
+      "video": null,
+      "audio": null,
+      "error": "PICKER NEVER ANSWERED (30s)"
+    },
+    {
+      "name": "fakeui",
+      "flags": "--use-fake-ui-for-media-stream",
+      "error": "NotReadableError: Could not start video source"
+    },
+    {
+      "name": "tab (control)",
+      "flags": "--auto-accept-this-tab-capture, preferCurrentTab",
+      "video": "1800x1220 browser",
+      "audio": "YES — label \"Tab audio\", ch=1, sr=48000, latency 0.01",
+      "ms": 157
+    }
   ],
-  "constraintsAsked": { "video": true, "audio": true, "systemAudio": "include" },
+  "constraintsAsked": {
+    "video": true,
+    "audio": true,
+    "systemAudio": "include"
+  },
   "verdict": "NO CHROME SWITCH GIVES A MONITOR SHARE AN AUDIO TRACK ON THIS MACHINE. Only the native macOS picker has the box that turns it on, and no switch can answer that picker (30 s, every time). So the lab's screen lane structurally cannot carry the channel that dies in the field, and every negative tabAudioDeath cell is about the OTHER path.",
   "twoPathsAreDifferent": {
-    "tabAudio": { "label": "Tab audio", "reportedLatencyMs": 10, "measuredHere": "0.01 s (0.003 s at 44.1 kHz in the tabaudio rig)", "what": "Chrome's per-renderer mix" },
-    "monitorAudio": { "label": "unknown — no take ever recorded it", "reportedLatencyMs": 20, "measuredOn": "rec_tcjr3v2cskgd, Robert's disk", "what": "the machine's own loopback; Chrome 152 ships CatapAudioInputStream, a Core Audio process tap, behind kMacCatapLoopbackAudioForScreenShare" }
+    "tabAudio": {
+      "label": "Tab audio",
+      "reportedLatencyMs": 10,
+      "measuredHere": "0.01 s (0.003 s at 44.1 kHz in the tabaudio rig)",
+      "what": "Chrome's per-renderer mix"
+    },
+    "monitorAudio": {
+      "label": "unknown — no take ever recorded it",
+      "reportedLatencyMs": 20,
+      "measuredOn": "rec_tcjr3v2cskgd, Robert's disk",
+      "what": "the machine's own loopback; Chrome 152 ships CatapAudioInputStream, a Core Audio process tap, behind kMacCatapLoopbackAudioForScreenShare"
+    }
   },
   "tccNote": "A node-spawned Chrome is DENIED macOS Screen Recording — tccd attributes the request to the responsible process, which is com.anthropic.claude-code, not Chrome. `launchChrome({viaOpen:true})` (`open -na`) is the lane that works, and memory-slope/gpu-residency/painter-parity already use it.",
   "whatWouldUnlockIt": "One Accessibility grant on this machine (System Settings → Privacy & Security → Accessibility) would let System Events click the native picker; without it osascript answers -25211 and CGEvent posting is refused the same way. That is Robert's tick, not an agent's.",
@@ -32,5 +92,19 @@
     "audibleAtMs": 38186,
     "audibleAfterSoundReturnedMs": 186,
     "reading": "the tone ran 0-8 s, the gap 8-38 s, video2 from 38 s. The product convicted 10.1 s after the sound stopped and cleared 186 ms after it came back. Before this it said nothing at all, for as long as the take ran."
+  },
+  "bandOnScreen": {
+    "rig": "node scripts/b15-band.mjs (~55 s, headed, makes a sound)",
+    "what": "the whole chain on the DEPLOYED build — a real take of a real tab that really goes quiet, read off the screen rather than the engine",
+    "build": "8cff2068",
+    "take": "rec_2aigv4skanda, 21.3 s, screen + tab audio",
+    "soundRecordedFirstMs": 10000,
+    "bandWhileSounding": "absent (correct)",
+    "bandAppearedAfterSilenceMs": 11025,
+    "bandText": "Tab Audio stopped making sound — the source is still connected and sending nothing. Tap its chip off and on to reconnect it.",
+    "bandClearedAfterSoundReturnedMs": 502,
+    "card": "rec_2aigv4skanda · 21.3s · build 8cff2068 · RED — audio-continuity: tab audio was digital zeros for 11.1s of 21.2s (52.1%)",
+    "note": "it says \"tab audio\" here and that is CORRECT — this cell captures a browser surface. A monitor share now reads \"system audio\", which is what Robert's takes are.",
+    "threeRunsItTookToGetThere": "the rig failed three times before it measured anything, and each failure was the rig's: a camera chip that would not toggle from CDP hung the arm on `camera start` forever (no take at all), --use-fake-device-for-media-stream hijacked getDisplayMedia into a fake monitor, and a data: tone tab was never matched by --auto-select-tab-capture-source-by-title. Setting `inout.capture.prefs` in localStorage and reloading is what made the take reproducible."
   }
 }
