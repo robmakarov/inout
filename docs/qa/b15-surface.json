@@ -1,0 +1,36 @@
+{
+  "task": "B15 — the tab/system-audio death: can the lab reach the surface it happens on?",
+  "when": "2026-09-05",
+  "machine": "Robert's M3, macOS 26 (Darwin 25.6.0), Chrome 152.0.7977.75",
+  "rig": "node scripts/b15-surface.mjs [cells…]",
+  "question": "getDisplayMedia on a MONITOR surface: does an audio track come back?",
+  "why": "All three field deaths are whole-screen takes. Every negative cell in tabAudioDeath.ts captured a TAB. If the lab cannot ask for monitor audio at all, no lab negative is evidence about the field bug.",
+  "cells": [
+    { "name": "legacy", "flags": "--auto-select-desktop-capture-source=Entire screen, ScreenCaptureKit picker features disabled", "video": "3024x1964 monitor (screen:1:0)", "audio": "NONE", "ms": 620 },
+    { "name": "legacy+open", "flags": "same, launched via `open -na` so TCC blames Chrome and not the agent", "video": "3024x1964 monitor", "audio": "NONE", "ms": 525 },
+    { "name": "screen-switch", "flags": "--auto-select-screen-capture-source=Entire screen (newer than the switch every rig here uses)", "video": "3024x1964 monitor", "audio": "NONE", "ms": 530 },
+    { "name": "screen-switch-0", "flags": "--auto-select-screen-capture-source=0", "video": "3024x1964 monitor", "audio": "NONE", "ms": 427 },
+    { "name": "catap", "flags": "+ --enable-features=MacCatapLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride", "video": "3024x1964 monitor", "audio": "NONE", "ms": 437 },
+    { "name": "sck", "flags": "native macOS picker left ON", "video": null, "audio": null, "error": "PICKER NEVER ANSWERED (30s)" },
+    { "name": "fakeui", "flags": "--use-fake-ui-for-media-stream", "error": "NotReadableError: Could not start video source" },
+    { "name": "tab (control)", "flags": "--auto-accept-this-tab-capture, preferCurrentTab", "video": "1800x1220 browser", "audio": "YES — label \"Tab audio\", ch=1, sr=48000, latency 0.01", "ms": 157 }
+  ],
+  "constraintsAsked": { "video": true, "audio": true, "systemAudio": "include" },
+  "verdict": "NO CHROME SWITCH GIVES A MONITOR SHARE AN AUDIO TRACK ON THIS MACHINE. Only the native macOS picker has the box that turns it on, and no switch can answer that picker (30 s, every time). So the lab's screen lane structurally cannot carry the channel that dies in the field, and every negative tabAudioDeath cell is about the OTHER path.",
+  "twoPathsAreDifferent": {
+    "tabAudio": { "label": "Tab audio", "reportedLatencyMs": 10, "measuredHere": "0.01 s (0.003 s at 44.1 kHz in the tabaudio rig)", "what": "Chrome's per-renderer mix" },
+    "monitorAudio": { "label": "unknown — no take ever recorded it", "reportedLatencyMs": 20, "measuredOn": "rec_tcjr3v2cskgd, Robert's disk", "what": "the machine's own loopback; Chrome 152 ships CatapAudioInputStream, a Core Audio process tap, behind kMacCatapLoopbackAudioForScreenShare" }
+  },
+  "tccNote": "A node-spawned Chrome is DENIED macOS Screen Recording — tccd attributes the request to the responsible process, which is com.anthropic.claude-code, not Chrome. `launchChrome({viaOpen:true})` (`open -na`) is the lane that works, and memory-slope/gpu-residency/painter-parity already use it.",
+  "whatWouldUnlockIt": "One Accessibility grant on this machine (System Settings → Privacy & Security → Accessibility) would let System Events click the native picker; without it osascript answers -25211 and CGEvent posting is refused the same way. That is Robert's tick, not an agent's.",
+  "liveDetector": {
+    "rig": "npm run exp -- tabaudio --keep-audio {\"video1Secs\":8,\"gapSecs\":30,\"video2Secs\":12}",
+    "what": "the same rig, now reporting what the product SAYS while the channel is quiet",
+    "silentAtMs": 18056,
+    "silentAfterMsOfZeros": 10008,
+    "silentAtAttempt": 2,
+    "audibleAtMs": 38186,
+    "audibleAfterSoundReturnedMs": 186,
+    "reading": "the tone ran 0-8 s, the gap 8-38 s, video2 from 38 s. The product convicted 10.1 s after the sound stopped and cleared 186 ms after it came back. Before this it said nothing at all, for as long as the take ran."
+  }
+}

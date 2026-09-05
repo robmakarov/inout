@@ -538,6 +538,12 @@ export interface Recording {
    * is itself the answer to "was this made before or after?".
    */
   buildId?: string
+  /**
+   * B15 — the surface this take captured and where its display audio came
+   * from. Absent on every take made before this field, and on every take with
+   * no screen channel. See CapturedSurface.
+   */
+  capturedSurface?: CapturedSurface
 }
 
 /**
@@ -945,6 +951,43 @@ export type CaptureState = 'armed' | 'recording' | 'paused' | 'stopping' | 'stop
  */
 export type DisplaySurfaceKind = 'monitor' | 'window' | 'browser'
 
+/**
+ * B15 — WHICH SURFACE THE TAKE ACTUALLY CAPTURED, AND WHERE ITS DISPLAY AUDIO
+ * CAME FROM. Read off the delivered tracks at arm, stored on the take.
+ *
+ * Three field takes lost their display audio mid-take and NOTHING IN ANY OF
+ * THEM SAID WHICH AUDIO PATH DIED. It had to be inferred from the pixels — the
+ * macOS menu bar in the frames — and the lab spent every negative cell it ever
+ * ran on the other path: `tabAudioDeath.ts` captures a TAB, and all three of
+ * Robert's deaths were whole-MONITOR shares. They are not the same source.
+ * Chrome's tab audio is a per-renderer mix labelled "Tab audio" reporting 10 ms
+ * of input latency; a monitor share's audio on macOS is the machine's own
+ * loopback (Chrome 152 ships `CatapAudioInputStream`, a Core Audio process
+ * tap), and Robert's take reported 20 ms. The number was in the take all along
+ * and nothing named what it belonged to.
+ *
+ * Measured 2026-09-05 (`scripts/b15-surface.mjs`, this machine, Chrome 152):
+ * a monitor surface answered by ANY Chrome switch — `--auto-select-desktop-
+ * capture-source`, the newer `--auto-select-screen-capture-source`, with the
+ * Catap feature forced on, with `systemAudio: 'include'` asked for — returns
+ * 3024x1964 video and NO AUDIO TRACK AT ALL. Only the native macOS picker,
+ * which no switch can answer, has the box that turns it on. So this field is
+ * how a FIELD take says what a lab take cannot be made to say.
+ */
+export interface CapturedSurface {
+  /** What the picker returned for the display VIDEO track. */
+  kind: DisplaySurfaceKind | null
+  /** That track's own label — "screen:1:0" for a monitor, a
+   *  `web-contents-media-stream://…` URL for a tab. */
+  videoLabel: string | null
+  /** The display AUDIO track's label. Chrome names it, and the name is the
+   *  path: "Tab audio" is the renderer mix, anything else is the machine. */
+  audioLabel: string | null
+  /** …and its device id, which is the same string for a tab's video and audio
+   *  and a different one for the system loopback. */
+  audioDeviceId: string | null
+}
+
 export type CaptureEvent =
   /** `remainingMs` is null when the take is uncapped, which it is by default. */
   | { type: 'tick'; elapsedMs: number; remainingMs: number | null }
@@ -963,6 +1006,23 @@ export type CaptureEvent =
    *  it must stay said: the user is in another tab when this happens. */
   | { type: 'channel-stalled'; kind: ChannelKind }
   | { type: 'channel-resumed'; kind: ChannelKind }
+  /**
+   * B15 — AN AUDIO CHANNEL THAT WAS HEARD AND IS NOW WRITING PURE ZEROS, while
+   * its track is still `live` and unmuted and delivering packets on time.
+   *
+   * The audio twin of 'channel-stalled', and it needs to be its own event
+   * because every liveness path the product had was about FRAMES. Robert's
+   * 5:51 take carried 10.57 s of sound and 195 s of digital silence after it,
+   * and the only thing that ever said so was the editor, after the stop. The
+   * revive ladder knew at +5 s and told nobody.
+   *
+   * Fires once per silent run, after the rescue has tried and failed twice on a
+   * live track — never on silence BEFORE the channel was first heard, which is
+   * a channel that never arrived and is `Recording.missing`'s subject.
+   * 'channel-audible' closes it if sound ever comes back.
+   */
+  | { type: 'channel-silent'; kind: ChannelKind; sinceMs: number; attempts: number }
+  | { type: 'channel-audible'; kind: ChannelKind }
   /**
    * H4 — A VIDEO SOURCE THAT HAS NEVER DELIVERED ONE FRAME. Not the same event
    * as 'channel-stalled' and not the same sentence: a stall is a source that

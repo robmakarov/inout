@@ -5,10 +5,28 @@ import { detectPlatform, type BrowserEngine, type OSName, type PlatformInfo } fr
  *
  * This is engine × OS, not engine, and that distinction is the whole reason the
  * type exists. Chromium on WINDOWS hands over the machine's audio when the user
- * shares a whole monitor; the same Chromium on macOS and Linux only ever gives
- * audio for a tab or window share. Gecko is a third case that reads like a
- * fourth: it ACCEPTS `audio: true` and silently returns video only, so a UI
- * that trusts the constraint shows a channel that records nothing.
+ * shares a whole monitor. Gecko is a third case that reads like a fourth: it
+ * ACCEPTS `audio: true` and silently returns video only, so a UI that trusts
+ * the constraint shows a channel that records nothing.
+ *
+ * THIS TABLE IS A GUESS AND IT IS WRONG ON MACOS (B15, 2026-09-05). It used to
+ * say the same Chromium on macOS "only ever gives audio for a tab or window
+ * share". Robert's `rec_tcjr3v2cskgd` is a whole-MONITOR share — 3024x1964,
+ * the macOS menu bar and the dock in every frame — carrying a stereo 48 kHz
+ * display-audio track. Chrome 152 ships `CatapAudioInputStream`, a Core Audio
+ * process tap, and the native macOS picker has the box that turns it on. Only
+ * that picker does: measured on this machine, a monitor surface answered by
+ * `--auto-select-desktop-capture-source`, by the newer
+ * `--auto-select-screen-capture-source`, with the Catap feature forced on, and
+ * with `systemAudio: 'include'` asked for, returns video and NO AUDIO TRACK
+ * (docs/qa/b15-surface.json).
+ *
+ * So the scope is NOT a property of the browser — it is a property of what the
+ * user picked, which nothing here can know before the picker closes. This stays
+ * as the pre-flight guess (it only ever decides whether to OFFER the channel,
+ * and 'tab' and 'system' both offer it); once a take has a surface,
+ * `channelLabel` reads THAT instead. Do not use this to decide what a live
+ * channel IS.
  */
 export type DisplayAudioScope = 'none' | 'tab' | 'system'
 

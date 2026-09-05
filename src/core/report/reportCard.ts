@@ -417,6 +417,24 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
           )
         }
       }
+      /**
+       * B15 — NAME THE AUDIO PATH BESIDE THE VERDICT.
+       *
+       * A display-audio death reads identically whichever path produced it, and
+       * they are not the same source: Chrome's tab audio is a per-renderer mix
+       * (label "Tab audio", 10 ms reported latency); a monitor share's audio on
+       * macOS is the machine's own loopback (20 ms on the take that named this
+       * task). Every negative lab cell ever run captured a TAB and all three
+       * field deaths were whole-MONITOR shares — a fact nobody could read off a
+       * take, because no take said it. Absent on takes made before this field.
+       */
+      const s = recording.capturedSurface
+      if (s && measured.some((c) => c.kind === 'system-audio')) {
+        notes.push(
+          `display audio came from a ${s.kind ?? 'unknown'} share` +
+            (s.audioLabel ? ` as "${s.audioLabel}"` : ''),
+        )
+      }
       dims.push({
         id: 'audio-continuity',
         status: bad.length ? 'fail' : 'pass',

@@ -1,4 +1,4 @@
-import type { CaptureConfig, ChannelKind, ChannelLoss, SegmentSeam } from '@core/types'
+import type { CaptureConfig, ChannelKind, ChannelLoss, DisplaySurfaceKind, SegmentSeam } from '@core/types'
 import type { Capabilities } from '@core/capabilities'
 import type { IconName } from '@app/components/Icon'
 
@@ -33,14 +33,58 @@ export function isKindSupported(kind: ChannelKind, caps: Capabilities): boolean 
 }
 
 /**
- * What to CALL this channel here (task P1). On Chromium/Windows a whole-monitor
- * share carries the machine's audio, so "Tab Audio" is simply the wrong word;
- * everywhere else it is exactly the right one. The label follows the platform
- * rather than promising the same thing everywhere and being wrong on one.
+ * What to CALL this channel here (task P1, corrected by B15 2026-09-05).
+ *
+ * It used to be engine × OS alone: Chromium on Windows says "System Audio",
+ * everything else says "Tab Audio". THAT IS WRONG ON MACOS AND ROBERT'S OWN
+ * TAKES PROVE IT. `rec_tcjr3v2cskgd` is a whole-MONITOR share — 3024x1964 with
+ * the macOS menu bar and the dock in every frame — carrying a stereo 48 kHz
+ * display-audio track that reported 20 ms of input latency where Chrome's tab
+ * audio reports 10. Chrome 152 ships `CatapAudioInputStream`, a Core Audio
+ * process tap, and the native macOS picker has the box that turns it on. So he
+ * was recording the machine's audio and being told, in the editor, that his
+ * "Tab Audio" had died.
+ *
+ * The capability table cannot know this — the answer is not a property of the
+ * browser, it is a property of WHAT THE USER PICKED — so the surface, when the
+ * take has one, is what decides. A monitor or window share carries the
+ * machine's sound; only a `browser` surface is a tab. Without a surface (before
+ * a take, on a summary screen) the table is still the best guess available.
  */
-export function channelLabel(kind: ChannelKind, caps: Capabilities): string {
-  if (kind === 'system-audio' && caps.displayAudioScope === 'system') return 'System Audio'
+export function channelLabel(
+  kind: ChannelKind,
+  caps: Capabilities,
+  surface?: DisplaySurfaceKind | null,
+): string {
+  if (kind !== 'system-audio') return CHANNEL_META[kind].label
+  if (surface) return surface === 'browser' ? 'Tab Audio' : 'System Audio'
+  if (caps.displayAudioScope === 'system') return 'System Audio'
   return CHANNEL_META[kind].label
+}
+
+/**
+ * B15 — WHAT A CHANNEL THAT WAS HEARD AND IS NOW SILENT SAYS, WHILE THE TAKE
+ * IS STILL RUNNING.
+ *
+ * Not the frozen-source sentence and not the dead-channel one. The source here
+ * is connected, live, unmuted and delivering packets on time; what it is
+ * delivering is digital zeros. The rescue has already been tried twice and this
+ * is the one shape it provably cannot fix — it re-taps a clone of a source that
+ * is itself silent, which is why 12 attempts over 195 s recovered nothing on
+ * the take that named this task.
+ *
+ * So the sentence names the one thing that CAN work: turning the channel off
+ * and on is a gesture, and only a gesture can open the picker a fresh
+ * `getDisplayMedia` needs. WORDING IS ROBERT'S (B4's gate says so) — this is
+ * the proposal, not the ruling.
+ */
+export function silentChannelMessage(
+  kinds: readonly ChannelKind[],
+  caps: Capabilities,
+  surface?: DisplaySurfaceKind | null,
+): string {
+  const names = kinds.map((k) => channelLabel(k, caps, surface)).join(' & ')
+  return `${names} stopped making sound — the source is still connected and sending nothing. Tap its chip off and on to reconnect it.`
 }
 
 /**
@@ -258,13 +302,16 @@ export function takeLosses(
     }
   }[],
   caps: Capabilities,
+  /** B15 — the surface the take captured. Without it a whole-screen take on
+   *  macOS is told its "Tab Audio" died when what died was the machine's. */
+  surface?: DisplaySurfaceKind | null,
 ): TakeLoss[] {
   const out: TakeLoss[] = []
   for (const c of channels) {
     if (c.media !== 'audio') continue
     const d = c.diagnostics
     if (!d) continue
-    const name = channelLabel(c.kind, caps)
+    const name = channelLabel(c.kind, caps, surface)
     const tail = d.silentTailMs ?? 0
     const muted = (d.events ?? []).some((e) => e.type === 'mute')
     const tailShare = c.durationMs > 0 ? tail / c.durationMs : 0

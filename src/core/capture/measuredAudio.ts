@@ -29,7 +29,7 @@ import {
   trackTapBufferMs,
 } from './audioTap'
 import type { AudioTapMsg, AudioTapReply } from './audioTap.worker'
-import { ReviveSchedule } from './reviveSchedule'
+import { ReviveSchedule, SILENCE_CONVICTS_AT_ATTEMPT } from './reviveSchedule'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
 const WORKLET_NAME = 'inout-pcm-capture'
@@ -307,6 +307,23 @@ export async function startMeasuredAudioCapture(opts: {
    * session timeline. `right` aliases `left` for mono sources. Must be cheap
    * and must not throw — it runs on the capture path.
    */
+  /**
+   * B15 — THE CHANNEL WAS HEARD AND IS NOW WRITING PURE ZEROS, said WHILE the
+   * take runs.
+   *
+   * Every liveness path this product had was about frames: a video source that
+   * stops delivering raises 'channel-stalled' and puts a band on screen within
+   * seconds. An audio source that goes dead delivers packets on time, keeps its
+   * track `live` and unmuted, and writes silence — and until this callback the
+   * only thing that ever said so was the editor, after the stop. Robert's 5:51
+   * take carried 195 s of digital zeros and he was told nothing for any of them.
+   *
+   * `silent` fires ONCE per silent run and only after the rescue has tried and
+   * failed twice on a live track — never on silence before the channel was
+   * first heard, which is a channel that never arrived. `audible` closes it.
+   * Runs on the capture path: must be cheap and must not throw.
+   */
+  onSilence?: (state: 'silent' | 'audible', sinceMs: number, attempts: number) => void
   onPcm?: (
     left: Float32Array,
     right: Float32Array,
@@ -341,6 +358,8 @@ export async function startMeasuredAudioCapture(opts: {
    *  once a minute for as long as the take runs, and console work on the thread
    *  carrying the PCM is exactly what a starved audio path cannot afford. */
   let reviveSkipLogged = false
+  /** B15 — has this silent run already been announced? One band per run. */
+  let saidSilent = false
   /**
    * G6(g) — FRAME AT WHICH THE LAST TAP REBUILD HAPPENED, and the whole point
    * of recording it.
@@ -902,6 +921,15 @@ export async function startMeasuredAudioCapture(opts: {
           noteEvent('revive-recovered')
         }
         lastReviveFrame = null
+        // B15: sound is back on a channel we said was dead — close the band.
+        if (saidSilent) {
+          saidSilent = false
+          try {
+            opts.onSilence?.('audible', 0, rev.attempts)
+          } catch {
+            /* a listener must never cost the capture path a batch */
+          }
+        }
         // noteSignal, not reset: this branch is SIGNAL arriving, and only
         // signal may mark the channel as having been heard. The unmute handler
         // calls reset() for the ladder alone (reviveSchedule.ts).
@@ -954,6 +982,32 @@ export async function startMeasuredAudioCapture(opts: {
                 `[capture] ${label} audio input dead (pure silence ${(silentFrames / sampleRate).toFixed(0)}s on a live, ` +
                   `unmuted track) — rebuilt the source tap on a track clone (attempt ${attempt})`,
               )
+              /**
+               * B15 — SAY IT, NOW, NOT IN THE EDITOR.
+               *
+               * Two attempts is the threshold because one is what a genuine
+               * quiet passage looks like: the ladder's first rung is 5 s of
+               * digital zeros, and music has those. By the second rung (10 s)
+               * the rescue has been tried and the source is still handing over
+               * nothing on a track Chrome insists is live — which is the exact
+               * shape of all three field deaths, and the shape the rescue is
+               * known to be unable to fix (it re-taps a clone of a source that
+               * is itself silent). `heardSignal` is what keeps this off a
+               * channel that never arrived: that is Recording.missing's story,
+               * not this one.
+               */
+              if (!saidSilent && rev.heardSignal && attempt >= SILENCE_CONVICTS_AT_ATTEMPT) {
+                saidSilent = true
+                try {
+                  opts.onSilence?.(
+                    'silent',
+                    Math.round((silentFrames / sampleRate) * 1000),
+                    attempt,
+                  )
+                } catch {
+                  /* a listener must never cost the capture path a batch */
+                }
+              }
             } catch (err) {
               noteEvent('revive-failed')
               console.warn(`[capture] ${label} audio tap rebuild failed`, err)

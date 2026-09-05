@@ -1,6 +1,7 @@
 import {
   DEFAULT_EXPORT_SETTINGS,
   type CaptureConfig,
+  type CapturedSurface,
   type ChannelKind,
   type DisplaySurfaceKind,
   type MediaKind,
@@ -46,6 +47,9 @@ export interface AcquiredChannel {
   track: MediaStreamTrack
   /** Screen channel only: which surface the picker returned. */
   surface?: DisplaySurfaceKind
+  /** Screen channel only (B15): the identity of the display tracks — which
+   *  surface, and which audio path came with it. See CapturedSurface. */
+  captured?: CapturedSurface
 }
 
 export interface AcquireFailure {
@@ -995,6 +999,22 @@ async function repairDisplayAudio(track: MediaStreamTrack): Promise<void> {
 
 /** What the user actually picked in the screen picker. Not in every TS DOM lib. */
 type DisplaySurface = DisplaySurfaceKind
+/** A track's own label, or null. Chrome names the display audio path here and
+ *  nowhere else: "Tab audio" is the renderer mix, anything else is the machine. */
+function labelOf(track: MediaStreamTrack | undefined): string | null {
+  const l = track?.label
+  return typeof l === 'string' && l.length > 0 ? l : null
+}
+
+function deviceIdOf(track: MediaStreamTrack | undefined): string | null {
+  try {
+    const id = track?.getSettings().deviceId
+    return typeof id === 'string' && id.length > 0 ? id : null
+  } catch {
+    return null
+  }
+}
+
 function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface | undefined {
   const s = track?.getSettings() as (MediaTrackSettings & { displaySurface?: string }) | undefined
   const v = s?.displaySurface
@@ -1518,6 +1538,16 @@ export function acquireChannelsProgressive(
       for (const t of display.getTracks()) trackDisplayCapture(t)
       const video = display.getVideoTracks()[0]
       const surface = displaySurfaceOf(video)
+      // B15 — WHAT THE PICKER ACTUALLY HANDED OVER, kept on the take. Three
+      // field takes lost their display audio and none of them could say which
+      // audio path it was; the labels below are what say it. Free: both tracks
+      // are already in hand and `getSettings()` is already being read.
+      const capturedSurface: CapturedSurface = {
+        kind: surface ?? null,
+        videoLabel: labelOf(video),
+        audioLabel: labelOf(display.getAudioTracks()[0]),
+        audioDeviceId: deviceIdOf(display.getAudioTracks()[0]),
+      }
       // THE PICKER HAS ANSWERED — say so here, not eight lines and one await
       // further down. `mark('display','done')` used to sit after
       // capDisplayTrack, so up to 1.5 s of our own applyConstraints was still
@@ -1587,6 +1617,7 @@ export function acquireChannelsProgressive(
           stream: new MediaStream([video]),
           track: video,
           surface,
+          captured: capturedSurface,
         })
       }
     } catch (err) {

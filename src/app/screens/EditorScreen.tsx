@@ -451,7 +451,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           whole input has always said so, and still does. */}
       {testPanelEnabled() && (
         <>
-          {takeLosses(recording.channels, detectCapabilities()).map((l) => (
+          {takeLosses(recording.channels, detectCapabilities(), recording.capturedSurface?.kind).map((l) => (
             <div key={`${l.kind}-loss`} className="editor__missing" role="alert">
               {l.message}
             </div>

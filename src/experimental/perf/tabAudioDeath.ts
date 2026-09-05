@@ -42,6 +42,13 @@ export interface TabAudioDeathReport {
   trackEvents: { atMs: number; type: string }[]
   /** track.muted polled once a second — the slow-motion view of the same story. */
   mutedTimeline: { atMs: number; muted: boolean }[]
+  /**
+   * B15 — WHAT THE PRODUCT SAID, AND WHEN. Every 'silent'/'audible' the live
+   * detector raised, stamped from the capture epoch. The gap phase is a channel
+   * that was heard and then went quiet on a live track, which is the shape the
+   * detector exists for: it must convict in the gap and clear in video2.
+   */
+  liveness: { atMs: number; state: 'silent' | 'audible'; sinceMs: number; attempts: number }[]
   measured: { durationMs: number; paddedMs: number; silentTailMs: number } | null
   displayAudioSettings: MediaTrackSettings | null
   error?: string
@@ -160,6 +167,7 @@ export async function runTabAudioDeath(opts?: {
         ],
     trackEvents: [],
     mutedTimeline: [],
+    liveness: [],
     measured: null,
     displayAudioSettings: null,
   }
@@ -243,6 +251,15 @@ export async function runTabAudioDeath(opts?: {
       stream: new MediaStream([audioTrack]),
       epoch,
       label: 'tabcap-rig',
+      // B15 — the live death signal, read in a real browser off a real
+      // getDisplayMedia audio track that really goes quiet.
+      onSilence: (state, sinceMs, attempts) =>
+        report.liveness.push({
+          atMs: Math.round(performance.now() - epoch),
+          state,
+          sinceMs,
+          attempts,
+        }),
       writer: {
         write: async () => undefined,
         close: async () => undefined,

@@ -62,6 +62,7 @@ import type {
   CameraPose,
   CompositeRecording,
   TakeGlue,
+  CapturedSurface,
   DisplaySurfaceKind,
   LatenessSummary,
   MediaKind,
@@ -436,6 +437,8 @@ class Session implements CaptureSession {
   readonly previewStreams: Partial<Record<ChannelKind, MediaStream>> = {}
   /** Which surface the screen picker returned — see DisplaySurfaceKind. */
   displaySurface: DisplaySurfaceKind | null = null
+  /** B15 — the same answer with the AUDIO path in it, stamped on the take. */
+  private capturedSurface: CapturedSurface | null = null
 
   private stateInternal: CaptureState = 'armed'
   private readonly listeners = new Set<(e: CaptureEvent) => void>()
@@ -551,6 +554,8 @@ class Session implements CaptureSession {
    * dead lost nothing new at that instant.
    */
   private readonly losses = new Map<ChannelKind, { atMs: number; reason: 'ended' | 'never-delivered' }>()
+  /** B15 — audio channels currently announced as silent. One band per run. */
+  private readonly silentNow = new Set<ChannelKind>()
   /** H4 harness (`?die=`): cancels the scheduled synthetic track deaths. */
   private cancelDeaths: (() => void) | null = null
   /**
@@ -1017,6 +1022,7 @@ class Session implements CaptureSession {
     this.channels.push(rt)
     this.previewStreams[acq.kind] = acq.stream
     if (acq.kind === 'screen' && acq.surface) this.displaySurface = acq.surface
+    if (acq.kind === 'screen' && acq.captured) this.capturedSurface = acq.captured
     return rt
   }
 
@@ -1421,6 +1427,36 @@ class Session implements CaptureSession {
     const atMs = reason === 'never-delivered' ? 0 : Math.max(0, performance.now() - this.epoch)
     this.losses.set(kind, { atMs, reason })
     console.warn(`[capture] ${kind} lost at +${Math.round(atMs)}ms (${reason}) — the take continues`)
+  }
+
+  /**
+   * B15 — AN AUDIO CHANNEL WENT SILENT MID-TAKE (or came back).
+   *
+   * Deliberately its own pair of events rather than reusing 'channel-stalled':
+   * the stall band says "recording a still image" and offers "re-share your
+   * whole screen", and both are the wrong sentence for a channel whose picture
+   * is perfect and whose sound is gone. What the user can actually do about
+   * this one is turn the channel off and on again — a chip toggle is a gesture,
+   * and only a gesture can open the picker a re-acquire needs. The rescue
+   * cannot: it re-taps a clone of the same silent source, which is why 12
+   * attempts over 195 s recovered nothing on the take that named this task.
+   */
+  private onAudioSilence(
+    kind: ChannelKind,
+    state: 'silent' | 'audible',
+    sinceMs: number,
+    attempts: number,
+  ): void {
+    if (this.stateInternal !== 'recording') return
+    if (this.channels.some((c) => c.kind === kind && c.ended)) return
+    if (state === 'silent') {
+      if (this.silentNow.has(kind)) return
+      this.silentNow.add(kind)
+      this.emit({ type: 'channel-silent', kind, sinceMs, attempts })
+      return
+    }
+    if (!this.silentNow.delete(kind)) return
+    this.emit({ type: 'channel-audible', kind })
   }
 
   /** A video source froze (or came back). The take continues — audio and the
@@ -2200,6 +2236,13 @@ class Session implements CaptureSession {
         audioCtx: ch.audioCtx ?? undefined,
         // H1 harness. An audio channel has no worker, so only `?killenc=`.
         killEncoderInMs: faultDelayMs(ch.kind, 'killenc', performance.now() - this.epoch) ?? undefined,
+        /**
+         * B15 — the audio twin of onSourceLiveness. A source that was heard and
+         * now writes pure zeros on a live, unmuted track is dead in exactly the
+         * way a frozen screen is dead, and until this it was the only kind of
+         * death the product recorded in silence and mentioned after the stop.
+         */
+        onSilence: (state, sinceMs, attempts) => this.onAudioSilence(ch.kind, state, sinceMs, attempts),
         /** H1 — contained exactly as a video encoder death is (see there). */
         onFatal: (err) => {
           if (this.stateInternal !== 'recording') return
@@ -3554,6 +3597,10 @@ class Session implements CaptureSession {
       // which, so a fixed defect could be re-investigated off a take made before
       // the fix landed.
       buildId: buildId(),
+      // B15: which surface this take captured and where its display audio came
+      // from. Three field takes died on a path the lab had never once run, and
+      // nothing in any of them said which path it was.
+      ...(this.capturedSurface ? { capturedSurface: this.capturedSurface } : null),
       // UI1: the pose the composite was written with, so the editor opens on
       // the composition this take actually holds.
       ...(this.cameraPose ? { cameraPose: this.cameraPose } : null),

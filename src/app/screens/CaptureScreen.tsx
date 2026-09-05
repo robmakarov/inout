@@ -34,6 +34,7 @@ import {
   CONFIG_KEY,
   containedChannelMessage,
   deadChannelMessage,
+  silentChannelMessage,
   endedChannelMessage,
   isKindSupported,
   unsupportedReason,
@@ -241,6 +242,8 @@ export function CaptureScreen() {
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
+  /** B15 — audio channels that were heard and are now writing digital zeros. */
+  const [silent, setSilent] = useState<ChannelKind[]>([])
   /** H4: connected, healthy by the browser's word, delivering nothing. */
   const [deadChannels, setDeadChannels] = useState<ChannelKind[]>([])
   /** H1 — kinds whose encoder, worker or recorder died and was contained. */
@@ -455,6 +458,16 @@ export function CaptureScreen() {
           break
         case 'channel-notice':
           toast(e.message)
+          break
+        // B15 — the source is handing over nothing and the rescue has already
+        // failed twice on a live track. Said HERE, at ~12 s, instead of in the
+        // editor after the stop: Robert's 5:51 take wrote 195 s of digital
+        // zeros and nothing on this screen ever mentioned it.
+        case 'channel-silent':
+          setSilent((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
+          break
+        case 'channel-audible':
+          setSilent((s) => s.filter((k) => k !== e.kind))
           break
         case 'channel-stalled':
           setStalled((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
@@ -783,6 +796,9 @@ export function CaptureScreen() {
 
   const anyOn = CHANNEL_KINDS.some((k) => prefs[CONFIG_KEY[k]] && isKindSupported(k, caps))
 
+  // B15: what the picker actually returned decides what this channel is
+  // CALLED — a monitor share carries the machine's sound, not a tab's.
+  const displaySurface = session?.displaySurface ?? null
   const screenStream = session?.previewStreams.screen
   const cameraStream = session?.previewStreams.camera
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
@@ -1034,6 +1050,7 @@ export function CaptureScreen() {
       )}
       {recording &&
         (stalled.length > 0 ||
+          silent.length > 0 ||
           deadChannels.length > 0 ||
           endedMidTake.length > 0 ||
           contained.length > 0) && (
@@ -1044,6 +1061,7 @@ export function CaptureScreen() {
               image. Re-share your whole screen to fix it.
             </div>
           )}
+          {silent.length > 0 && <div>{silentChannelMessage(silent, caps, displaySurface)}</div>}
           {deadChannels.length > 0 && <div>{deadChannelMessage(deadChannels, caps)}</div>}
           {endedMidTake.length > 0 && <div>{endedChannelMessage(endedMidTake, caps)}</div>}
           {contained.length > 0 && <div>{containedChannelMessage(contained, caps)}</div>}

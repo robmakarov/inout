@@ -48,6 +48,16 @@ export const REVIVE_BASE_SEC = 5
  *  one minute instead of "the rest of the take", and costs one clone swap a
  *  minute on a channel with genuinely nothing playing. */
 export const REVIVE_CEILING_SEC = 60
+/**
+ * B15 — how many failed rescue attempts in one silent run before the product
+ * SAYS the channel is dead while the take is still running.
+ *
+ * The first rung is 5 s of pure digital zeros, which real music has; the second
+ * is 10 s, by which point the rescue has been tried on a live, unmuted track
+ * and the source is still handing over nothing. That is the shape of all three
+ * field deaths, and the one shape the rescue provably cannot fix.
+ */
+export const SILENCE_CONVICTS_AT_ATTEMPT = 2
 
 /**
  * One silent run's worth of scheduling state. Frames, not milliseconds: the
