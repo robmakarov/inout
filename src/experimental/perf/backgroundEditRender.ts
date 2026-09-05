@@ -45,13 +45,15 @@ import { blobStore } from '@core/store'
 import { defaultEditState } from '@core/timeline'
 import { exportByBestPath } from '@core/compose/choose'
 import { getLastChunkedRenderStats } from '@core/compose/pipeline'
-import { describePlan, renderChunked } from '@core/compose/chunkedRender'
+import { ChunkedRenderUnavailable, describePlan, renderChunked } from '@core/compose/chunkedRender'
 import { CHUNK_PART_PREFIX, CHUNK_PREFIX } from '@core/compose/chunkStore'
 import { cancelEditRender, noteEditorEdit, editRenderPending, EDIT_SETTLE_MS } from '@core/compose/editRender'
 import { cancelPrerender, prerenderKey, prerenderStatus } from '@core/compose/prerender'
+import { currentRenderFlags, type RenderFlagPrint } from '@core/compose/chunkPlan'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
+import { renderExport } from '@core/compose/render'
 import { newId } from '@core/id'
-import type { EditState, Recording } from '@core/types'
+import type { EditState, ExportResult, ExportSettings, Recording } from '@core/types'
 import { buildAudioFile, buildChannelFile, channel, existingFixture, fixtureKey } from './nativeRender'
 
 export interface BackgroundEditRenderOptions {
@@ -89,6 +91,33 @@ async function countChunks(): Promise<number> {
   let n = 0
   for (const f of await blobStore.list()) if (f.key.startsWith(CHUNK_PREFIX)) n += 1
   return n
+}
+
+/**
+ * THE COLD FOREGROUND RENDER, WITH THE PRODUCT'S OWN FALLBACK UNDER IT.
+ *
+ * Gates 3 and 4 used to call `renderChunked` bare, which is only the same thing
+ * the product does while the chunked path is AVAILABLE. It is not always: under
+ * O9(b)'s `?colour=all`, `renderChunked` declines by name (its concatenation
+ * muxes one AVC track and a full-colour render encodes AV1) and pipeline.ts
+ * falls through to the unbroken render. A rig that stops at the decline is
+ * measuring its own shortcut rather than the export, so this is the same two
+ * lines pipeline.ts has — chunked, then unbroken on `ChunkedRenderUnavailable`.
+ *
+ * At 4:2:0 — every J5 number ever quoted — the first call succeeds and nothing
+ * about this rig moves.
+ */
+async function coldRender(args: {
+  recording: Recording
+  edit: EditState
+  settings: ExportSettings
+}): Promise<{ result: ExportResult; path: 'chunked' | 'unbroken' }> {
+  try {
+    return { result: await renderChunked(args), path: 'chunked' }
+  } catch (err) {
+    if (!(err instanceof ChunkedRenderUnavailable)) throw err
+    return { result: await renderExport(args), path: 'unbroken' }
+  }
 }
 
 async function sha256(blob: Blob): Promise<string> {
@@ -218,6 +247,8 @@ function withZoomAt(edit: EditState, atMs: number): EditState {
 export interface BackgroundEditRenderReport {
   source: { width: number; height: number; fps: number; mbps: number; takeSec: number }
   output: { step: QualityTierId; width: number; height: number; fps: number; gopSec: number; chunks: number }
+  /** What was in force. O9(b) reads `fullColour` off this run rather than trusting the command line. */
+  flags: RenderFlagPrint
   untouched: {
     watchedMs: number
     scheduled: boolean
@@ -237,6 +268,8 @@ export interface BackgroundEditRenderReport {
     coldMs: number
     ratio: number
     path: string
+    /** Which render the cold press actually ran — 'unbroken' whenever chunked declined. */
+    coldPath: string
     bytes: number
     verdict: string
   }
@@ -342,9 +375,10 @@ export async function runBackgroundEditRender(
       gopSec: plan.gopSec,
       chunks: plan.chunks.length,
     },
+    flags: currentRenderFlags(),
     untouched: { watchedMs: untouchedWatchMs, scheduled: false, jobStarted: false, chunksOnDisk: 0, verdict: '' },
     background: { readyMs: 0, chunksOnDisk: 0, state: 'never started' },
-    press: { quietMs, premadeMs: 0, coldMs: 0, ratio: 0, path: '', bytes: 0, verdict: '' },
+    press: { quietMs, premadeMs: 0, coldMs: 0, ratio: 0, path: '', coldPath: '', bytes: 0, verdict: '' },
     identical: {
       premade: '',
       cold: '',
@@ -424,9 +458,10 @@ export async function runBackgroundEditRender(
     // is the render that would have happened if J5 had never run.
     await clearChunks()
     const tCold = performance.now()
-    const cold = await renderChunked({ recording, edit: zoomEdit, settings })
+    const cold = await coldRender({ recording, edit: zoomEdit, settings })
     report.press.coldMs = r1(performance.now() - tCold)
-    const coldBlob = new Blob([await cold.blob.arrayBuffer()], { type: 'video/mp4' })
+    report.press.coldPath = cold.path
+    const coldBlob = new Blob([await cold.result.blob.arrayBuffer()], { type: 'video/mp4' })
     report.identical.cold = await sha256(coldBlob)
     report.identical.bytesCold = coldBlob.size
     report.identical.same =
@@ -448,8 +483,8 @@ export async function runBackgroundEditRender(
      * timestamp, duration and keyframe flag — hashed on both sides.
      */
     await clearChunks()
-    const control = await renderChunked({ recording, edit: zoomEdit, settings })
-    const controlBlob = new Blob([await control.blob.arrayBuffer()], { type: 'video/mp4' })
+    const control = await coldRender({ recording, edit: zoomEdit, settings })
+    const controlBlob = new Blob([await control.result.blob.arrayBuffer()], { type: 'video/mp4' })
     report.identical.control = {
       hash: await sha256(controlBlob),
       bytes: controlBlob.size,
@@ -476,7 +511,8 @@ export async function runBackgroundEditRender(
     report.press.ratio = report.press.premadeMs > 0 ? r1(report.press.coldMs / report.press.premadeMs) : 0
     report.press.verdict =
       `press with the export already made ${report.press.premadeMs} ms against a cold ` +
-      `${report.press.coldMs} ms (${report.press.ratio}x), path=${report.press.path}`
+      `${report.press.coldMs} ms (${report.press.ratio}x), path=${report.press.path}, ` +
+      `cold render=${report.press.coldPath}`
 
     // ---- gate 4: a second small edit invalidates only its own chunks -------
     // The cold render above left this edit's chunks on disk, which is exactly
@@ -494,7 +530,11 @@ export async function runBackgroundEditRender(
       report.invalidated.rendered >= 0
         ? `the zoom moved 400 ms: ${report.invalidated.rendered} chunk(s) re-rendered, ` +
           `${report.invalidated.reused} reused, of ${report.invalidated.total}`
-        : 'FAIL — the chunked path did not report (the unbroken render ran instead)'
+        : report.flags.fullColour
+          ? 'the unbroken render ran, as `?colour=all` requires — chunked declines at 4:4:4, so there ' +
+            'are no chunks to reuse and this gate has nothing to count (J1 teaching its concatenation ' +
+            'a second codec is its own task)'
+          : 'FAIL — the chunked path did not report (the unbroken render ran instead)'
   } catch (err) {
     report.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
   } finally {

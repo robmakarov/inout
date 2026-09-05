@@ -1,0 +1,490 @@
+{
+ "what": "O9(b)'s precondition, the part that was still owed: the EXPORT PRESS COST measured AT 4:4:4, with a 4:4:4 pre-render actually being served. The other part \u2014 the render flags in prerenderKey \u2014 landed 2026-09-04; this is the number the ruling asked for.",
+ "how": "node scripts/exp.mjs j5 '{\"takeSec\":30,\"quietMs\":60000}' [--query=colour=all] \u2014 J5's own rig, unchanged except that its cold render now falls through to the unbroken render on ChunkedRenderUnavailable, exactly as pipeline.ts does. At 4:2:0 that fallback never fires and the 4:2:0 column below reproduces J5's standing evidence (9 ms / 5855.6 ms) inside run variance.",
+ "date": "2026-09-05",
+ "headline": "THE PRESS IS INSTANT AT 4:4:4 \u2014 2.4 ms, against 11.5 ms at 4:2:0 on the same fixture the same hour. The pre-made file IS served under ?colour=all, so J6's ruling holds: there is no instant path left for 4:4:4 to kill. BUT THE EDIT LOOP IS WHERE IT NOW COSTS: a second small edit re-renders THE WHOLE TAKE at 4:4:4 (9533.9 ms, nothing reused) where 4:2:0 re-renders 3 chunks of 12 (2729.5 ms) \u2014 3.5x on a 30 s take, and it scales with the take, not with the edit, because renderChunked declines at 4:4:4 and there is no chunk cache to reuse.",
+ "runs": {
+  "fullColour": {
+   "source": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "mbps": 12,
+    "takeSec": 30
+   },
+   "output": {
+    "step": "1080p",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "gopSec": 2.5,
+    "chunks": 12
+   },
+   "flags": {
+    "cq": 20,
+    "loudness": "p90",
+    "sourceFrame": true,
+    "fullColour": true,
+    "audioTracks": "flat",
+    "noiseGate": false
+   },
+   "untouched": {
+    "watchedMs": 5000,
+    "scheduled": false,
+    "jobStarted": false,
+    "chunksOnDisk": 0,
+    "verdict": "PASS \u2014 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
+   },
+   "background": {
+    "readyMs": 9797.9,
+    "chunksOnDisk": 0,
+    "state": "done"
+   },
+   "press": {
+    "quietMs": 60000,
+    "premadeMs": 2.4,
+    "coldMs": 8125.8,
+    "ratio": 3385.8,
+    "path": "render",
+    "coldPath": "unbroken",
+    "bytes": 4094854,
+    "verdict": "press with the export already made 2.4 ms against a cold 8125.8 ms (3385.8x), path=render, cold render=unbroken"
+   },
+   "identical": {
+    "premade": "ad4a958bec7a0f022240108965e13d690e49ed44808f15d85a832f9c4d8c3ee4",
+    "cold": "961ca1c17adf45830bd9dd1f383de602e8924b58f80feee90e71ca129b4fcfca",
+    "same": false,
+    "bytesPremade": 4094854,
+    "bytesCold": 4094854,
+    "diff": {
+     "differingBytes": 20,
+     "spans": [
+      {
+       "at": 4083577,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4083581,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4083693,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4083697,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4083793,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4083797,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4088085,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4088089,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4088185,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      },
+      {
+       "at": 4088189,
+       "len": 2,
+       "a": "3dcc",
+       "b": "3e11"
+      }
+     ],
+     "size": 4094854
+    },
+    "control": {
+     "hash": "b902e987de03c7671edcf5dc236d21c819b3dfa4e4b765d28e89c6f4c2f5cf72",
+     "bytes": 4094854,
+     "diff": {
+      "differingBytes": 10,
+      "spans": [
+       {
+        "at": 4083578,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4083582,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4083694,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4083698,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4083794,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4083798,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4088086,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4088090,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4088186,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       },
+       {
+        "at": 4088190,
+        "len": 1,
+        "a": "11",
+        "b": "19"
+       }
+      ],
+      "size": 4094854
+     }
+    },
+    "media": {
+     "premade": {
+      "video": {
+       "packets": 900,
+       "keyframes": 12,
+       "bytes": 3624673,
+       "firstTimestamp": 0,
+       "lastTimestamp": 29.967,
+       "hash": "e226eb4ff0398de7ad491d6daa7c8f57898960dfbfce69e854da02c0a48b9390"
+      },
+      "audio": {
+       "packets": 1410,
+       "keyframes": 1410,
+       "bytes": 458842,
+       "firstTimestamp": 0,
+       "lastTimestamp": 30.059,
+       "hash": "cce808dc967169cea9b8d1ac4ed65d4c712653a0230a691a1cafb1c71ffa029e"
+      }
+     },
+     "cold": {
+      "video": {
+       "packets": 900,
+       "keyframes": 12,
+       "bytes": 3624673,
+       "firstTimestamp": 0,
+       "lastTimestamp": 29.967,
+       "hash": "e226eb4ff0398de7ad491d6daa7c8f57898960dfbfce69e854da02c0a48b9390"
+      },
+      "audio": {
+       "packets": 1410,
+       "keyframes": 1410,
+       "bytes": 458842,
+       "firstTimestamp": 0,
+       "lastTimestamp": 30.059,
+       "hash": "cce808dc967169cea9b8d1ac4ed65d4c712653a0230a691a1cafb1c71ffa029e"
+      }
+     },
+     "same": true
+    },
+    "verdict": "PASS \u2014 every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 20 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
+   },
+   "invalidated": {
+    "rendered": -1,
+    "reused": -1,
+    "total": 0,
+    "readyMs": 9533.9,
+    "verdict": "the unbroken render ran, as `?colour=all` requires \u2014 chunked declines at 4:4:4, so there are no chunks to reuse and this gate has nothing to count (J1 teaching its concatenation a second codec is its own task)"
+   },
+   "notes": [
+    "the door said: scheduled 1200 ms after this edit"
+   ],
+   "error": null
+  },
+  "today": {
+   "source": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "mbps": 12,
+    "takeSec": 30
+   },
+   "output": {
+    "step": "1080p",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "gopSec": 2.5,
+    "chunks": 12
+   },
+   "flags": {
+    "cq": 20,
+    "loudness": "p90",
+    "sourceFrame": true,
+    "fullColour": false,
+    "audioTracks": "flat",
+    "noiseGate": false
+   },
+   "untouched": {
+    "watchedMs": 5000,
+    "scheduled": false,
+    "jobStarted": false,
+    "chunksOnDisk": 0,
+    "verdict": "PASS \u2014 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
+   },
+   "background": {
+    "readyMs": 10587.5,
+    "chunksOnDisk": 13,
+    "state": "done"
+   },
+   "press": {
+    "quietMs": 60000,
+    "premadeMs": 11.5,
+    "coldMs": 5963,
+    "ratio": 518.5,
+    "path": "render",
+    "coldPath": "chunked",
+    "bytes": 5194944,
+    "verdict": "press with the export already made 11.5 ms against a cold 5963 ms (518.5x), path=render, cold render=chunked"
+   },
+   "identical": {
+    "premade": "f2737739a7e760b66df2248e739d58dc973332f50e835daabfdf527b3d9ab743",
+    "cold": "2028e1fbd983f32875134ed675e2d7a7d8b11ecbde606326756009b8f4022a0f",
+    "same": false,
+    "bytesPremade": 5194944,
+    "bytesCold": 5194944,
+    "diff": {
+     "differingBytes": 10,
+     "spans": [
+      {
+       "at": 5183710,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5183714,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5183826,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5183830,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5183926,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5183930,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5188249,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5188253,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5188349,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      },
+      {
+       "at": 5188353,
+       "len": 1,
+       "a": "4d",
+       "b": "8f"
+      }
+     ],
+     "size": 5194944
+    },
+    "control": {
+     "hash": "4320920d8b9ba610da0997ae1daf631608937ee87b3dfd2d6d48215cd2d8ea75",
+     "bytes": 5194944,
+     "diff": {
+      "differingBytes": 10,
+      "spans": [
+       {
+        "at": 5183710,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5183714,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5183826,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5183830,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5183926,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5183930,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5188249,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5188253,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5188349,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       },
+       {
+        "at": 5188353,
+        "len": 1,
+        "a": "8f",
+        "b": "95"
+       }
+      ],
+      "size": 5194944
+     }
+    },
+    "media": {
+     "premade": {
+      "video": {
+       "packets": 900,
+       "keyframes": 12,
+       "bytes": 4724687,
+       "firstTimestamp": 0,
+       "lastTimestamp": 29.967,
+       "hash": "bd81cfeb9d5b776a60ae65478091f7d35c1c28b6548aab98dc5ebf9916286140"
+      },
+      "audio": {
+       "packets": 1410,
+       "keyframes": 1410,
+       "bytes": 458956,
+       "firstTimestamp": 0,
+       "lastTimestamp": 30.059,
+       "hash": "1e46a6f6e5a8ed8dfff02893d1485319dae6fde279f64829a00da2bd3ed63506"
+      }
+     },
+     "cold": {
+      "video": {
+       "packets": 900,
+       "keyframes": 12,
+       "bytes": 4724687,
+       "firstTimestamp": 0,
+       "lastTimestamp": 29.967,
+       "hash": "bd81cfeb9d5b776a60ae65478091f7d35c1c28b6548aab98dc5ebf9916286140"
+      },
+      "audio": {
+       "packets": 1410,
+       "keyframes": 1410,
+       "bytes": 458956,
+       "firstTimestamp": 0,
+       "lastTimestamp": 30.059,
+       "hash": "1e46a6f6e5a8ed8dfff02893d1485319dae6fde279f64829a00da2bd3ed63506"
+      }
+     },
+     "same": true
+    },
+    "verdict": "PASS \u2014 every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 10 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
+   },
+   "invalidated": {
+    "rendered": 3,
+    "reused": 9,
+    "total": 12,
+    "readyMs": 2729.5,
+    "verdict": "the zoom moved 400 ms: 3 chunk(s) re-rendered, 9 reused, of 12"
+   },
+   "notes": [
+    "the door said: scheduled 1200 ms after this edit"
+   ],
+   "error": null
+  }
+ }
+}

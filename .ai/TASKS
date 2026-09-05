@@ -90,15 +90,22 @@ THE ORDER IS PART OF THE RULING: **J5 lands before J6.** BOTH LANDED 2026-09-04,
    row and would have been a silent regression.
  · KILLED BY THE ABOVE: ~~`?singlegen=capture`~~ DELETED with J6. `?glue=record` is the switch that puts
    the composite back, per the rule that the thing being replaced carries the switch.
- · O9(b) IS RE-OPENED BY THIS, not closed: the only objection to 4:4:4 by default was that it kills
-   instant export. With the export pre-made while he edits there is no instant path left to kill, so the
-   colour default becomes nearly free. **THE PRECONDITION IS DONE (2026-09-04) — WHAT IS LEFT BEFORE ASKING HIM IS ONE MEASUREMENT.** The
-   render flags are in `prerenderKey` and `prerenderShape` now, and choose.ts's `fullColour ? null :
-   takePrerender(...)` is deleted, so J5's and F16b's files ARE servable under 4:4:4 and a file made
-   under different flags is simply not adopted. What is still owed before the question goes to him is
-   the press cost measured AT 4:4:4 — the whole point of the ruling was that a pre-made file removes
-   the objection, so the number has to come from a 4:4:4 pre-render being served. The history below is
-   kept because it explains why the key had to change first.
+ · O9(b)'s PRECONDITION IS DONE — BOTH HALVES, MEASURED 2026-09-05 (docs/qa/o9b-precondition-press.json).
+   The claim J6 made is TRUE: **the press at 4:4:4 is 2.4 ms**, against 11.5 ms at 4:2:0 on the same
+   fixture the same hour, `path=render` on both — the 4:4:4 pre-render is MADE and SERVED, so there is
+   no instant path left for full colour to kill. (The 4:2:0 column reproduces J5's standing evidence,
+   9 ms / 5855.6 ms, so the rig did not move.) The render flags landed in `prerenderKey` and
+   `prerenderShape` on 2026-09-04 and choose.ts's `fullColour ? null : takePrerender(...)` is deleted.
+   **AND THE MEASUREMENT REPLACED THE OBJECTION RATHER THAN REMOVING IT — READ THIS BEFORE PROPOSING
+   THE DEFAULT AGAIN.** The cost of 4:4:4 is no longer at the press, it is in the EDIT LOOP: a second
+   small edit (the zoom nudged 400 ms) re-renders THE WHOLE TAKE at 4:4:4 — **9533.9 ms, 0 chunks
+   reused** — where 4:2:0 re-renders **3 chunks of 12, 2729.5 ms**. 3.5x on a 30 s take, and it scales
+   with the TAKE and not with the EDIT, because `renderChunked` declines at 4:4:4 (its concatenation
+   muxes one AVC track) and there is no chunk cache to reuse. On an hour take that is one chunk either
+   way at 4:2:0 and ~16 min of background render PER NUDGE at 4:4:4. Cold press, for completeness:
+   8125.8 ms unbroken against 5963 ms chunked, 1.36x on this fixture. SO THE DEFAULT NOW WAITS ON
+   TEACHING J1's CONCATENATION A SECOND CODEC, which O9(b) already named as its own task — not on
+   anything left in O9. The history below is kept because it explains why the key had to change first.
    **J5 AND J6 HAVE BOTH LANDED — AND HERE IS WHAT USED TO BLOCK THIS**
    (found while landing J5, 2026-09-04): `choose.ts` REFUSES the pre-made file whenever full colour is
    asked for — `const ready = fullColour ? null : takePrerender(...)` — because `prerenderKey` carries no
@@ -345,6 +352,13 @@ G6's confirmation rule doing its job; `git diff main` on instant.ts, smartCut.ts
 EMPTY, so there is nothing in those paths that could have moved) · 1,213 unit tests + typecheck green.
 WHAT IS LEFT: Robert looks at `~/Downloads/inout-o9` and says whether the default moves, and for which
 destinations. NOTHING ELSE IN THIS TASK IS ENGINEERING.
+THE PRECONDITION FOR THAT QUESTION IS DONE (2026-09-05, docs/qa/o9b-precondition-press.json) AND IT
+MOVED THE QUESTION: the press at 4:4:4 is **2.4 ms** with the pre-made file served (11.5 ms at 4:2:0),
+so "4:4:4 kills instant export" is dead as J6 said it would be — but a second edit re-renders the WHOLE
+take at 4:4:4 (9533.9 ms, 0 of 12 chunks reused) against 3 chunks and 2729.5 ms at 4:2:0, because
+`renderChunked` declines. That cost scales with the take, so the default flip is gated on J1's
+concatenation learning AV1, not on anything in O9. The full-colour EXPORT stays exactly as shippable as
+it is today; it is the EDIT-then-export loop that pays.
 THE BROWSER GIVES US NO COLOUR TO RECORD — MEASURED, NOT ARGUED (2026-09-04, re-read out of O4's own
 evidence docs/qa/o4-gpu-residency.json rather than re-run; the headless probe in colourCeiling.ts CANNOT
 answer this, a desktop capture has no picker there). Real `getDisplayMedia` on Robert's screen hands us
