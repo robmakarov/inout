@@ -630,6 +630,21 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
       }; the export ${liveOk ? 'completed' : 'FAILED'}`
   }
 
+  /**
+   * ---- 10. J11: DELETING THE TAKE DELETES ITS RENDER ---------------------
+   *
+   * Through the real delete path — `recordingsRepo.remove`, the one every
+   * Delete button and every experiment goes through — on a take that has just
+   * rendered a full set of chunks. Before J11 a chunk was named by the hash of
+   * its descriptor alone, so nothing could FIND a deleted take's render and all
+   * of it stayed on disk for 24 hours under the cap. Robert measured 2.686 GB
+   * of exactly this on his own machine.
+   */
+  const beforeDelete = await chunkFootprint()
+  const { recordingsRepo: repo } = await import('@core/store')
+  await repo.remove(recording.id).catch(() => undefined)
+  const afterDelete = await chunkFootprint()
+
   const footprint = await chunkFootprint()
 
   // ---- the verdict, in words a gate can read -----------------------------
@@ -754,6 +769,11 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
         ? 'PASS — the miss costs one chunk, and it used to cost the whole take'
         : 'FAIL — see sweptChunk'
   }
+  verdict.deleteTakesItsRender =
+    `deleting the take left ${afterDelete.files} of ${beforeDelete.files} chunk files ` +
+    `(${afterDelete.mb} of ${beforeDelete.mb} MB)` +
+    (afterDelete.files === 0 ? ' — PASS' : ' — FAIL, the render outlived the video')
+
   verdict.footprint = `${footprint.files} chunk files, ${footprint.parts} parts, ${footprint.mb} MB on disk`
 
   for (const [k, v] of Object.entries(verdict)) console.info(`[j1] ${k}: ${v}`)
