@@ -43,13 +43,16 @@ const cancelledJobs: string[] = []
 /** Jobs THIS page session is running. `removeExportJob` no-ops on any other —
  *  a row from an earlier session is a row, not work, and step 4 clears it. */
 const liveIds = new Set<string>()
-vi.mock('./exportJobs', () => ({
-  removeExportJob: (id: string) => {
-    if (!liveIds.has(id)) return
+vi.mock('./jobCancel', () => ({
+  cancelExportJob: (id: string) => {
+    // Models exportJobs.removeExportJob: it acts only on a job THIS page
+    // session is running, and no-ops on a row left by an earlier one.
+    if (!liveIds.has(id)) return true
     cancelledJobs.push(id)
     const i = jobs.findIndex((j) => j.id === id)
     if (i >= 0) jobs.splice(i, 1)
     files.delete(`xjob-${id}`)
+    return true
   },
 }))
 
@@ -65,7 +68,7 @@ vi.mock('./prerender', () => ({
 const { purgeDerivedFor } = await import('./purge')
 const { chunkKeyFor, recordingOfChunk, recordingOfChunkPart } = await import('./chunkStore')
 const { recordingOfScratch } = await import('./scratch')
-const { recordingOfAiSink } = await import('@core/ai/build')
+const { recordingOfAiSink } = await import('@core/ai/sinkKey')
 
 const MINE = 'rec_aaaaaaaaaaaa'
 const THEIRS = 'rec_bbbbbbbbbbbb'

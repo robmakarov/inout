@@ -34,9 +34,9 @@
 import { blobStore, jobsRepo, EXPORTJOB_PREFIX } from '@core/store'
 import { removeChunksFor } from './chunkStore'
 import { removeScratchFor } from './scratch'
-import { recordingOfAiSink } from '@core/ai/build'
+import { recordingOfAiSink } from '@core/ai/sinkKey'
 import { cancelPrerenderFor, prerenderBlobFor } from './prerender'
-import { removeExportJob } from './exportJobs'
+import { cancelExportJob } from './jobCancel'
 
 export interface PurgeResult {
   /** Files actually removed, of every kind. */
@@ -75,7 +75,7 @@ export async function purgeDerivedFor(recordingId: string): Promise<PurgeResult>
     const mine = (await jobsRepo.list())
       .filter((j) => j.recordingId === recordingId)
       .map((j) => j.id)
-    for (const id of mine) removeExportJob(id)
+    for (const id of mine) cancelExportJob(id)
     /**
      * COUNTED BY WHAT HAPPENED, NOT BY WHAT WAS ASKED. `removeExportJob` acts
      * only on a job this page session is actually running — a row left by an

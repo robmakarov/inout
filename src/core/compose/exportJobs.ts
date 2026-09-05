@@ -59,6 +59,7 @@ import { saveToFile } from '@core/share'
 import { exportByBestPath } from './choose'
 
 export { EXPORTJOB_PREFIX }
+import { setExportJobCanceller } from './jobCancel'
 /** A job that keeps killing the page must not restart forever. */
 const MAX_RUNS = 3
 /** Finished/failed rows (and their files) expire at boot — the download is in
@@ -408,3 +409,9 @@ export function resetExportJobsForTests(): void {
   jobs.clear()
   listeners.clear()
 }
+
+/**
+ * J12 — REGISTER THE CANCELLER, because purge.ts may not import this module:
+ * the edge closes a worker cycle vite refuses to build. See jobCancel.ts.
+ */
+setExportJobCanceller(removeExportJob)
