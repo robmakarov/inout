@@ -351,7 +351,14 @@ GATES: green ≥ 94 % at (a) **FAILED, and (a) is gone because of it** · ≥ 99
 fringe quoted at every rung **done** · A/B pairs in `~/Downloads/inout-o9` (todays-export / every-colour,
 each .mp4 + .png + a 4x blow-up of the text where the difference is visible) **done, HIS EYE IS OWED** ·
 plays at its destination: the 4:4:4 file decodes in Chrome (every score above is read off a decode);
-Safari is UNVERIFIED and is exactly why this is opt-in · wall clock per rung **stated above** · instant and
+**SAFARI IS NOW MEASURED AND IT REFUSES IT — 2026-09-05, `node scripts/o9b-destination.mjs`, two identical
+readings, docs/qa/o9b-destination.json.** Real Safari 26.6 seeks the AV1 4:4:4 file clean and paints a BLANK
+canvas (1 colour against 173-238 on three controls) while `canPlayType` answers "probably" and `readyState`
+reaches 4 — so no capability probe can route around it. AND THERE IS NO OTHER RUNG: WebCodecs here refuses
+HEVC 4:4:4 (Rext), HEVC 4:2:2 10-bit and H.264 High 4:4:4 Predictive at every acceleration preference, while
+Safari decodes HEVC 4:4:4 fine. THE ONLY 4:4:4 THIS BROWSER CAN MAKE IS THE ONE APPLE CANNOT PLAY, which is
+why the default cannot move on the web and why this stays opt-in — not taste, a wall. VideoToolbox itself
+takes 4:4:4 (`ayuv`), so P4 is where 100 % colours become shareable · wall clock per rung **stated above** · instant and
 smart-cut untouched with the flag off **oracle v2 PASS: inst=instant/61.2 ms, trim=smartcut/59.3 ms,
 sync 65.4/77.6, spur -54.6 dB, tail 71 ms, export 3.46x** · `oracle:long` PASS TWICE and the instant/
 trimmed numbers did NOT move up: run 2 inst 52.4 / trim 52.0 / export 5.33x against the standing
@@ -366,8 +373,9 @@ so "4:4:4 kills instant export" is dead as J6 said it would be — but a second 
 take at 4:4:4 (9533.9 ms, 0 of 12 chunks reused) against 3 chunks and 2729.5 ms at 4:2:0, because
 `renderChunked` declined. **J8 CLOSED THAT 2026-09-05** — the same second edit now re-renders 3 of 12
 and reuses 9, in 4446.6 ms, and the concatenated file is the codec the unbroken render makes. So the
-edit-then-export loop no longer pays for the colour, and the default is a question about Robert's eye
-and nothing else — **J8's one open note was taken and closed the same day as J9**: the rung has a
+edit-then-export loop no longer pays for the colour — but the default is NOT a question about Robert's eye
+alone, and 2026-09-05 measured why: the file does not open on Apple devices (the gate above). What his eye
+decides is whether `all` is worth keeping as the opt-in for files he watches himself — **J8's one open note was taken and closed the same day as J9**: the rung has a
 quality target now (AV1 quantizer 60, swept on two contents), the 4:4:4 export is 25 % smaller at no
 measured cost to the picture, and the chunked/unbroken gap is −2.1 % where it was −19.5 %.
 THE BROWSER GIVES US NO COLOUR TO RECORD — MEASURED, NOT ARGUED (2026-09-04, re-read out of O4's own

@@ -478,7 +478,7 @@ export const SWITCHES: readonly SwitchSpec[] = [
     fallback: '420',
     group: 'Export',
     label: 'Full colour',
-    hint: '420 is today. `all` keeps 99.3 % of the colour for 1.11× the bytes — BUILT, waiting on Robert’s eye (O9).',
+    hint: '420 is today, and it is what to send other people. `all` keeps every colour and a sharp text edge (99.3 % against 77.8 %) — but the file it makes DOES NOT OPEN IN SAFARI, ON AN IPHONE OR ON AN IPAD: measured 2026-09-05, they show a black rectangle, and Safari claims it can play it right up until it cannot. Use `all` for a file you will watch in Chrome yourself.',
   },
   {
     id: 'cq',

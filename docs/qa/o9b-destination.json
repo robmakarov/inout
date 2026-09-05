@@ -1,0 +1,151 @@
+{
+ "what": "O9(b)'s last open gate: does the full-colour file play where it is sent? Two real browsers, real files.",
+ "how": "node scripts/o9b-destination.mjs",
+ "date": "2026-09-05",
+ "headline": "THE ONLY 4:4:4 THIS BROWSER CAN ENCODE IS THE ONE SAFARI CANNOT DECODE, AND THE ONLY 4:4:4 SAFARI DECODES IS ONE THIS BROWSER CANNOT ENCODE. AV1 4:4:4 encodes in Chrome and paints a BLANK canvas in Safari 26.6 (1 colour against 173-238 on the three controls) while canPlayType answers \"probably\" and readyState reaches 4; HEVC 4:4:4 (Rext) decodes in Safari and is refused by WebCodecs here at every acceleration preference. So the full-colour file cannot become the blind-shared default from a browser — every Safari, iPhone and iPad recipient gets a black rectangle. VideoToolbox itself takes 4:4:4 (ayuv is in hevc_videotoolbox pixel formats), which is P4 native at maximum in one line.",
+ "method": "Two readings, identical. The three instruments that answered nothing first are in the script header so nobody re-walks them: canPlayType lies, readyState 4 is reached on an undecodable file, and WebDriver has no user gesture so autoplay is refused for every lane including plain H.264. The verdict is a decoded pixel.",
+ "files": {
+  "av1_444": {
+   "codec_name": "av1",
+   "profile": "High",
+   "pix_fmt": "yuv444p"
+  },
+  "hevc_444": {
+   "codec_name": "hevc",
+   "profile": "Rext",
+   "pix_fmt": "yuv444p"
+  },
+  "hevc_420": {
+   "codec_name": "hevc",
+   "profile": "Main",
+   "pix_fmt": "yuv420p"
+  },
+  "avc_420": {
+   "codec_name": "h264",
+   "profile": "High",
+   "pix_fmt": "yuv420p"
+  }
+ },
+ "encode": [
+  {
+   "name": "hevc-444-8",
+   "codec": "hvc1.4.10.L153.B0",
+   "supported": false,
+   "accel": null,
+   "encoded": 0,
+   "bytes": 0,
+   "error": null
+  },
+  {
+   "name": "hevc-444-8-hev1",
+   "codec": "hev1.4.10.L153.B0",
+   "supported": false,
+   "accel": null,
+   "encoded": 0,
+   "bytes": 0,
+   "error": null
+  },
+  {
+   "name": "hevc-422-10",
+   "codec": "hvc1.4.10.L153.BD",
+   "supported": false,
+   "accel": null,
+   "encoded": 0,
+   "bytes": 0,
+   "error": null
+  },
+  {
+   "name": "hevc-main-420",
+   "codec": "hvc1.1.6.L153.B0",
+   "supported": true,
+   "accel": "no-preference",
+   "encoded": 12,
+   "bytes": 16943,
+   "error": null
+  },
+  {
+   "name": "avc-444",
+   "codec": "avc1.f4002a",
+   "supported": false,
+   "accel": null,
+   "encoded": 0,
+   "bytes": 0,
+   "error": null
+  },
+  {
+   "name": "avc-high-420",
+   "codec": "avc1.640028",
+   "supported": true,
+   "accel": "no-preference",
+   "encoded": 12,
+   "bytes": 13221,
+   "error": null
+  },
+  {
+   "name": "av1-444",
+   "codec": "av01.1.08M.08",
+   "supported": true,
+   "accel": "no-preference",
+   "encoded": 12,
+   "bytes": 14764,
+   "error": null
+  }
+ ],
+ "play": {
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+  "files": {
+   "hevc_444": {
+    "error": null,
+    "colours": 173,
+    "id": "hevc_444",
+    "h": 1080,
+    "seekedTo": 1,
+    "duration": 4,
+    "readyState": 4,
+    "w": 1920,
+    "decodes": true
+   },
+   "hevc_420": {
+    "error": null,
+    "colours": 238,
+    "id": "hevc_420",
+    "h": 1080,
+    "seekedTo": 1,
+    "duration": 4,
+    "readyState": 4,
+    "w": 1920,
+    "decodes": true
+   },
+   "avc_420": {
+    "error": null,
+    "colours": 204,
+    "id": "avc_420",
+    "h": 1080,
+    "seekedTo": 1,
+    "duration": 4,
+    "readyState": 4,
+    "w": 1920,
+    "decodes": true
+   },
+   "av1_444": {
+    "error": null,
+    "colours": 1,
+    "id": "av1_444",
+    "h": 1080,
+    "seekedTo": 1,
+    "duration": 4,
+    "readyState": 4,
+    "w": 1920,
+    "decodes": false
+   }
+  },
+  "canPlayType": {
+   "av1_444": "probably",
+   "avc_420": "probably",
+   "hevc_444": "probably"
+  },
+  "isTypeSupported": {
+   "av1_444": true
+  }
+ }
+}
