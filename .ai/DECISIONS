@@ -1814,3 +1814,18 @@ the takes he actually records the idea was empty before it was written. G is del
 A SECOND CAPTURE-TIME FILE AGAIN, in any wrapping — proxy, ladder, sidecar, glued copy. The lesson for
 the offering: R1b's measurements were sound and the conclusion drawn from them was not checked against
 what shipped three days earlier. Read git log and the last week of this file before proposing an engine.
+
+robert (32) 2026-09-05 — "SAME AS LAST FRAME" IS ACCEPTED. Asked whether the output would be pixel
+perfect ("it will be pixel fucking perfect?"), told the mechanism and the one real risk (the bitstream,
+not the picture), he said "okay do it". PROPOSALS B is deleted and is now TASKS J13. The acceptance came
+with the gate already stated to him and it binds: all 325,410 frames compared, never a sample and never
+PSNR, decoded outside Chrome as well as in it, and the duplicate set proven from CAPTURE'S OWN record
+rather than a pixel comparison (robert (8) — every movement is kept, no "close enough"). Step 0 ran the
+same day and passed in two decoders; the numbers are in the J13 row.
+THE ROUTE TO IT IS ALSO A RULING ABOUT SEARCHING. He refused the two compromises (fewer frames, a lower
+rate) and the capture-time proxy, said "search other ways, i dont give a fuck, no compromises", and the
+things that died on measurement after that were `optimizeForLatency` (nothing), software decode (loses:
+it buys a cheap encode and pays for it twice over in draw), and every encoder-config axis (the rig
+cannot resolve them). What survived was the one lever that takes nothing away from him. The lesson is
+the order: measure his OWN take first — the 43.1 % came off his file and it is what made B worth
+building, when B's own text said "zero for Robert's own headline case".
