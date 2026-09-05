@@ -1699,3 +1699,16 @@ band's worth of the window above the first (the two-half comparison this file's 
 names as the statistic that survives macOS's +/-90 MB reclaiming). The heap gained the same two-half
 check, which until now was written but never computed — a no-op that read like a gate.
 WHAT IS LEFT OF THE CELL: the SECOND take. One command, and it is the same one.
+
+session 2026-09-05 (4) — **BOTH OF PHASE 1's TAKES ARE ON THE BOARD.**
+Second run, same command, same shape: **`rec_7l95s85cql9q · 60.0 min · build 5d8e19a0 · GREEN — 13 of
+13 dimensions measured and inside band`** — RSS **-1.00 MB/min** (half-means 684 -> 656 MB), heap
+**+0.073 MB/min** (11 -> 13 MB), 60 samples, still recording at the last one, 4.74 GB written, nothing
+stopped it, and all three rig gates PASS on the corrected band.
+Beside the first (`rec_1ir4llw999k0`, RSS -6.03 MB/min, half-means 1202 -> 1064), that is **two ≥60-min
+max60 takes with camera + tab audio on prod, both graded GREEN 13/13** — the configuration this cell
+has asked for since 2026-09-02 and which had never been run. Two independent hours, two different
+starting footprints (1257 MB and ~700 MB), the same answer: nothing grows.
+WHETHER THAT MEANS PHASE 1 IS DONE IS ROBERT'S CALL and always was. What is no longer true is that the
+hours had not been run.
+Both cards carry `build 5d8e19a0`, which is tonight's build stamp doing its job on prod.
