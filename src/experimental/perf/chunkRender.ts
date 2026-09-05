@@ -28,7 +28,7 @@
  * and `renderExport` for the unbroken one, both in this thread so the two wall
  * clocks are measured against the same scheduler.
  */
-import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny'
+import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { defaultEditState } from '@core/timeline'
 import { DEFAULT_BACKGROUND } from '@core/compose/background'
@@ -44,6 +44,7 @@ import { settingsForTier, tierById, type QualityTierId } from '@core/compose/qua
 import { newId } from '@core/id'
 import type { EditState, ExportResult, Recording } from '@core/types'
 import { buildAudioFile, buildChannelFile, channel, existingFixture, fixtureKey } from './nativeRender'
+import { psnr } from './textSource'
 
 const MB = (bytes: number): number => Math.round((bytes / 1024 / 1024) * 10) / 10
 
@@ -81,6 +82,16 @@ interface FileFacts {
   lastTimestamp: number | null
   /** O8's certification survived into the concatenated file. */
   certified: boolean
+  /**
+   * J8 — WHICH CODEC CAME OUT, and whether a DECODER will take it. The
+   * concatenation used to open its track with the ladder's codec while the
+   * chunks were AV1, and a container that demuxes is not a file that plays:
+   * every packet count below is read with `metadataOnly`, which never touches
+   * a decoder and would have believed a wrong av1C. One real frame is what
+   * says the track description we wrote is the one the packets need.
+   */
+  codec: string | null
+  decodedFirstFrame: boolean
   error: string | null
 }
 
@@ -95,6 +106,8 @@ async function inspect(blob: Blob): Promise<FileFacts> {
     firstTimestamps: [],
     lastTimestamp: null,
     certified: false,
+    codec: null,
+    decodedFirstFrame: false,
     error: null,
   }
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
@@ -104,6 +117,7 @@ async function inspect(blob: Blob): Promise<FileFacts> {
     facts.certified = typeof tags.comment === 'string' && tags.comment.includes('"path"')
     const video = await input.getPrimaryVideoTrack()
     if (video) {
+      facts.codec = (await video.getDecoderConfig())?.codec ?? null
       const sink = new EncodedPacketSink(video)
       let n = 0
       let keys = 0
@@ -117,6 +131,9 @@ async function inspect(blob: Blob): Promise<FileFacts> {
       facts.videoPackets = n
       facts.keyPackets = keys
       facts.lastTimestamp = last === null ? null : Math.round(last * 1e6) / 1e6
+      const sample = await new VideoSampleSink(video).getSample(0)
+      facts.decodedFirstFrame = sample !== null
+      sample?.close()
     }
     const audio = await input.getPrimaryAudioTrack()
     if (audio) {
@@ -132,6 +149,47 @@ async function inspect(blob: Blob): Promise<FileFacts> {
     input.dispose()
   }
   return facts
+}
+
+/**
+ * J8 — THE SAME INSTANTS OUT OF BOTH LANES, decoded, so "comparable" can be a
+ * PICTURE claim and not only a packet count.
+ *
+ * It is needed because the two lanes are two ENCODES, not one file copied: at
+ * 4:2:0 they came out the same size to the tenth of a MB, but AV1's software
+ * rate control does not behave the same across twelve 2.5 s encodes as across
+ * one 30 s encode, and a size difference is not by itself a quality one. The
+ * frames are taken WHILE THE LANE'S BLOB IS ALIVE and only the ImageData is
+ * kept, so the cost is three 960x540 buffers per lane whatever the take's
+ * length — never two whole files held at once.
+ */
+async function framesAt(blob: Blob, instantsSec: number[]): Promise<(ImageData | null)[]> {
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track) return instantsSec.map(() => null)
+    const sink = new VideoSampleSink(track)
+    const canvas = new OffscreenCanvas(960, 540)
+    const ctx = canvas.getContext('2d', { alpha: false })!
+    const out: (ImageData | null)[] = []
+    for (const t of instantsSec) {
+      const sample = await sink.getSample(t)
+      if (!sample) {
+        out.push(null)
+        continue
+      }
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, 960, 540)
+      sample.draw(ctx, 0, 0, 960, 540)
+      sample.close()
+      out.push(ctx.getImageData(0, 0, 960, 540))
+    }
+    return out
+  } catch {
+    return instantsSec.map(() => null)
+  } finally {
+    input.dispose()
+  }
 }
 
 /** Every chunk file this rig's take has left on disk, and what they weigh. */
@@ -279,11 +337,17 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
     `plan: ${plan.chunks.length} chunks of ${plan.gopSec}s over ${plan.totalFrames} output frames`,
   )
 
+  /** Decoded frames per lane, for the picture check — never in the report. */
+  const pictures = new Map<string, (ImageData | null)[]>()
+  /** Three instants spread across the take, each in a different chunk. */
+  const pictureAt = [0.05, 0.5, 0.9].map((f) => Math.round(takeSec * f * 100) / 100)
+
   const run = async (
     lane: string,
     what: string,
     fn: () => Promise<ExportResult>,
     inspectFile = true,
+    picture = false,
   ): Promise<LaneReport> => {
     const t0 = performance.now()
     let file: FileFacts | null = null
@@ -293,6 +357,9 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
       const result = await fn()
       chunks = getLastChunkedStats()
       if (inspectFile) file = await inspect(result.blob)
+      // While the blob is still alive — a scratch-backed one does not outlive
+      // the lane, and only the ImageData is kept.
+      if (picture) pictures.set(lane, await framesAt(result.blob, pictureAt))
     } catch (err) {
       error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
     }
@@ -346,14 +413,22 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
   // ---- 1. the unbroken control, first, on a cold cache -------------------
   let control: LaneReport | null = null
   if (!opts.skipControl) {
-    control = await run('control-unbroken', 'the render that shipped, whole', () =>
-      renderExport({ recording, edit: baseEdit, settings }),
+    control = await run(
+      'control-unbroken',
+      'the render that shipped, whole',
+      () => renderExport({ recording, edit: baseEdit, settings }),
+      true,
+      true,
     )
   }
 
   // ---- 2. the chunked lane, cold -----------------------------------------
-  const cold = await run('chunked-cold', 'chunked, nothing on disk', () =>
-    renderChunked({ recording, edit: baseEdit, settings }),
+  const cold = await run(
+    'chunked-cold',
+    'chunked, nothing on disk',
+    () => renderChunked({ recording, edit: baseEdit, settings }),
+    true,
+    true,
   )
 
   // ---- 3. the same export again — everything must be a hit ---------------
@@ -480,6 +555,34 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
       `${controlFile.keyPackets} vs ${coldFile.keyPackets} (${sameKeys ? 'same' : 'differ'}); ` +
       `timestamps ${sameStarts ? 'identical' : 'differ'}; size ${MB(controlFile.bytes)} vs ` +
       `${MB(coldFile.bytes)} MB (${sizeDelta === null ? 'n/a' : `${sizeDelta > 0 ? '+' : ''}${sizeDelta}%`})`
+    /**
+     * J8 — THE CODEC IS PART OF "COMPARABLE". The two lanes must produce the
+     * SAME codec (the chunked one used to open an AVC track over whatever the
+     * chunks actually were), and the chunked file must DECODE — every packet
+     * count above is read metadata-only, which never touches a decoder and
+     * would believe a wrong av1C as readily as a right one.
+     */
+    verdict.codec =
+      `unbroken ${controlFile.codec ?? '?'} vs chunked ${coldFile.codec ?? '?'} — ` +
+      `${controlFile.codec === coldFile.codec ? 'SAME' : 'DIFFERENT'}; first frame decoded: ` +
+      `unbroken ${controlFile.decodedFirstFrame ? 'yes' : 'NO'}, chunked ` +
+      `${coldFile.decodedFirstFrame ? 'yes' : 'NO'}`
+
+    /**
+     * AND IS IT THE SAME PICTURE? The two lanes are two ENCODES, so they are
+     * never byte-identical and a size delta is not by itself a quality one —
+     * at 4:2:0 they land within 0.1 MB, at 4:4:4 the chunked file came back
+     * 19.5 % SMALLER on the same 900 packets. This is the number that says
+     * whether that is a different bit budget or a different picture.
+     */
+    const a = pictures.get('control-unbroken') ?? []
+    const b = pictures.get('chunked-cold') ?? []
+    const dbs = pictureAt.map((t, k) => {
+      const x = a[k]
+      const y = b[k]
+      return `${t}s ${x && y ? `${psnr(x, y)} dB` : 'no frame'}`
+    })
+    verdict.picture = `chunked against unbroken, whole-frame PSNR at ${dbs.join(', ')}`
     /**
      * NOT A SPEED COMPARISON, AND IT SAYS SO — 2026-09-03. Both lanes run in
      * ONE page, and the first one pays every one-time cost there is: module

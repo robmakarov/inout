@@ -1,0 +1,50 @@
+{
+  "what": "J8 — the chunk concatenation learns a second codec. `renderChunked` opened its one video track with `pickEncodingTarget`'s codec ('avc') while `render.ts` had encoded the chunks with AV1 under O9(b)'s `?colour=all`, so the whole chunked path declined at 4:4:4 and every edit re-rendered the whole take. The track is now opened from the FIRST CHUNK'S OWN TRACK, and a set whose chunks disagree on codec family, codec string or decoder description is refused rather than muxed.",
+  "how": "node scripts/exp.mjs j5 '{\"takeSec\":30,\"quietMs\":60000}' --query=colour=all (J5's own rig, the DONE gate) and node scripts/exp.mjs chunkrender '{\"takeSec\":30}' [--query=colour=all|cq=off] (J1's own rig, which compares the chunked lane against the unbroken one). Both through scripts/gate.sh, 2026-09-05, same machine, same hour. The J1 rig grew two facts for this task: the output file's CODEC STRING, and whether a real decoder takes its first frame — every packet count it reports is read `metadataOnly`, which never touches a decoder and would believe a wrong av1C as readily as a right one.",
+  "date": "2026-09-05",
+  "headline": "THE EDIT LOOP AT 4:4:4 IS NOW THE EDIT LOOP AT 4:2:0: a second small edit re-renders 3 chunks of 12 and reuses 9, in 4446.6 ms, where before J8 it re-rendered the whole take in 9533.9 ms with nothing reused. The concatenated file is the same codec the unbroken render produces (av01.1.08M.08.0.110.06.06.06.0, AV1 profile 1), the same 900 packets at the same 12 keyframes at identical timestamps, and a decoder takes its first frame. The 4:2:0 path is unmoved: same codec, same 900/12, 0 % size delta, and the two lanes still come out PIXEL-IDENTICAL.",
+  "gates": {
+    "j5_invalidated_at_444": {
+      "gate": "the j5 rig's `invalidated` gate at --query=colour=all reports the same 3-of-12 reuse it reports at 4:2:0",
+      "result": "3 rendered, 9 reused, of 12, readyMs 4446.6",
+      "before": "0 reused, 12 of 12 re-rendered, 9533.9 ms (docs/qa/o9b-precondition-press.json)",
+      "at_420": "3 rendered, 9 reused, of 12, 2729.5 ms",
+      "pass": true
+    },
+    "j5_other_three_at_444": {
+      "untouched": "PASS — 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks",
+      "press": "7 ms with the export already made against 9808.7 ms cold (1401.2x); coldPath=chunked, i.e. the chunked path RAN at 4:4:4 where it used to decline",
+      "identical": "PASS — every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 20 container bytes and two cold renders differ in 10 of the same",
+      "flags": { "cq": 20, "loudness": "p90", "sourceFrame": true, "fullColour": true, "audioTracks": "flat", "noiseGate": false },
+      "pass": true
+    },
+    "j1_at_444": {
+      "codec": "unbroken av01.1.08M.08.0.110.06.06.06.0 vs chunked av01.1.08M.08.0.110.06.06.06.0 — SAME; first frame decoded: unbroken yes, chunked yes",
+      "comparable": "SAME video packet count (900 vs 900); keyframes 12 vs 12 (same); timestamps identical; size 3.6 vs 2.9 MB (-19.5 %)",
+      "oneSpan": "one zoom span: 3 of 12 chunks re-rendered, 2813 ms against a cold 9221 ms (saved 6408 ms); audio REUSED",
+      "packetCopy": "900 video and 1410 audio packets copied, 0 frames re-encoded; concat wall 30 ms of 9221 ms",
+      "resume": "killed at 20/50/85 % → resumed and finished a VALID file every time",
+      "pass": true
+    },
+    "j1_at_420_control": {
+      "gate": "J8 touches the SHIPPED path (the track is opened from the chunk instead of the ladder), so 4:2:0 has to be proven unmoved on the same build",
+      "codec": "unbroken avc1.420028 vs chunked avc1.420028 — SAME; first frame decoded: both yes",
+      "comparable": "SAME video packet count (900 vs 900); keyframes 12 vs 12; timestamps identical; size 3.2 vs 3.2 MB (0 %)",
+      "picture": "chunked against unbroken, whole-frame PSNR 99 dB at all three instants — PIXEL-IDENTICAL (99 is the metric's cap for mse 0)",
+      "pass": true
+    },
+    "unit": {
+      "gate": "the two refusal rules are born red",
+      "result": "src/core/compose/chunkedCodec.test.ts — 10 tests. With the codec-family and codec-string tests removed from `sameTrack`, 2 of them fail; restored, 10 pass. Full suite 1406 passed, typecheck clean.",
+      "pass": true
+    }
+  },
+  "the_one_thing_that_is_not_free": {
+    "finding": "At 4:4:4 the chunked file is 19.5 % SMALLER than the unbroken one on the same 900 packets, and the two are 99 / 37.1 / 51.8 dB apart at 1.5 / 15 / 27 s. At 4:2:0 they are pixel-identical.",
+    "it_is_not_the_concatenation": "MEASURED, not argued. Run the SAME 4:2:0 lanes with constant quality off (--query=cq=off) and AVC diverges the same way: 99 / 40.6 / 49.1 dB, size -3 %. So this is what a BITRATE-TARGETED encoder does when its rate control runs over twelve 2.5 s segments instead of one 30 s stream — it has been true of J1's chunked path on the AVC rung since J1 shipped, for anyone who turns `?cq=` off.",
+    "why_444_meets_it": "`constantQualityCodec` returns null for anything that is not avc (render.ts), so the 4:4:4 rung carries no quality string and is bitrate-targeted. Constant quality — the shipped default, qp 20 — pins the QP and is exactly why the 4:2:0 lanes come out identical.",
+    "what_it_is_not": "It is not a colour loss: 4:4:4 stores chroma per pixel either way. It is a different bit budget, and the chunked lane spent fewer bits.",
+    "what_it_would_take": "A quality target for the AV1 rung, the way `?cq=` gives one to AVC. That is a task, not this one, and it is worth having BEFORE any 4:4:4 default moves."
+  },
+  "verdict": "J8 IS DONE. The concatenation reads the codec off the chunks, a mixed set is refused rather than mis-muxed, and the j5 rig at --query=colour=all reports 3 of 12 re-rendered and 9 reused — the number it reports at 4:2:0. The colour default is now a question about Robert's eye and about the bit-budget note above, and nothing else."
+}

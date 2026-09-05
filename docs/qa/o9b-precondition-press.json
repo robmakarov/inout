@@ -1,8 +1,8 @@
 {
- "what": "O9(b)'s precondition, the part that was still owed: the EXPORT PRESS COST measured AT 4:4:4, with a 4:4:4 pre-render actually being served. The other part \u2014 the render flags in prerenderKey \u2014 landed 2026-09-04; this is the number the ruling asked for.",
- "how": "node scripts/exp.mjs j5 '{\"takeSec\":30,\"quietMs\":60000}' [--query=colour=all] \u2014 J5's own rig, unchanged except that its cold render now falls through to the unbroken render on ChunkedRenderUnavailable, exactly as pipeline.ts does. At 4:2:0 that fallback never fires and the 4:2:0 column below reproduces J5's standing evidence (9 ms / 5855.6 ms) inside run variance.",
+ "what": "O9(b)'s precondition, the part that was still owed: the EXPORT PRESS COST measured AT 4:4:4, with a 4:4:4 pre-render actually being served. The other part — the render flags in prerenderKey — landed 2026-09-04; this is the number the ruling asked for.",
+ "how": "node scripts/exp.mjs j5 '{\"takeSec\":30,\"quietMs\":60000}' [--query=colour=all] — J5's own rig, unchanged except that its cold render now falls through to the unbroken render on ChunkedRenderUnavailable, exactly as pipeline.ts does. At 4:2:0 that fallback never fires and the 4:2:0 column below reproduces J5's standing evidence (9 ms / 5855.6 ms) inside run variance.",
  "date": "2026-09-05",
- "headline": "THE PRESS IS INSTANT AT 4:4:4 \u2014 2.4 ms, against 11.5 ms at 4:2:0 on the same fixture the same hour. The pre-made file IS served under ?colour=all, so J6's ruling holds: there is no instant path left for 4:4:4 to kill. BUT THE EDIT LOOP IS WHERE IT NOW COSTS: a second small edit re-renders THE WHOLE TAKE at 4:4:4 (9533.9 ms, nothing reused) where 4:2:0 re-renders 3 chunks of 12 (2729.5 ms) \u2014 3.5x on a 30 s take, and it scales with the take, not with the edit, because renderChunked declines at 4:4:4 and there is no chunk cache to reuse.",
+ "headline": "THE PRESS IS INSTANT AT 4:4:4 — 2.4 ms, against 11.5 ms at 4:2:0 on the same fixture the same hour. The pre-made file IS served under ?colour=all, so J6's ruling holds: there is no instant path left for 4:4:4 to kill. BUT THE EDIT LOOP IS WHERE IT NOW COSTS: a second small edit re-renders THE WHOLE TAKE at 4:4:4 (9533.9 ms, nothing reused) where 4:2:0 re-renders 3 chunks of 12 (2729.5 ms) — 3.5x on a 30 s take, and it scales with the take, not with the edit, because renderChunked declines at 4:4:4 and there is no chunk cache to reuse.",
  "runs": {
   "fullColour": {
    "source": {
@@ -33,7 +33,7 @@
     "scheduled": false,
     "jobStarted": false,
     "chunksOnDisk": 0,
-    "verdict": "PASS \u2014 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
+    "verdict": "PASS — 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
    },
    "background": {
     "readyMs": 9797.9,
@@ -231,14 +231,14 @@
      },
      "same": true
     },
-    "verdict": "PASS \u2014 every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 20 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
+    "verdict": "PASS — every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 20 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
    },
    "invalidated": {
     "rendered": -1,
     "reused": -1,
     "total": 0,
     "readyMs": 9533.9,
-    "verdict": "the unbroken render ran, as `?colour=all` requires \u2014 chunked declines at 4:4:4, so there are no chunks to reuse and this gate has nothing to count (J1 teaching its concatenation a second codec is its own task)"
+    "verdict": "the unbroken render ran, as `?colour=all` requires — chunked declines at 4:4:4, so there are no chunks to reuse and this gate has nothing to count (J1 teaching its concatenation a second codec is its own task)"
    },
    "notes": [
     "the door said: scheduled 1200 ms after this edit"
@@ -274,7 +274,7 @@
     "scheduled": false,
     "jobStarted": false,
     "chunksOnDisk": 0,
-    "verdict": "PASS \u2014 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
+    "verdict": "PASS — 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks"
    },
    "background": {
     "readyMs": 10587.5,
@@ -472,7 +472,7 @@
      },
      "same": true
     },
-    "verdict": "PASS \u2014 every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 10 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
+    "verdict": "PASS — every packet identical (900 video, 1410 audio, same timestamps, same keyframes); the files differ in 10 container bytes, and two cold foreground renders of the same edit differ in 10 of the same (mediabunny stamps Date.now() into mvhd/tkhd/mdhd)"
    },
    "invalidated": {
     "rendered": 3,
@@ -486,5 +486,6 @@
    ],
    "error": null
   }
- }
+ },
+ "superseded": "The edit-loop half of the headline below is NO LONGER TRUE: J8 (2026-09-05) taught the chunk concatenation to read its codec off the chunks, and the same second edit at 4:4:4 now re-renders 3 of 12 chunks and reuses 9, in 4446.6 ms. See docs/qa/j8-chunked-second-codec.json. The press numbers here stand."
 }

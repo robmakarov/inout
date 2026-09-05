@@ -22,6 +22,20 @@
  * mismatch refuses the whole path and renders unbroken instead. We can afford
  * to be strict because both encoders are ours.
  *
+ * WHICH CODEC IT IS, IS READ AND NOT ASSUMED (task J8). This concatenation used
+ * to open its one video track with `pickEncodingTarget`'s codec — the ladder's
+ * answer, 'avc' — while the thing that actually made the chunks is
+ * `render.ts`, which swaps in AV1 whenever O9(b)'s `?colour=all` is on. Two
+ * different answers to one question, and the muxer said so:
+ * "Couldn't extract an AVCDecoderConfigurationRecord from the AVC packet", i.e.
+ * AV1 packets on an AVC track. So the track is now opened from the FIRST
+ * CHUNK'S OWN TRACK, and every chunk after it must agree with that one on all
+ * three of codec family, full codec string and decoder description — a mixed
+ * set is refused, never muxed. The string and not only the description,
+ * because AV1 carries no description at all: its av1C is generated from the
+ * codec string (mediabunny codec.js), so `av01.0…` (4:2:0) and `av01.1…`
+ * (4:4:4) chunks would both compare "equal" on bytes nobody wrote.
+ *
  * WHY THE AUDIO IS NOT CHUNKED. AAC and opus both carry encoder priming, so
  * audio cut into pieces and spliced back together clicks at every boundary —
  * that is not a bounded difference, it is a broken file. The audio is one
@@ -51,6 +65,8 @@ import {
   EncodedVideoPacketSource,
   Input,
   Output,
+  type InputVideoTrack,
+  type VideoCodec,
 } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { keptSegments, segmentSpeed } from '@core/timeline'
@@ -72,7 +88,7 @@ import {
   touchChunk,
 } from './chunkStore'
 import { buildCertification, certificationComment } from './certify'
-import { VIDEO_BITRATE, pickEncodingTarget } from './codecs'
+import { VIDEO_BITRATE, pickEncodingTarget, type EncodingTarget } from './codecs'
 import { keyframeIntervalSec } from './keyframeInterval'
 import { exportFileName } from './fileName'
 import { createExportScratch, type ExportScratch } from './scratch'
@@ -210,6 +226,80 @@ function sameBytes(
 }
 
 /**
+ * One chunk file, opened far enough to say what is inside it (task J8).
+ *
+ * `codec` is the FAMILY the output track has to be opened with ('avc', 'av1');
+ * `config.codec` is the exact string, which for AV1 is the only thing that
+ * distinguishes 4:2:0 from 4:4:4 and is what the muxer builds av1C out of.
+ */
+export interface OpenChunkVideo {
+  index: number
+  input: Input
+  track: InputVideoTrack
+  codec: VideoCodec
+  config: VideoDecoderConfig
+}
+
+/** Only what the three rules below read — so they can be pinned without a file. */
+export type ChunkTrackShape = Pick<OpenChunkVideo, 'codec' | 'config'>
+
+async function openChunkVideo(key: string, index: number): Promise<OpenChunkVideo> {
+  const blob = await blobStore.read(key)
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track) throw new ChunkedRenderUnavailable(`chunk ${index} has no video track`)
+    const codec = await track.getCodec()
+    if (!codec) throw new ChunkedRenderUnavailable(`chunk ${index} names no codec`)
+    const config = await track.getDecoderConfig()
+    if (!config) throw new ChunkedRenderUnavailable(`chunk ${index} has no decoder config`)
+    return { index, input, track, codec, config }
+  } catch (err) {
+    input.dispose()
+    throw err
+  }
+}
+
+/**
+ * Can these two chunks share one track? Returns null when they can, and the
+ * reason in words when they cannot — a mixed set is REFUSED, never muxed.
+ *
+ * All three tests matter and each catches something the others cannot:
+ *   codec        'avc' packets on an 'av1' track is the failure J8 was opened
+ *                for, and it is the one the muxer reports as gibberish.
+ *   codec string AV1 carries no `description` at all — its av1C is GENERATED
+ *                from this string by the muxer — so a 4:2:0 chunk
+ *                (`av01.0.08M.08`) and a 4:4:4 one (`av01.1.08M.08.0.000…`)
+ *                are byte-identical on the test below and differ only here.
+ *                Compared whole and not by parts: mediabunny derives the
+ *                string from the track's own av1C/avcC, so it is the same
+ *                string for the same encode and a normalisation would only be
+ *                a way to accept something we cannot check.
+ *   description  the original avcC test: one track carries one SPS/PPS.
+ */
+export function sameTrack(chunk: ChunkTrackShape, reference: ChunkTrackShape): string | null {
+  if (chunk.codec !== reference.codec) {
+    return `is ${chunk.codec} where the first chunk is ${reference.codec}`
+  }
+  if (chunk.config.codec !== reference.config.codec) {
+    return `is encoded as ${chunk.config.codec} where the first chunk is ${reference.config.codec}`
+  }
+  if (!sameBytes(chunk.config.description, reference.config.description)) {
+    return 'has a different decoder description than the first'
+  }
+  return null
+}
+
+/** Which rung the FILE is, said in render.ts's own words. */
+export function rungOf(target: Pick<EncodingTarget, 'rung' | 'videoCodec'>, reference: ChunkTrackShape): string {
+  if (reference.codec === target.videoCodec) return `${target.rung}-chunked`
+  // The only swap that exists today is O9(b)'s, and its profile is in the
+  // string: `av01.1…` is the 4:4:4 profile (fullColour.ts).
+  const swapped = reference.config.codec.startsWith('av01.1') ? 'av1-444-sw' : reference.codec
+  return `${target.rung}→${swapped}-chunked`
+}
+
+/**
  * The chunked export. Throws ChunkedRenderUnavailable for anything it cannot
  * do, so the caller renders unbroken and the user never learns this existed.
  */
@@ -219,21 +309,14 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   const t0 = performance.now()
   const flags = currentRenderFlags()
   /**
-   * O9(b) DECLINES HERE, and the fallback is the point of the fallback. The
-   * concatenation below muxes every chunk's packets onto ONE track opened with
-   * `pickEncodingTarget`'s codec — 'avc' — while a full-colour render encodes
-   * AV1. The first run of (b) through this path died on
-   * "Couldn't extract an AVCDecoderConfigurationRecord from the AVC packet",
-   * which is the muxer being handed AV1 packets on an AVC track. Teaching the
-   * concatenation a second codec is its own piece of work; declining costs an
-   * opt-in export its chunk cache and nothing else, and the unbroken render is
-   * the runtime fallback this path was built to have.
+   * O9(b) USED TO DECLINE HERE — deleted 2026-09-05 by J8, which is the whole
+   * of that task. `?colour=all` renders chunks like any other export now,
+   * because the concatenation reads the codec off them instead of assuming the
+   * ladder's. What it cost while it stood is measured: a second small edit at
+   * 4:4:4 re-rendered the WHOLE take (9533.9 ms, 0 of 12 chunks reused) where
+   * 4:2:0 re-rendered 3 chunks in 2729.5 ms, and that gap scales with the
+   * TAKE, not with the edit.
    */
-  if (flags.fullColour) {
-    throw new ChunkedRenderUnavailable(
-      'every colour asked for: the chunk concatenation muxes one AVC track and this render is AV1 4:4:4',
-    )
-  }
   const plan = planChunks({ recording, edit, settings, flags })
   if (!plan.chunkable) throw new ChunkedRenderUnavailable(plan.unchunkableReason ?? 'no plan')
 
@@ -283,6 +366,8 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   const tRender = performance.now()
   let scratch: ExportScratch | null = null
   let output: Output | null = null
+  /** The reference chunk, while it is open and before the copy loop takes it. */
+  let head: OpenChunkVideo | null = null
   const stats: ChunkedRenderStats = {
     chunks: plan.chunks.length,
     reused,
@@ -387,6 +472,21 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     const tConcat = performance.now()
     const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
     const target = await pickEncodingTarget(settings.width, settings.height, needAudio, videoBitrate)
+
+    /**
+     * J8 — OPEN THE TRACK FROM THE CHUNKS. The ladder says what an export WOULD
+     * be encoded as; the chunks on disk say what one WAS. Only the second can
+     * open a track that the packets will fit into, so the first chunk is opened
+     * here, before the Output exists, and it is the reference every other chunk
+     * is checked against below. It is not opened twice: the copy loop takes
+     * this one for index 0.
+     */
+    const chunkKeys = plan.chunks.map((c) => chunkKeyFor(hashes[c.index]!))
+    const firstKey = chunkKeys[0]
+    if (!firstKey) throw new ChunkedRenderUnavailable('the plan has no chunks to concatenate')
+    const reference = await openChunkVideo(firstKey, plan.chunks[0]!.index)
+    head = reference
+
     scratch = await createExportScratch()
     const bufferTarget = scratch ? null : new BufferTarget()
     const out = new Output({ format: target.format, target: scratch ? scratch.target : bufferTarget! })
@@ -407,16 +507,19 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
           cuts: Math.max(0, keptSegments(edit).length - 1),
           codec: {
             container: target.mimeType,
-            video: target.videoCodec,
+            // J8: what the file IS, read off the chunks — not what the ladder
+            // would have picked. A certification that names the wrong codec is
+            // exactly the unanswerable size/quality report O8 exists to prevent.
+            video: reference.codec,
             audio: needAudio ? target.audioCodec : undefined,
             gopSec: settings.keyFrameIntervalSec ?? keyframeIntervalSec(),
-            rung: `${target.rung}-chunked`,
+            rung: rungOf(target, reference),
             qp: flags.cq ?? undefined,
           },
         }),
       ),
     })
-    const videoSource = new EncodedVideoPacketSource(target.videoCodec)
+    const videoSource = new EncodedVideoPacketSource(reference.codec)
     out.addVideoTrack(videoSource)
     let audioSource: EncodedAudioPacketSource | null = null
     if (needAudio) {
@@ -426,31 +529,22 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     await out.start()
     stats.muxOpenMs = Math.round(performance.now() - tConcat)
 
-    let firstDescription: AllowSharedBufferSource | undefined
     let firstVideo = true
-    for (const chunk of plan.chunks) {
+    for (let i = 0; i < plan.chunks.length; i++) {
       throwIfAborted()
-      const blob = await blobStore.read(chunkKeyFor(hashes[chunk.index]!))
-      const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+      const chunk = plan.chunks[i]!
+      // Index 0 is already open — it is what the track above was opened FROM.
+      const opened = i === 0 ? reference : await openChunkVideo(chunkKeys[i]!, chunk.index)
+      if (i === 0) head = null
       try {
-        const track = await input.getPrimaryVideoTrack()
-        if (!track) throw new ChunkedRenderUnavailable(`chunk ${chunk.index} has no video track`)
-        const config = await track.getDecoderConfig()
-        if (!config) throw new ChunkedRenderUnavailable(`chunk ${chunk.index} has no decoder config`)
-        if (firstVideo) {
-          firstDescription = config.description
-        } else if (!sameBytes(config.description, firstDescription)) {
-          /**
-           * ONE TRACK CARRIES ONE avcC. Two chunks whose encoders describe
-           * their bitstreams differently cannot share it — half the file would
-           * decode to garbage. Refuse the path rather than ship that; the
-           * unbroken render is right there.
-           */
-          throw new ChunkedRenderUnavailable(
-            `chunk ${chunk.index} has a different decoder description than the first`,
-          )
+        // ONE TRACK CARRIES ONE DECODER DESCRIPTION. Refuse a set that does not
+        // agree rather than ship a file half of which decodes to garbage; the
+        // unbroken render is right there. `sameTrack` is what "agree" means.
+        const disagreement = sameTrack(opened, reference)
+        if (disagreement) {
+          throw new ChunkedRenderUnavailable(`chunk ${chunk.index} ${disagreement}`)
         }
-        const sink = new EncodedPacketSink(track)
+        const sink = new EncodedPacketSink(opened.track)
         for await (const packet of sink.packets()) {
           throwIfAborted()
           const at = chunk.startSec + packet.timestamp
@@ -463,12 +557,12 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
             Math.max(0, at),
             packet.duration,
           )
-          await videoSource.add(shifted, firstVideo ? { decoderConfig: config } : undefined)
+          await videoSource.add(shifted, firstVideo ? { decoderConfig: reference.config } : undefined)
           firstVideo = false
           stats.videoPacketsCopied++
         }
       } finally {
-        input.dispose()
+        opened.input.dispose()
       }
     }
     videoSource.close()
@@ -479,6 +573,15 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
       try {
         const track = await input.getPrimaryAudioTrack()
         if (!track) throw new ChunkedRenderUnavailable('the audio artifact has no audio track')
+        // J8's rule on the other track: the artifact was encoded by the ladder
+        // too, so this can only disagree if the ladder answered differently
+        // between the render and here — refuse it rather than mis-mux it.
+        const artifactCodec = await track.getCodec()
+        if (artifactCodec !== target.audioCodec) {
+          throw new ChunkedRenderUnavailable(
+            `the audio artifact is ${artifactCodec} where the track is ${target.audioCodec}`,
+          )
+        }
         const config = await track.getDecoderConfig()
         if (!config) throw new ChunkedRenderUnavailable('the audio artifact has no decoder config')
         const sink = new EncodedPacketSink(track)
@@ -544,6 +647,9 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {
       await output.cancel().catch(() => undefined)
     }
+    // Open between the probe and the copy loop's first turn, and nobody else's
+    // to close on the way out.
+    head?.input.dispose()
     await scratch?.discard().catch(() => undefined)
     throw err
   }

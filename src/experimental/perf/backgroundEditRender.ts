@@ -97,15 +97,18 @@ async function countChunks(): Promise<number> {
  * THE COLD FOREGROUND RENDER, WITH THE PRODUCT'S OWN FALLBACK UNDER IT.
  *
  * Gates 3 and 4 used to call `renderChunked` bare, which is only the same thing
- * the product does while the chunked path is AVAILABLE. It is not always: under
- * O9(b)'s `?colour=all`, `renderChunked` declines by name (its concatenation
- * muxes one AVC track and a full-colour render encodes AV1) and pipeline.ts
- * falls through to the unbroken render. A rig that stops at the decline is
- * measuring its own shortcut rather than the export, so this is the same two
- * lines pipeline.ts has — chunked, then unbroken on `ChunkedRenderUnavailable`.
+ * the product does while the chunked path is AVAILABLE. It is not always — a
+ * chunk the store cannot write, a set whose codecs disagree, no video to chunk
+ * — and pipeline.ts falls through to the unbroken render for every one of
+ * them. A rig that stops at the decline is measuring its own shortcut rather
+ * than the export, so this is the same two lines pipeline.ts has: chunked,
+ * then unbroken on `ChunkedRenderUnavailable`.
  *
- * At 4:2:0 — every J5 number ever quoted — the first call succeeds and nothing
- * about this rig moves.
+ * IT WAS WRITTEN FOR O9(b)'s `?colour=all`, which used to be declined BY NAME
+ * (the concatenation muxed one AVC track and a full-colour render encodes
+ * AV1). J8 deleted that decline 2026-09-05, so `--query=colour=all` now takes
+ * the first call like any other run — which is the point of the gate below.
+ * The fallback stays because the other declines have not gone anywhere.
  */
 async function coldRender(args: {
   recording: Recording
@@ -529,12 +532,13 @@ export async function runBackgroundEditRender(
     report.invalidated.verdict =
       report.invalidated.rendered >= 0
         ? `the zoom moved 400 ms: ${report.invalidated.rendered} chunk(s) re-rendered, ` +
-          `${report.invalidated.reused} reused, of ${report.invalidated.total}`
-        : report.flags.fullColour
-          ? 'the unbroken render ran, as `?colour=all` requires — chunked declines at 4:4:4, so there ' +
-            'are no chunks to reuse and this gate has nothing to count (J1 teaching its concatenation ' +
-            'a second codec is its own task)'
-          : 'FAIL — the chunked path did not report (the unbroken render ran instead)'
+          `${report.invalidated.reused} reused, of ${report.invalidated.total}` +
+          // J8: this line used to have a `?colour=all` branch that PASSED on
+          // the unbroken render, because the chunked path declined at 4:4:4.
+          // It does not any more, so full colour is held to the same count as
+          // 4:2:0 and the branch is a FAIL like every other miss.
+          (report.flags.fullColour ? ' — at 4:4:4, on the chunks J8 taught the concatenation to read' : '')
+        : 'FAIL — the chunked path did not report (the unbroken render ran instead)'
   } catch (err) {
     report.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
   } finally {

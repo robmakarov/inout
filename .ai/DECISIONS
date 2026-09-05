@@ -1729,3 +1729,34 @@ concatenation opening its track from the codec the chunks were actually encoded 
 j5 rig's own `invalidated` reading the same 3-of-12 reuse at `--query=colour=all` that it reads at
 4:2:0. After that the colour default is a question about his eye on `~/Downloads/inout-o9` and nothing
 else. Evidence: docs/qa/o9b-precondition-press.json.
+
+J8 2026-09-05 — THE CHUNK CONCATENATION LEARNS A SECOND CODEC. DONE, and the gate robert (28) named
+is met: the j5 rig at `--query=colour=all` reports **3 chunks re-rendered, 9 reused, of 12, in
+4446.6 ms**, which is the 3-of-12 it reports at 4:2:0, against 0-of-12 and 9533.9 ms the day before.
+WHAT WAS WRONG, in one line: `renderChunked` opened its one video track with `pickEncodingTarget`'s
+codec — the LADDER's answer, 'avc' — while the thing that actually made the chunks is render.ts,
+which swaps in AV1 whenever `?colour=all` is on. Two answers to one question, and the muxer said so
+("Couldn't extract an AVCDecoderConfigurationRecord from the AVC packet"). The track is now opened
+from the FIRST CHUNK'S OWN TRACK, and every chunk after it must agree on codec family, full codec
+string and decoder description or the whole path is refused into the unbroken render.
+THE STRING AND NOT ONLY THE DESCRIPTION, and this is the part worth remembering: AV1 carries NO
+decoder description at all — mediabunny GENERATES its av1C from the codec string — so a 4:2:0 chunk
+(`av01.0.08M.08`) and a 4:4:4 one (`av01.1.08M.08.0.000…`) are byte-identical on the avcC test J1
+shipped and differ only in the string. Both refusal rules are born red (chunkedCodec.test.ts).
+PROVEN ON THE FILE, NOT ON THE ORDERING. The J1 rig grew two facts for this, because every packet
+count it prints is read `metadataOnly` and would believe a wrong av1C as readily as a right one: the
+output's CODEC STRING, and whether a real decoder takes its first frame. At 4:4:4 the chunked and
+unbroken lanes both come out `av01.1.08M.08.0.110.06.06.06.0`, 900 packets, 12 keyframes, identical
+timestamps, both decode. At 4:2:0 on the same build: same codec, 900/12, 0 % size delta, and the two
+lanes are PIXEL-IDENTICAL (99 dB) — the shipped path is unmoved.
+ONE THING IS NOT FREE, AND IT IS NOT THE CONCATENATION'S. At 4:4:4 the chunked file is **19.5 %
+smaller** than the unbroken one on the same 900 packets, and 99/37.1/51.8 dB from it at 1.5/15/27 s.
+That was MEASURED to its cause rather than argued: run the same 4:2:0 AVC lanes with `--query=cq=off`
+and they diverge the same way (99/40.6/49.1 dB, −3 %). So it is what a BITRATE-TARGETED encoder does
+when its rate control runs over twelve 2.5 s segments instead of one 30 s stream — true of J1's
+chunked path on AVC since J1 shipped, for anyone who turns `?cq=` off. Constant quality (qp 20, the
+default) pins the QP and is exactly why the 4:2:0 lanes are identical; `constantQualityCodec` returns
+null for anything but avc, so the 4:4:4 rung has no quality target. A QUALITY TARGET FOR THE AV1 RUNG
+IS WORTH HAVING BEFORE ANY 4:4:4 DEFAULT MOVES — it is not J8 and it is not built.
+Gates: typecheck + 1406 tests · oracle PASS sync=61.1/76.2ms, instant 76.4 ms, smartcut 78.5 ms.
+Evidence: docs/qa/j8-chunked-second-codec.json.
