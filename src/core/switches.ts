@@ -440,16 +440,6 @@ export const SWITCHES: readonly SwitchSpec[] = [
     hint: 'On. Off renders the whole take again for every edit — 165 s where the remembered path takes 2 s (J1).',
   },
   {
-    id: 'bgrender',
-    verdict: 'fallback',
-    storageKey: 'inout.compose.bgrender',
-    kind: 'toggle',
-    fallback: 'on',
-    group: 'Export',
-    label: 'Render an edit while you keep editing',
-    hint: 'On. Off waits for the export press before touching the encoder.',
-  },
-  {
     id: 'prerender',
     verdict: 'answered',
     storageKey: 'inout.export.prerender',
@@ -656,7 +646,7 @@ export const DYNAMIC_READS: ReadonlyMap<string, string> = new Map([
  * the pushed commit's parent and refuses the push if it rose. Adding a switch
  * means retiring one, or Robert saying so.
  */
-export const SWITCH_CEILING = 50
+export const SWITCH_CEILING = 49
 
 export function switchById(id: string): SwitchSpec | undefined {
   return SWITCHES.find((s) => s.id === id)

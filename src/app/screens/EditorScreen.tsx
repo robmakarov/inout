@@ -13,7 +13,6 @@ import {
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
 import { cancelPrerender, editBindsPrerender, exportWouldRender } from '@core/compose'
-import { cancelEditRender, noteEditorEdit } from '@core/compose/editRender'
 import { holdEditorAhead, noteEditingActivity } from '@core/backgroundWork'
 import { startEditorLateness } from '@core/lateness'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
@@ -268,13 +267,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * other chunk it finished stays on disk and is reused — by the next job and
    * by the press. Same trigger, bounded waste.
    *
-   * FOUR THINGS HAPPEN HERE, and only one of them starts work:
-   *  · `noteEditorEdit` (compose/editRender.ts) is the ONE door to a background
-   *    render. It holds the rules and is unit-pinned: opening a take starts
-   *    nothing, an undo back to the take as it opened starts nothing and
-   *    cancels what was pending, an export that would be a packet copy starts
-   *    nothing, and a real edit starts one 1.2 s after it settles.
-   *  · `editBindsPrerender` still STOPS a running job when an edit makes its
+   * NOTHING HERE STARTS WORK ANY MORE — Robert 2026-09-05, "bg render while edit
+   * dont work, fuck it, delete it". J5's edit-triggered background render is
+   * deleted: an edit no longer starts a render, and the export press is the
+   * only thing that touches the encoder. F16b's AT-STOP pre-render is
+   * untouched, and so is every rule below, because all of them STOP work
+   * rather than start it.
+   *  · `editBindsPrerender` STOPS a running job when an edit makes its
    *    output unservable — the job stops instead of spending the machine on a
    *    file the key would never let anyone serve, and since J1 stopping costs
    *    one chunk.
@@ -300,7 +299,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     })
     editBindsPrerender({ recording, edit, settings })
     if (!wouldRender) cancelPrerender()
-    noteEditorEdit({ recording, edit, settings, wouldRender })
   }, [recording, edit, tier, frameAspect, frameRate])
 
   // A take that is left behind takes its pre-render with it: the file is for an
@@ -308,7 +306,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   // the next editor would open onto a render aimed at the take it replaced.
   useEffect(
     () => () => {
-      cancelEditRender()
       cancelPrerender()
     },
     [recording.id],

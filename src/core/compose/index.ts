@@ -26,6 +26,4 @@ export {
   type ChunkedRenderStats,
 } from './chunkedRender'
 export { chunkedRenderEnabled, setChunkedRenderEnabled } from './chunkedFlag'
-export { cancelEditRender, editRenderPending, noteEditorEdit, EDIT_SETTLE_MS } from './editRender'
-export { editRenderEnabled, setEditRenderEnabled } from './editRenderFlag'
 export { sweepChunks } from './chunkStore'

@@ -34,7 +34,6 @@ import { bandLimitedResampling } from '@core/compose/audio'
 import { audioTrackMode } from '@core/compose/audioTracks'
 import { chunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { constantQualityQp } from '@core/compose/constantQuality'
-import { editRenderEnabled } from '@core/compose/editRenderFlag'
 import { fullColourEnabled } from '@core/compose/fullColour'
 import { noiseGateEnabled } from '@core/compose/gateFlag'
 import { keyframeIntervalSec } from '@core/compose/keyframeInterval'
@@ -89,7 +88,6 @@ export const SWITCH_READERS: Readonly<Record<string, () => string>> = {
   noisegate: () => (noiseGateEnabled() ? 'on' : 'off'),
   loudness: () => loudnessMode(),
   chunked: () => onOff(chunkedRenderEnabled()),
-  bgrender: () => onOff(editRenderEnabled()),
   prerender: () => onOff(prerenderEnabled()),
   smartcut: () => onOff(smartCutEnabled()),
   colour: () => (fullColourEnabled() ? 'all' : '420'),

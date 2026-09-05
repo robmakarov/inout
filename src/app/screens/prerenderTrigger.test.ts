@@ -1,20 +1,22 @@
 /**
- * THERE IS ONE DOOR BETWEEN AN EDIT AND A RENDER — J5's source gate.
+ * NO EDIT MAY START A RENDER — the source gate, back to gating an ABSENCE.
  *
- * WHAT THIS FILE USED TO SAY, and why it changed. J3 (Robert 2026-09-03) gated
- * an ABSENCE: no code path may start a render from an edit, scanned for as a
- * `setTimeout(startPrerender)` anywhere in the app. Robert reversed the ruling
- * on 2026-09-04 (robert (27)) once J1 made a superseded render cost one 2.5 s
- * chunk instead of the whole take — "kill the glued copy encoding and do
- * background render while editing" — so the absence is gone and what replaces
- * it is a single, unit-pinned door: `core/compose/editRender.ts`.
+ * THE HISTORY, kept because this file has now been written three ways and each
+ * turn was a ruling. J3 (Robert 2026-09-03) gated the absence: no code path may
+ * start a render from an edit. He reversed it on 2026-09-04 (robert (27)) once
+ * J1 made a superseded render cost one 2.5 s chunk instead of the whole take —
+ * "kill the glued copy encoding and do background render while editing" — and
+ * J5 built the one door, `core/compose/editRender.ts`. He reversed it again on
+ * 2026-09-05: "bg render while edit dont work, fuck it, delete it". The door
+ * module, its flag and the `?bgrender=` switch are DELETED, and the absence is
+ * what is gated once more.
  *
- * The rules themselves are behavioural and live in `editRender.test.ts` (an
- * untouched editor renders nothing, a settle, no render for a packet copy, the
- * flag). What can only be gated by READING THE SOURCE is that the door stays
- * the only one — a second `startPrerender` call added to a component months
- * from now would pass every behavioural test in the repo while quietly putting
- * F16's speculative render back.
+ * The at-stop pre-render (F16b, CaptureScreen) is untouched and is asserted
+ * below, because deleting the edit trigger must not quietly take it too.
+ *
+ * What can only be gated by READING THE SOURCE is that nobody re-adds the
+ * trigger: a `setTimeout(startPrerender)` in a component months from now would
+ * pass every behavioural test in the repo while putting J5 back.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -39,7 +41,7 @@ function code(text: string): string {
     .replace(/`(?:[^`\\]|\\.)*`/g, '``')
 }
 
-describe('J5 — one door from an edit to a background render', () => {
+describe('an edit starts no render — the deleted J5 trigger stays deleted', () => {
   it('reads the modules it is gating', () => {
     // A glob that came back empty would pass every assertion below by looking
     // at nothing at all (note 17: a gate that cannot fail is not a gate).
@@ -47,11 +49,19 @@ describe('J5 — one door from an edit to a background render', () => {
     expect(Object.keys(coreSources).length).toBeGreaterThan(20)
     const editor = Object.entries(appSources).find(([f]) => f.endsWith('EditorScreen.tsx'))
     expect(editor, 'EditorScreen.tsx must be in the scanned set').toBeTruthy()
-    const door = Object.entries(coreSources).find(([f]) => f.endsWith('compose/editRender.ts'))
-    expect(door, 'compose/editRender.ts is the door and must be in the scanned set').toBeTruthy()
   })
 
-  it('the EDITOR goes through the door — it never calls startPrerender itself', () => {
+  it('the door module is gone and nothing imports it', () => {
+    const offenders = [...Object.entries(appSources), ...Object.entries(coreSources)]
+      // This file names the deleted module in its own history note, so it is
+      // excluded for the same reason the timer scan below excludes itself.
+      .filter(([file]) => !/\.test\.tsx?$/.test(file))
+      .filter(([, text]) => /compose\/editRender(Flag)?['"]/.test(text))
+      .map(([file]) => file)
+    expect(offenders).toEqual([])
+  })
+
+  it('the EDITOR never starts a render — not directly, not on a timer', () => {
     // Scoped to the editor and its components on purpose: the capture screen
     // still starts the at-stop job, and that one is not speculation — it runs
     // once, when the machine is idle by definition.
@@ -63,31 +73,21 @@ describe('J5 — one door from an edit to a background render', () => {
     expect(offenders).toEqual([])
   })
 
-  it('the editor DOES call the door — the feature is on, not merely allowed', () => {
-    // The other half, and the one that matters after robert (27): a fix that
-    // ships wired to nothing is the "you did fix and turned it off" defect.
-    const editor = Object.entries(appSources).find(([f]) => f.endsWith('EditorScreen.tsx'))!
-    expect(code(editor[1])).toMatch(/\bnoteEditorEdit\s*\(/)
-    expect(code(editor[1])).toMatch(/\bcancelEditRender\s*\(/)
-  })
-
-  it('editRender.ts is the ONLY module that starts a render on a timer', () => {
-    // The exact shape J3 deleted, allowed in precisely one file now.
+  it('NO module starts a render on a timer — the exemption is gone with J5', () => {
     const deferred = /set(?:Timeout|Interval)\([^;]{0,400}?startPrerender/
     const offenders = [...Object.entries(appSources), ...Object.entries(coreSources)]
       // Tests are excluded, and this one is why: the born-red assertion below
       // carries the forbidden shape as a regex literal, so a scan that included
       // itself would fail forever on its own gate.
       .filter(([file]) => !/\.test\.tsx?$/.test(file))
-      .filter(([file]) => !/compose\/editRender\.ts$/.test(file))
       .filter(([, text]) => deferred.test(code(text).replace(/\s+/g, ' ')))
       .map(([file]) => file)
     expect(offenders).toEqual([])
   })
 
   it('catches the shape it is meant to catch', () => {
-    // Born red against the line J3 deleted and J5 re-homed, so this is known to
-    // be able to fail.
+    // Born red against the exact line J5 owned, so this is known to be able to
+    // fail rather than merely known to pass.
     const loose = 'const t = setTimeout(() => startPrerender({ recording, edit, settings }), 1200)'
     expect(/\bstartPrerender\s*\(/.test(code(loose))).toBe(true)
     expect(/set(?:Timeout|Interval)\([^;]{0,400}?startPrerender/.test(code(loose).replace(/\s+/g, ' '))).toBe(
@@ -95,7 +95,7 @@ describe('J5 — one door from an edit to a background render', () => {
     )
   })
 
-  it('the AT-STOP render is untouched — J5 added a trigger, it did not move one', () => {
+  it('the AT-STOP render is untouched — deleting the edit trigger did not take it', () => {
     const capture = Object.entries(appSources).find(([f]) => f.endsWith('CaptureScreen.tsx'))
     expect(capture).toBeTruthy()
     expect(code(capture![1])).toMatch(/startPrerender\(/)
