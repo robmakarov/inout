@@ -640,10 +640,28 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
    * of it stayed on disk for 24 hours under the cap. Robert measured 2.686 GB
    * of exactly this on his own machine.
    */
+  const derived = async (): Promise<{ files: number; mb: number; kinds: string }> => {
+    const own: Record<string, number> = {}
+    let files = 0
+    let bytes = 0
+    for (const f of await blobStore.list()) {
+      // Everything this take could have caused, by the take's own id (J11/J12).
+      if (!f.key.includes(recording.id)) continue
+      if (f.key.startsWith('rec_')) continue // its own channels, deleted by the repo
+      files++
+      bytes += f.size
+      const kind = f.key.split('-')[0] ?? '?'
+      own[kind] = (own[kind] ?? 0) + 1
+    }
+    const kinds = Object.entries(own).map(([k, n]) => `${k}×${n}`).join(' ') || 'none'
+    return { files, mb: MB(bytes), kinds }
+  }
   const beforeDelete = await chunkFootprint()
+  const derivedBefore = await derived()
   const { recordingsRepo: repo } = await import('@core/store')
   await repo.remove(recording.id).catch(() => undefined)
   const afterDelete = await chunkFootprint()
+  const derivedAfter = await derived()
 
   const footprint = await chunkFootprint()
 
@@ -769,6 +787,11 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
         ? 'PASS — the miss costs one chunk, and it used to cost the whole take'
         : 'FAIL — see sweptChunk'
   }
+  verdict.deleteTakesEverything =
+    `derived files for this take: ${derivedBefore.files} before (${derivedBefore.kinds}, ` +
+    `${derivedBefore.mb} MB) → ${derivedAfter.files} after (${derivedAfter.kinds})` +
+    (derivedAfter.files === 0 ? ' — PASS' : ' — FAIL, junk outlived the video')
+
   verdict.deleteTakesItsRender =
     `deleting the take left ${afterDelete.files} of ${beforeDelete.files} chunk files ` +
     `(${afterDelete.mb} of ${beforeDelete.mb} MB)` +

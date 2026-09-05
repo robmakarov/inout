@@ -40,6 +40,49 @@ const CHUNK_SIZE = 4 * 1024 * 1024
  */
 const SCRATCH_TTL_MS = 6 * 60 * 60 * 1000
 
+/**
+ * J12 — WHOSE EXPORT THIS SCRATCH IS. The birth stamp stays at index 0, so
+ * `scratchBornAt` and the 6-hour sweep are untouched; the take's id is the
+ * segment after it. A key written before J12 has `x_…` there, which matches no
+ * recording, so it is simply never purged by take and expires on the TTL as it
+ * always did.
+ */
+export function recordingOfScratch(key: string): string | null {
+  if (!key.startsWith(SCRATCH_PREFIX)) return null
+  const parts = key.slice(SCRATCH_PREFIX.length).split('-')
+  return parts.length >= 3 ? (parts[1] ?? null) : null
+}
+
+/**
+ * Every scratch file this take's exports left behind.
+ *
+ * SAFE ONLY BECAUSE THE CALLER KILLS THE WORK FIRST: purge.ts cancels the
+ * take's live export jobs and its pre-render before calling this, so anything
+ * still matching is a finished or abandoned file. A scratch deleted from under
+ * a writer fails that export — which, for a take being deleted, is an export we
+ * are deliberately ending anyway.
+ */
+export async function removeScratchFor(
+  recordingId: string,
+): Promise<{ removed: number; bytes: number }> {
+  let removed = 0
+  let bytes = 0
+  for (const f of await blobStore.list()) {
+    if (recordingOfScratch(f.key) !== recordingId) continue
+    const size = f.size
+    await blobStore.remove(f.key).then(
+      () => {
+        removed += 1
+        bytes += size
+        open.delete(f.key)
+        if (newestFinished === f.key) newestFinished = null
+      },
+      () => undefined,
+    )
+  }
+  return { removed, bytes }
+}
+
 function scratchBornAt(key: string): number {
   const stamp = key.slice(SCRATCH_PREFIX.length).split('-')[0]
   const t = parseInt(stamp, 36)
@@ -122,9 +165,12 @@ async function sweepStale(): Promise<void> {
  * Open a scratch target, or null when OPFS is unusable — callers then keep the
  * in-memory BufferTarget, so no platform loses the ability to export.
  */
-export async function createExportScratch(): Promise<ExportScratch | null> {
+export async function createExportScratch(
+  /** J12 — whose export this is, so deleting the take can take it too. */
+  recordingId: string,
+): Promise<ExportScratch | null> {
   if (!scratchEnabled) return null
-  const key = `${SCRATCH_PREFIX}${Date.now().toString(36)}-${newId('x')}`
+  const key = `${SCRATCH_PREFIX}${Date.now().toString(36)}-${recordingId}-${newId('x')}`
   try {
     await sweepStale().catch(() => undefined)
     const writer = await createPositionedWriter(key)

@@ -652,7 +652,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // J1: the caller's sink wins — a chunk file, or the audio artifact. Nobody
     // else has one, so the scratch stays exactly what it was for every export.
     const tScratch = performance.now()
-    if (!sink) scratch = await createExportScratch()
+    if (!sink) scratch = await createExportScratch(recording.id)
     stats.prep.scratch = since(tScratch)
     const bufferTarget = sink || scratch ? null : new BufferTarget()
     const out = new Output({

@@ -39,6 +39,20 @@ vi.mock('@core/store', () => ({
   },
 }))
 
+const cancelledJobs: string[] = []
+/** Jobs THIS page session is running. `removeExportJob` no-ops on any other —
+ *  a row from an earlier session is a row, not work, and step 4 clears it. */
+const liveIds = new Set<string>()
+vi.mock('./exportJobs', () => ({
+  removeExportJob: (id: string) => {
+    if (!liveIds.has(id)) return
+    cancelledJobs.push(id)
+    const i = jobs.findIndex((j) => j.id === id)
+    if (i >= 0) jobs.splice(i, 1)
+    files.delete(`xjob-${id}`)
+  },
+}))
+
 vi.mock('./prerender', () => ({
   prerenderBlobFor: (id: string) => (liveJob?.recordingId === id ? liveJob.blobKey : null),
   cancelPrerenderFor: (id: string) => {
@@ -49,7 +63,9 @@ vi.mock('./prerender', () => ({
 }))
 
 const { purgeDerivedFor } = await import('./purge')
-const { chunkKeyFor, recordingOfChunk } = await import('./chunkStore')
+const { chunkKeyFor, recordingOfChunk, recordingOfChunkPart } = await import('./chunkStore')
+const { recordingOfScratch } = await import('./scratch')
+const { recordingOfAiSink } = await import('@core/ai/build')
 
 const MINE = 'rec_aaaaaaaaaaaa'
 const THEIRS = 'rec_bbbbbbbbbbbb'
@@ -58,6 +74,8 @@ beforeEach(() => {
   files.clear()
   locked.clear()
   jobs.length = 0
+  cancelledJobs.length = 0
+  liveIds.clear()
   cancelledFor = null
   liveJob = null
 })
@@ -153,6 +171,66 @@ describe('deleting a take takes its render with it', () => {
 
   it('does nothing, loudly or otherwise, for a take that rendered nothing', async () => {
     const r = await purgeDerivedFor(MINE)
-    expect(r).toEqual({ removed: 0, bytes: 0, jobs: 0, prerender: false, failed: 0 })
+    expect(r).toEqual({
+      removed: 0, bytes: 0, jobs: 0, prerender: false, cancelled: 0, failed: 0,
+    })
+  })
+})
+
+/**
+ * J12 — THE THREE TRANSIENT FILES. Each was bounded (a 6-hour TTL, or a
+ * newest-only rule) and none carried a recording id, so a deleted take's export
+ * scratch, its half-written chunk and its flattened-to-PDF copy all outlived
+ * it. Robert, 2026-09-05: "fix those three too".
+ */
+describe('the transient files name their take as well', () => {
+  it('reads the take out of each key, and out of none of the older shapes', () => {
+    expect(recordingOfScratch(`xport-abc-${MINE}-x_1`)).toBe(MINE)
+    expect(recordingOfChunkPart(`rchunkpart-abc-${MINE}-c_1`)).toBe(MINE)
+    expect(recordingOfAiSink(`aixport-${MINE}-ai_1.pdf`)).toBe(MINE)
+    // Pre-J12 shapes: no take, so a purge by take never touches them and the
+    // TTL / newest-only rules keep owning them exactly as before.
+    expect(recordingOfScratch('xport-abc-x_1')).not.toBe(MINE)
+    expect(recordingOfChunkPart('rchunkpart-abc-c_1')).toBeNull()
+    expect(recordingOfAiSink('aixport-ai_1.pdf')).toBeNull()
+  })
+
+  it('takes the export scratch, the staging chunk and the AI pdf with the take', async () => {
+    files.set(`xport-abc-${MINE}-x_1`, 6_800_000_000)
+    files.set(`rchunkpart-abc-${MINE}-c_1`, 3_000_000)
+    files.set(`aixport-${MINE}-ai_1.pdf`, 40_000_000)
+    // ...and one of each belonging to another take.
+    files.set(`xport-abc-${THEIRS}-x_9`, 1)
+    files.set(`rchunkpart-abc-${THEIRS}-c_9`, 1)
+    files.set(`aixport-${THEIRS}-ai_9.pdf`, 1)
+
+    const r = await purgeDerivedFor(MINE)
+    expect(r.removed).toBe(3)
+    expect(r.bytes).toBe(6_843_000_000)
+    expect(files.has(`xport-abc-${THEIRS}-x_9`)).toBe(true)
+    expect(files.has(`rchunkpart-abc-${THEIRS}-c_9`)).toBe(true)
+    expect(files.has(`aixport-${THEIRS}-ai_9.pdf`)).toBe(true)
+  })
+
+  it('stops the export before deleting what it writes', async () => {
+    jobs.push({ id: 'j_1', recordingId: MINE }, { id: 'j_2', recordingId: THEIRS })
+    liveIds.add('j_1')
+    liveIds.add('j_2')
+    const r = await purgeDerivedFor(MINE)
+    expect(cancelledJobs).toEqual(['j_1'])
+    expect(r.cancelled).toBe(1)
+    expect(jobs.map((j) => j.id)).toEqual(['j_2'])
+  })
+})
+
+describe('a job row from a dead session is a row, not work', () => {
+  it('clears it without claiming to have cancelled anything', async () => {
+    jobs.push({ id: 'j_old', recordingId: MINE, result: { blobKey: 'xjob-j_old' } })
+    files.set('xjob-j_old', 1234)
+    const r = await purgeDerivedFor(MINE)
+    expect(cancelledJobs).toEqual([])
+    expect(r.cancelled).toBe(0)
+    expect(r.jobs).toBe(1)
+    expect(files.has('xjob-j_old')).toBe(false)
   })
 })

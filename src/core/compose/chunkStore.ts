@@ -110,14 +110,25 @@ export function recordingOfChunk(key: string): string | null {
   return cut > 0 ? rest.slice(0, cut) : null
 }
 
-/** Every chunk this take ever made. What "delete the video" has to include. */
+/** The take a staging file is being written for, or null before J12. */
+export function recordingOfChunkPart(key: string): string | null {
+  if (!key.startsWith(CHUNK_PART_PREFIX)) return null
+  const parts = key.slice(CHUNK_PART_PREFIX.length).split('-')
+  return parts.length >= 3 ? (parts[1] ?? null) : null
+}
+
+/**
+ * Every chunk this take ever made, finished or half-written. What "delete the
+ * video" has to include.
+ */
 export async function removeChunksFor(
   recordingId: string,
 ): Promise<{ removed: number; bytes: number }> {
   let removed = 0
   let bytes = 0
   for (const f of await blobStore.list()) {
-    if (recordingOfChunk(f.key) !== recordingId) continue
+    const owner = recordingOfChunk(f.key) ?? recordingOfChunkPart(f.key)
+    if (owner !== recordingId) continue
     await blobStore.remove(f.key).then(
       () => {
         removed += 1
@@ -161,7 +172,9 @@ export async function openChunkWriter(
   recordingId: string,
   hash: string,
 ): Promise<ChunkWriter | null> {
-  const partKey = `${CHUNK_PART_PREFIX}${Date.now().toString(36)}-${newId('c')}`
+  // J12: the staging name carries the take too, so a delete can take a
+  // half-written chunk with it. `bornAt` still reads the stamp at index 0.
+  const partKey = `${CHUNK_PART_PREFIX}${Date.now().toString(36)}-${recordingId}-${newId('c')}`
   try {
     const writer = await createPositionedWriter(partKey)
     let closed = false

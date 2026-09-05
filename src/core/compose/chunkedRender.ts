@@ -586,7 +586,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     const reference = await openChunkVideo(firstKey, plan.chunks[0]!.index)
     head = reference
 
-    scratch = await createExportScratch()
+    scratch = await createExportScratch(recording.id)
     const bufferTarget = scratch ? null : new BufferTarget()
     const out = new Output({ format: target.format, target: scratch ? scratch.target : bufferTarget! })
     output = out

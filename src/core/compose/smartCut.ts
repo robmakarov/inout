@@ -407,7 +407,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
     )
 
     const format = new Mp4OutputFormat()
-    scratch = await createExportScratch()
+    scratch = await createExportScratch(recording.id)
     const bufferTarget = scratch ? null : new BufferTarget()
     const out = new Output({ format, target: scratch ? scratch.target : bufferTarget! })
     output = out

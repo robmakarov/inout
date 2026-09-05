@@ -169,7 +169,22 @@ export function setLastAiExportStats(stats: AiExportStats | null): void {
   lastStats = stats
 }
 
-const SINK_PREFIX = 'aixport-'
+export const AI_SINK_PREFIX = 'aixport-'
+const SINK_PREFIX = AI_SINK_PREFIX
+
+/**
+ * J12 — WHOSE PDF THIS IS. The sink already deletes every file but the newest
+ * finished one whenever a new AI export starts, so this was never unbounded —
+ * but that newest one is a whole flattened recording and it sat there until the
+ * NEXT AI export, long after its take had been deleted. A key written before
+ * J12 has `ai_…` here, matches no recording, and is cleared by that same
+ * newest-only rule exactly as before.
+ */
+export function recordingOfAiSink(key: string): string | null {
+  if (!key.startsWith(SINK_PREFIX)) return null
+  const cut = key.slice(SINK_PREFIX.length).indexOf('-')
+  return cut > 0 ? key.slice(SINK_PREFIX.length, SINK_PREFIX.length + cut) : null
+}
 let newestFinished: string | null = null
 
 interface PdfDestination {
@@ -183,8 +198,11 @@ interface PdfDestination {
  * must not live in the heap — a long take is hundreds of JPEGs), memory as the
  * fallback so no platform loses the export.
  */
-async function openPdfDestination(): Promise<PdfDestination> {
-  const key = `${SINK_PREFIX}${newId('ai')}.pdf`
+async function openPdfDestination(
+  /** J12 — whose take this PDF is of, so deleting it takes the PDF too. */
+  recordingId: string,
+): Promise<PdfDestination> {
+  const key = `${SINK_PREFIX}${recordingId}-${newId('ai')}.pdf`
   try {
     for (const stale of await blobStore.listKeys()) {
       if (stale.startsWith(SINK_PREFIX) && stale !== newestFinished) {
@@ -350,7 +368,7 @@ export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
   }
 
   const readers: VideoChannelReader[] = []
-  const destination = await openPdfDestination()
+  const destination = await openPdfDestination(recording.id)
   const pdf = new PdfWriter(destination.sink)
   const keyframes: KeyframeEntry[] = []
   const trail: TrailPoint[] = []

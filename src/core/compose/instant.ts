@@ -271,7 +271,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     const format = new Mp4OutputFormat()
     // Same O(1)-memory rule as the render path: packet-copying a 30-min take
     // into an ArrayBuffer was the instant path's own OOM.
-    scratch = await createExportScratch()
+    scratch = await createExportScratch(recording.id)
     const bufferTarget = scratch ? null : new BufferTarget()
     const out = new Output({ format, target: scratch ? scratch.target : bufferTarget! })
     output = out
