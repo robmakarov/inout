@@ -60,11 +60,17 @@ current path as fallback); the engine never refuses a record press.
   From a second worktree run mirror-watch from THAT worktree, and replace a symlinked `node_modules`
   with a real copy (`rsync -a "<main>/node_modules/" /tmp/inout-dev/node_modules/`). Deletable the day
   the repo moves out of `~/Downloads` (Robert's call; recommended).
-- `proto/style.html` and `proto/neon.html` (the proto UI's two tabs; each links to the other) are
-  opened off disk with `file://` and never served: one self-contained file each, no `<script src>`,
-  no `<link>`, no fetch, no modules, no external assets (fonts are embedded data: URLs); state
-  persists through the URL fragment first because `localStorage` can be refused on `file://`. A
-  picture of either: `node scripts/see.mjs "file:///…/proto/neon.html#p=editor" --shot=<png>`.
+- `proto/style.html`, `proto/neon.html` and `proto/app.html` (the proto UI's three tabs; each links
+  to the other two) are opened off disk with `file://` and never served: one self-contained file
+  each, no `<script src>`, no `<link>`, no fetch, no modules, no external assets (fonts and video
+  frames are embedded data: URLs); state persists through the URL fragment first because
+  `localStorage` can be refused on `file://`. All three wear the SAME shell — squeeze-panels from
+  ~/org/lib, left panel (proto · screen · simulate) + centre zone + right panel — so the tabs read
+  as one tool; a new tab copies that shell verbatim rather than inventing chrome. A picture of any:
+  `node scripts/see.mjs "file:///…/proto/neon.html#p=editor" --shot=<png>`.
+  **`proto/app.html` IS GENERATED AND MUST NEVER BE HAND-EDITED** — `node scripts/proto-app.mjs`
+  drives the deployed build through its real states and freezes its real DOM and real stylesheet, so
+  the third tab is the control the other two are judged against. Edit the script, not the file.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
 commits the files THIS session edited, and files no live session claims only when it is the last
