@@ -912,6 +912,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'skipframe',
+    title: 'J13 step 0 — what does VideoToolbox emit, and can a picture be written into it?',
+    detail:
+      'Encodes with the EXPORT\u2019s own codec choice (constantQualityCodec, qp20, prefer-hardware) and reads the stream back: profile, entropy_coding_mode_flag (CABAC vs CAVLC decides how an all-skip slice is written), pic_order_cnt_type (type 2 would forbid inserting a picture at all), nal_ref_idc per packet, and whether anything but P-frames comes out. Modifies nothing \u2014 it aims the build that follows at what this machine actually does.',
+    run: async (args) => {
+      const { runSkipFrame } = await import('../perf/skipFrame')
+      return runSkipFrame({
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        frames: typeof args?.frames === 'number' ? args.frames : undefined,
+      })
+    },
+  },
+  {
     id: 'nativerender',
     title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
     detail:
