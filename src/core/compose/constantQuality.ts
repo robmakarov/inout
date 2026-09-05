@@ -100,18 +100,78 @@ export const DEFAULT_QP = 20
  */
 const CQ_DEFAULT: number | null = 20
 
+/**
+ * THE SAME DIAL, IN AV1's UNITS — task J9, 2026-09-05, and it is measured.
+ *
+ * WebCodecs' AV1 quantizer is 0-63 on its own curve; H.264's QP is 1-51 on
+ * another. Nothing maps between them, so this was swept on the two contents
+ * DEFAULT_QP was chosen on (`npm run exp -- av1q`), scored against the bitrate
+ * target the 4:4:4 rung ships with today (text: 304 KB, green 99.6 %, glyph
+ * fringe 3.69, 37.3 dB · motion: 345 KB, fringe 1.59, 47.5 dB):
+ *
+ *   q     text KB   green   fringe   dB      motion, against its own control
+ *   8       501     100.9    1.61    46.6    13.38x
+ *   16      419     100.7    1.80    45.7     7.78x
+ *   24      367     100.4    2.04    44.5     4.53x
+ *   32      329     100.2    2.16    43.7     2.86x
+ *   40      301     100.0    2.60    42.3     2.22x
+ *   48      278     100.0    2.85    41.3     1.73x
+ *   52      268     100.0    2.99    40.8     1.43x
+ *   56      260      99.8    3.11    40.3     1.27x
+ *   60      252      99.8    3.24    40.0     1.08x   <- this one
+ *   63      243      99.3    3.28    39.9     0.85x
+ *
+ * 60 IS THE RUNG THAT IS PARETO-BETTER ON BOTH CONTENTS, which is the same rule
+ * that picked DEFAULT_QP: against today's bitrate target it keeps more colour
+ * (99.8 vs 99.6 %), a finer glyph edge (3.24 vs 3.69 — still inside O9(b)'s own
+ * shipped claim of 8.60 → 3.61) and more signal (40.0 vs 37.3 dB), for 83 % of
+ * the file on text and 1.08x on motion. Nothing about the picture regresses and
+ * the size does not run away.
+ *
+ * WHY NOT FINER, when this is the switch someone turns on to get every colour:
+ * because finer costs the take rather than the frame. q32 buys 1.1 dB and pays
+ * 2.86x on motion, and quantizer mode has NO byte ceiling by ruling (robert
+ * (16), Q1) — a two-hour screen recording is where that lands. The ladder is
+ * printed above precisely so moving this constant is one edit and no research.
+ */
+export const DEFAULT_AV1_QUANTIZER = 60
+
 /** Clamp to the range H.264 actually defines; a config outside it is a crash. */
 export function clampQp(qp: number): number {
   return Math.min(51, Math.max(1, Math.round(qp)))
 }
 
+/** The same, for AV1's 0-63 scale. Two codecs, two ranges, no shared clamp. */
+export function clampAv1Quantizer(q: number): number {
+  return Math.min(63, Math.max(0, Math.round(q)))
+}
+
+/**
+ * `?cq=`'s H.264 number, in AV1's units.
+ *
+ * ONE ANCHOR IS MEASURED AND THE REST IS SCALED FROM IT, and that is said out
+ * loud rather than implied: the dial's default (DEFAULT_QP) lands on the rung
+ * the sweep above chose, and every other value rides the same ratio. It clamps
+ * at 63 because AV1 has no coarser rung, so the top of the H.264 range flattens
+ * — the alternative, a switch whose number the 4:4:4 rung silently ignores, is
+ * the defect `?cq=` and `?sourceframe=` already cost this project once each.
+ * Re-measure with `npm run exp -- av1q` before trusting a value far from 20.
+ */
+export function av1QuantizerFor(qp: number): number {
+  return clampAv1Quantizer((qp * DEFAULT_AV1_QUANTIZER) / DEFAULT_QP)
+}
+
 /**
  * Stamp a QP onto the config mediabunny built. Pass as `onEncoderConfig` on the
  * video source; everything else about the source stays as it was.
+ *
+ * J9: the value is stored as given and clamped by the ENCODER at init, which is
+ * the only place that knows which codec it is. Clamping to H.264's 1-51 here
+ * would have silently turned the measured AV1 rung (60) into 51.
  */
 export function markConstantQuality(qp: number) {
   return (config: VideoEncoderConfig): void => {
-    ;(config as MarkedConfig)[QP_KEY] = clampQp(qp)
+    ;(config as MarkedConfig)[QP_KEY] = Math.round(qp)
   }
 }
 
@@ -184,6 +244,37 @@ export async function constantQualityCodec(
 }
 
 /**
+ * Will this machine encode THIS EXACT string in quantizer mode? (task J9)
+ *
+ * The ladder above walks profiles and levels because AVC's string is ours to
+ * choose. O9(b)'s is not: `fullColourCodec` has already probed and PINNED the
+ * 4:4:4 profile, and probing one string while encoding another is the bug that
+ * made constant quality report itself unsupported on hardware that supports it.
+ * So there is nothing to walk here — the string IS the request, and the only
+ * question is whether quantizer mode is available for it.
+ */
+export async function quantizerModeAccepts(
+  codecString: string,
+  width: number,
+  height: number,
+  hardwareAcceleration: VideoEncoderConfig['hardwareAcceleration'],
+): Promise<boolean> {
+  if (typeof VideoEncoder === 'undefined') return false
+  try {
+    const support = await VideoEncoder.isConfigSupported({
+      codec: codecString,
+      width,
+      height,
+      bitrateMode: 'quantizer',
+      hardwareAcceleration,
+    } as VideoEncoderConfig)
+    return support.supported === true
+  } catch {
+    return false
+  }
+}
+
+/**
  * THERE IS NO BYTE CEILING HERE, AND THAT IS A RULING, NOT AN OVERSIGHT.
  *
  * Robert 2026-09-02 (DECISIONS robert (16)), asked whether the export needed
@@ -209,17 +300,35 @@ export async function constantQualityCodec(
  */
 const ENCODE_QUEUE_DEPTH = 4
 
-class ConstantQualityAvcEncoder extends CustomVideoEncoder {
+/**
+ * The codecs this encoder drives. AVC since 2026-08-29; AV1 since J9, because
+ * O9(b)'s 4:4:4 rung was the last encode in the product still on a bitrate.
+ * Every other family falls through to mediabunny's own encoder untouched.
+ */
+const QUANTIZER_CODECS = new Set<VideoCodec>(['avc', 'av1'])
+
+class ConstantQualityEncoder extends CustomVideoEncoder {
   private encoder: VideoEncoder | null = null
   /** Set once from the config and never moved again — see the ruling above. */
   private qp = DEFAULT_QP
 
   static supports(codec: VideoCodec, config: VideoEncoderConfig): boolean {
-    return codec === 'avc' && qpOf(config) !== null
+    return QUANTIZER_CODECS.has(codec) && qpOf(config) !== null
   }
 
   init(): void {
-    this.qp = qpOf(this.config) ?? DEFAULT_QP
+    // THE CLAMP IS PER CODEC and it happens here, the only place that knows
+    // which one this is: H.264 defines 1-51 and AV1 0-63, and a config outside
+    // its own range is a crash rather than a coarse picture.
+    const asked = qpOf(this.config)
+    this.qp =
+      asked === null
+        ? this.codec === 'av1'
+          ? DEFAULT_AV1_QUANTIZER
+          : DEFAULT_QP
+        : this.codec === 'av1'
+          ? clampAv1Quantizer(asked)
+          : clampQp(asked)
     const encoder = new VideoEncoder({
       output: (chunk, meta) => {
         this.onPacket(EncodedPacket.fromEncodedChunk(chunk), meta)
@@ -288,7 +397,16 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
         keyFrame: options.keyFrame,
         // qp 0 marks the configure-time fallback above: the encoder is on its
         // bitrate target, so asking for a quantizer would be a lie.
-        ...(this.qp > 0 ? { avc: { quantizer: this.qp } } : {}),
+        //
+        // THE KEY IS THE CODEC'S OWN and getting it wrong is SILENT — an `avc`
+        // key on an AV1 encoder is ignored, the frame encodes at the
+        // implementation's default, and the file is neither the size nor the
+        // quality anyone asked for with no error anywhere.
+        ...(this.qp > 0
+          ? this.codec === 'av1'
+            ? { av1: { quantizer: this.qp } }
+            : { avc: { quantizer: this.qp } }
+          : {}),
       } as VideoEncoderEncodeOptions)
     } finally {
       frame.close()
@@ -319,7 +437,7 @@ let registered = false
 export function registerConstantQualityEncoder(): void {
   if (registered) return
   registered = true
-  registerEncoder(ConstantQualityAvcEncoder as unknown as typeof CustomVideoEncoder)
+  registerEncoder(ConstantQualityEncoder as unknown as typeof CustomVideoEncoder)
 }
 
 /**

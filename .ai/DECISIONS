@@ -1760,3 +1760,44 @@ null for anything but avc, so the 4:4:4 rung has no quality target. A QUALITY TA
 IS WORTH HAVING BEFORE ANY 4:4:4 DEFAULT MOVES — it is not J8 and it is not built.
 Gates: typecheck + 1406 tests · oracle PASS sync=61.1/76.2ms, instant 76.4 ms, smartcut 78.5 ms.
 Evidence: docs/qa/j8-chunked-second-codec.json.
+
+J9 2026-09-05 — A QUALITY TARGET FOR THE AV1 4:4:4 RUNG. Opened on Robert's word ("go the av1 quality
+target task") out of the one open note J8 left, and closed the same day.
+WHAT WAS WRONG: `?colour=all` was the LAST encode in this product still driven by a bitrate.
+`constantQualityCodec` answered only for avc, so O9(b)'s rung never got `?cq=`, and J8 is what made the
+cost visible — the chunked and unbroken 4:4:4 lanes produced the same 900 packets 19.5 % apart in bytes
+and 37.1 dB apart in pixels, because bitrate rate control over twelve 2.5 s segments is not the same
+rate control over one 30 s stream.
+THE NUMBER WAS SWEPT BEFORE IT WAS SET, and it could not be mapped: `?cq=` is an H.264 QP on 1-51 and
+WebCodecs' AV1 quantizer is 0-63 on a different curve. `npm run exp -- av1q` (new rig) encodes the
+IDENTICAL picture at every rung on the two contents DEFAULT_QP was chosen on. The finding is larger
+than the pick: against today's 4:4:4 bitrate rung (text 304 KB, green 99.6 %, glyph fringe 3.69,
+37.3 dB) EVERY quantizer from 8 to 60 keeps more colour, a finer edge AND more signal. The bitrate rung
+is simply spending its 8 Mbps badly on this content, so the choice was never quality-against-size — it
+was how much size to spend for quality nobody asked for.
+q60 SHIPS: text 252 KB (83 % of the control), green 99.8, fringe 3.24, 40.0 dB; motion 1.08x. The rung
+that is Pareto-better on BOTH contents, which is the rule that picked DEFAULT_QP. Finer rungs pay the
+TAKE and not the frame — q32 buys 1.1 dB and costs 2.86x on motion — and quantizer mode has NO byte
+ceiling by ruling (robert (16), Q1), so a two-hour screen recording is where that would land. The first
+sweep stopped at 48 and would have picked it; the coarse end was then swept to 63 to find where quality
+actually starts to cost (it is q63, green 99.3), so the pick is not from the middle of an arbitrary
+window. The whole ladder is printed in constantQuality.ts: moving the constant is one edit, no research.
+THROUGH THE PRODUCT, 30 s take: the 4:4:4 export 3.6 -> 2.7 MB (-25 %) at the same 900 packets and 12
+keyframes, and J8's leftover divergence closed from -19.5 % / 37.1 dB to -2.1 % / 55.8 dB. NOT
+pixel-identical the way AVC-at-qp20 is (99 dB flat) — AV1 keeps stream-level adaptation a per-frame
+quantizer does not pin, and that is said rather than rounded.
+THE SHIPPED PATH IS BYTE-FOR-BYTE UNMOVED although render.ts's resolution ORDER changed: full colour is
+resolved BEFORE constant quality now, because its pinned string is what quantizer mode has to be probed
+against (probing one string and encoding another is how constant quality first reported itself
+unsupported on hardware that supports it). 4:2:0: same codec, 900/12, 3.2 vs 3.2 MB, 0 %, lanes
+pixel-identical at 99 dB — every number identical to J8's run of the same rig.
+TWO SILENT FAILURES ARE PINNED ON THE SOURCE, because neither throws: the per-frame quantizer rides on
+a CODEC-SPECIFIC key (an `avc` key on an AV1 encoder is ignored and the frame encodes at the
+implementation default), and the clamp is per codec and happens in the encoder, the only place that
+knows which one it is — `markConstantQuality` used to clamp to 51 and would have turned the measured
+rung 60 into 51 with no error anywhere.
+NOTHING A USER SEES MOVED. `?colour=all` is still off by default; this changes what that switch does
+when it is on. `?cq=off` is still the way back to the bitrate target.
+Gates: typecheck + 1416 tests · oracle PASS sync=58.1/72.8ms, instant 76.8 ms, smartcut 79.0 ms · j5 at
+--query=colour=all all four green, press 2.9 ms, invalidated 3 of 12.
+Evidence: docs/qa/j9-av1-quality-target.json.

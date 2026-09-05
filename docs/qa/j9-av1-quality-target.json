@@ -1,0 +1,69 @@
+{
+  "what": "J9 — a quality target for the AV1 4:4:4 rung. O9(b)'s `?colour=all` was the last encode in this product still driven by a BITRATE: `constantQualityCodec` answered only for avc, so full colour never got a `?cq=` quality target. J8 made the cost visible — with the chunked path finally able to render 4:4:4, the chunked and unbroken lanes produced the same 900 packets 19.5 % apart in bytes and 37.1 dB apart in pixels, because bitrate rate control over twelve 2.5 s segments is not the same rate control over one 30 s stream.",
+  "how": "The number was SWEPT before it was set: `node scripts/exp.mjs av1q` (new, src/experimental/perf/av1Quality.ts) encodes the identical picture at every rung on the two contents DEFAULT_QP was chosen on — one still code page at 1:1 (where O9 measured 77.8 → 99.3 % green) and the deterministic moving fixture — and scores bytes, green kept, glyph chroma fringe and PSNR against the source. Then the product change was measured through the export with `node scripts/exp.mjs chunkrender '{\"takeSec\":30}' [--query=colour=all]` and `node scripts/exp.mjs j5 '{\"takeSec\":30,\"quietMs\":60000}' --query=colour=all`. All through scripts/gate.sh, 2026-09-05.",
+  "date": "2026-09-05",
+  "headline": "THE 4:4:4 RUNG IS ON A QUALITY TARGET AND THE FILE GOT SMALLER AND BETTER. AV1 quantizer 60, chosen as the rung that is Pareto-better than today's bitrate target on BOTH contents. On a 30 s take through the product the 4:4:4 export went 3.6 → 2.7 MB (−25 %), and J8's leftover divergence between the chunked and unbroken lanes closed from −19.5 % / 37.1 dB to −2.1 % / 55.8 dB. The shipped 4:2:0 path is byte-for-byte unmoved: same codec, 3.2 vs 3.2 MB, 0 %, and the two lanes still pixel-identical at 99 dB.",
+  "the_sweep": {
+    "fixtures": "text = one still code page at 1920x1080, painted once and encoded 60 times, so the only variable between lanes is the rate control. motion = the deterministic moving fixture, same sequence for every lane. Green is only measurable on the text fixture — the moving one has no green in its mask.",
+    "controls": {
+      "avc-bitrate": "272 KB, green 79.6 %, fringe 9.52, 32.8 dB (text) · 250 KB, fringe 7.37, 47.5 dB (motion)",
+      "avc-qp20": "220 KB, green 80.4 %, fringe 9.38, 33.7 dB (text) · 311 KB, fringe 6.43, 48.6 dB (motion) — the SHIPPED default rung",
+      "av1-bitrate": "304 KB, green 99.6 %, fringe 3.69, 37.3 dB (text) · 345 KB, fringe 1.59, 47.5 dB (motion) — O9(b) EXACTLY AS IT SHIPS TODAY, and what every rung below is scored against"
+    },
+    "ladder": [
+      { "q": 8, "textKB": 501, "green": 100.9, "fringe": 1.61, "db": 46.6, "motionVsControl": "13.38x" },
+      { "q": 16, "textKB": 419, "green": 100.7, "fringe": 1.8, "db": 45.7, "motionVsControl": "7.78x" },
+      { "q": 24, "textKB": 367, "green": 100.4, "fringe": 2.04, "db": 44.5, "motionVsControl": "4.53x" },
+      { "q": 32, "textKB": 329, "green": 100.2, "fringe": 2.16, "db": 43.7, "motionVsControl": "2.86x" },
+      { "q": 40, "textKB": 301, "green": 100.0, "fringe": 2.6, "db": 42.3, "motionVsControl": "2.22x" },
+      { "q": 44, "textKB": 290, "green": 100.0, "fringe": 2.69, "db": 41.8, "motionVsControl": "1.97x" },
+      { "q": 48, "textKB": 278, "green": 100.0, "fringe": 2.85, "db": 41.3, "motionVsControl": "1.73x" },
+      { "q": 52, "textKB": 268, "green": 100.0, "fringe": 2.99, "db": 40.8, "motionVsControl": "1.43x" },
+      { "q": 56, "textKB": 260, "green": 99.8, "fringe": 3.11, "db": 40.3, "motionVsControl": "1.27x" },
+      { "q": 60, "textKB": 252, "green": 99.8, "fringe": 3.24, "db": 40.0, "motionVsControl": "1.08x", "chosen": true },
+      { "q": 63, "textKB": 243, "green": 99.3, "fringe": 3.28, "db": 39.9, "motionVsControl": "0.85x", "note": "the first rung that costs colour — green falls below the bitrate control's 99.6 %" }
+    ],
+    "why_60": "EVERY quantizer rung from 8 to 60 keeps more colour, a finer glyph edge and more signal than the bitrate target — the bitrate rung is simply spending its 8 Mbps badly on this content. So the choice is not quality-against-size, it is HOW MUCH SIZE TO SPEND FOR QUALITY NOBODY HAS ASKED FOR. 60 is the rung that is Pareto-better on BOTH contents: text 252 KB against 304 (83 %) at green 99.8 vs 99.6, fringe 3.24 vs 3.69, 40.0 vs 37.3 dB; motion 1.08x, i.e. the same size. Finer rungs pay the TAKE rather than the frame — q32 buys 1.1 dB and costs 2.86x on motion — and quantizer mode has NO byte ceiling by ruling (robert (16), Q1). The ladder is printed in constantQuality.ts so moving the constant is one edit and no research.",
+    "sweep_range_note": "The first sweep stopped at 48 and would have picked it. The coarse end was then swept deliberately (44-63) to find where quality actually starts to cost, which is q63. Picking from a sweep that never reached its own edge would have been picking from the middle of an arbitrary window."
+  },
+  "gates": {
+    "the_divergence_j8_left": {
+      "gate": "the chunked and unbroken 4:4:4 lanes stop being two different pictures",
+      "before": "size 3.6 vs 2.9 MB (-19.5 %); PSNR 99 / 37.1 / 51.8 dB at 1.5 / 15 / 27 s",
+      "after": "size 2.7 vs 2.7 MB (-2.1 %); PSNR 99 / 55.8 / 52.7 dB",
+      "note": "not pixel-identical the way AVC-at-qp20 is (99 dB flat) — AV1 keeps some stream-level adaptation a per-frame quantizer does not pin. Stated rather than rounded.",
+      "pass": true
+    },
+    "the_export_itself": {
+      "gate": "the 4:4:4 export does not get worse",
+      "result": "the unbroken 4:4:4 render of the same 30 s take went 3.6 MB → 2.7 MB (-25 %) at the same 900 packets and 12 keyframes; on the sweep's own fixtures q60 keeps more colour, a finer glyph edge and more signal than the bitrate rung it replaces",
+      "pass": true
+    },
+    "shipped_path_unmoved": {
+      "gate": "render.ts's resolution ORDER changed (full colour now resolves before constant quality, because its pinned string is what quantizer mode has to be probed against) — 4:2:0 has to be proven untouched",
+      "result": "unbroken avc1.420028 vs chunked avc1.420028 — SAME; 900 packets, 12 keyframes, identical timestamps; 3.2 vs 3.2 MB (0 %); the two lanes PIXEL-IDENTICAL at 99 dB — every number identical to the J8 run of the same rig",
+      "pass": true
+    },
+    "j5_at_444": {
+      "untouched": "PASS — 5 s of an open, untouched editor: nothing scheduled, no job, 0 chunks",
+      "press": "2.9 ms with the export already made against 8643.6 ms cold (2980.6x), cold render = chunked",
+      "identical": "PASS — every packet identical (900 video, 1410 audio); the files now differ in 10 container bytes, the SAME 10 two cold renders differ in (it was 20 before the quality target)",
+      "invalidated": "3 chunks re-rendered, 9 reused, of 12",
+      "pass": true
+    },
+    "unit": {
+      "result": "src/core/compose/constantQualityAv1.test.ts — 10 tests. Full suite 1416 passed, typecheck clean.",
+      "pass": true
+    },
+    "oracle": {
+      "result": "PASS — 1/1 cells green, sync 58.1/72.8 ms, instant 76.8 ms, smartcut 79.0 ms",
+      "pass": true
+    }
+  },
+  "what_is_not_measured": [
+    "Robert's eye. Every number here is a metric; whether the 4:4:4 rung LOOKS right at q60 is his, and it rides on the same A/B O9(b) is already waiting on.",
+    "A real screen take. Both sweep fixtures are manufactured — a still code page and a synthetic moving one. The motion column is what prices the no-ceiling risk, and a real recording sits between the two.",
+    "The dial away from its anchor. `?cq=20` → AV1 q60 is measured; every other `?cq=` value rides that one ratio and clamps at 63. Re-measure with `exp av1q` before trusting a value far from 20."
+  ],
+  "verdict": "J9 IS DONE. The 4:4:4 rung takes `?cq=`, at a quantizer swept on two contents rather than mapped from H.264's scale; the export is 25 % smaller and no worse on any metric measured; J8's leftover chunked/unbroken divergence closed from -19.5 % to -2.1 %; and the shipped 4:2:0 path is byte-for-byte where it was. The colour default remains Robert's eye."
+}

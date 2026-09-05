@@ -118,9 +118,11 @@ import { openVideoChannel, type VideoChannelReader } from './video'
 export { openVideoChannel, type VideoChannelReader }
 import { exportFileName } from './fileName'
 import {
+  av1QuantizerFor,
   constantQualityCodec,
   constantQualityQp,
   markConstantQuality,
+  quantizerModeAccepts,
   registerConstantQualityEncoder,
 } from './constantQuality'
 
@@ -567,33 +569,21 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
      */
     const frame: FrameCanvas = { ctx, width, height, scale: frameScale(width, height) }
 
-    // CONSTANT QUALITY, when this browser honours it (Robert 2026-08-29, "more
-    // quality and much less size"). Resolved BEFORE the output so the file's
-    // own certification can say which way it was encoded — a size report from
-    // the field is unattributable otherwise. The bitrate stays in the config as
-    // the fallback's target and as what the size estimate is built from; the
-    // custom encoder drops it and drives the QP instead. A browser without
-    // quantizer mode never marks the config and encodes exactly as before.
-    const wantQp = constantQualityQp()
-    const tCq = performance.now()
-    const cqCodec =
-      wantQp === null ? null : await constantQualityCodec(target.videoCodec, width, height)
-    stats.prep.cq = since(tCq)
-    const qp = cqCodec === null ? null : wantQp
-    if (qp !== null) registerConstantQualityEncoder()
-    else if (wantQp !== null) {
-      console.info('[compose] constant quality asked for but unsupported here — bitrate target kept')
-    }
-
     /**
-     * O9(b) — KEEP EVERY COLOUR. Resolved here, beside constant quality, for
-     * the same reason: the certification has to be able to say which way the
-     * file was actually made. Probed on THIS frame size and PINNED; a machine
-     * that cannot encode it takes today's rung with nothing else changed, and
-     * the decline goes through the door rather than into silence.
+     * O9(b) — KEEP EVERY COLOUR, resolved FIRST (the order moved in J9).
      *
-     * The two do not collide: `constantQualityCodec` returns null for anything
-     * that is not avc, so a 4:4:4 export never carries a cq string.
+     * It used to be resolved after constant quality, which was fine while the
+     * two could not both be on: `constantQualityCodec` answered only for avc,
+     * so a 4:4:4 export never carried a cq string and was the last encode in
+     * this product still driven by a bitrate. They CAN both be on now, and the
+     * dependency runs this way — the 4:4:4 codec string is what quantizer mode
+     * has to be probed against, because probing one string and encoding
+     * another is exactly how constant quality first reported itself
+     * unsupported on hardware that supports it.
+     *
+     * Probed on THIS frame size and PINNED; a machine that cannot encode it
+     * takes today's rung with nothing else changed, and the decline goes
+     * through the door rather than into silence.
      */
     const want444 = wantVideo && fullColourActive()
     const tColour = performance.now()
@@ -613,8 +603,49 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         `[compose] O9(b) FULL COLOUR: ${codec444} (4:4:4, software) replaces ${target.rung} — every pixel keeps its own colour, and the file is bigger and slower to make`,
       )
     }
+
+    // CONSTANT QUALITY, when this browser honours it (Robert 2026-08-29, "more
+    // quality and much less size"). Resolved BEFORE the output so the file's
+    // own certification can say which way it was encoded — a size report from
+    // the field is unattributable otherwise. The bitrate stays in the config as
+    // the fallback's target and as what the size estimate is built from; the
+    // custom encoder drops it and drives the QP instead. A browser without
+    // quantizer mode never marks the config and encodes exactly as before.
+    //
+    // J9: the 4:4:4 rung takes the same dial. Its string is already pinned, so
+    // there is no ladder to walk — only quantizer mode to ask for, in software,
+    // which is the only way that rung encodes at all.
+    const wantQp = constantQualityQp()
+    const tCq = performance.now()
+    const cqCodec =
+      wantQp === null
+        ? null
+        : codec444
+          ? (await quantizerModeAccepts(codec444, width, height, 'prefer-software'))
+            ? codec444
+            : null
+          : await constantQualityCodec(target.videoCodec, width, height)
+    stats.prep.cq = since(tCq)
+    /** The dial is H.264's; AV1 has its own scale and its own measured rung. */
+    const qp = cqCodec === null ? null : codec444 ? av1QuantizerFor(wantQp!) : wantQp
+    if (qp !== null) registerConstantQualityEncoder()
+    else if (wantQp !== null) {
+      console.info(
+        `[compose] constant quality asked for but unsupported here${
+          codec444 ? ' for the 4:4:4 rung' : ''
+        } — bitrate target kept`,
+      )
+    }
+    if (codec444 && qp !== null) {
+      console.info(
+        `[compose] J9 the 4:4:4 rung is on a QUALITY target: ?cq=${wantQp} → AV1 quantizer ${qp}`,
+      )
+    }
+
     const effectiveVideoCodec = codec444 ? ('av1' as const) : target.videoCodec
-    const effectiveRung = codec444 ? `${target.rung}→av1-444-sw` : target.rung
+    const effectiveRung = codec444
+      ? `${target.rung}→av1-444-sw${qp === null ? '' : `-q${qp}`}`
+      : target.rung
 
     // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
     // the fallback for platforms where the scratch can't be opened.
@@ -651,7 +682,10 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
             audio: needAudio ? target.audioCodec : undefined,
             gopSec,
             rung: effectiveRung,
-            qp: qp ?? undefined,
+            // The DIAL, not the translated AV1 quantizer: chunkedRender writes
+            // `flags.cq` for the same file and the two must not disagree. Which
+            // quantizer actually ran is in the rung above.
+            qp: qp === null ? undefined : (wantQp ?? undefined),
           },
         }),
       ),

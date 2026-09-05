@@ -772,6 +772,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'av1q',
+    title: 'J9 — what quality number does the AV1 4:4:4 rung take?',
+    detail:
+      "O9(b)'s `?colour=all` is the only encode in this product still driven by a BITRATE: `constantQualityCodec` returns null for anything that is not avc, so full colour never gets a quality target. J8 made the cost visible \u2014 the chunked and unbroken 4:4:4 lanes render the same 900 packets and come out 19.5 % apart in bytes and 37.1 dB apart in pixels, because bitrate rate control over twelve 2.5 s segments is not the same as over one 30 s stream (the same 4:2:0 AVC lanes with ?cq=off diverge the same way). This sweeps the AV1 quantizer scale on the content O9 measured its colour on \u2014 one still code page at 1:1 \u2014 and prints bytes, green kept, glyph fringe and PSNR per rung. It does NOT set the constant; it is the table the constant is chosen against, the way DEFAULT_QP was.",
+    run: async (args) => {
+      const { runAv1Quality } = await import('../perf/av1Quality')
+      return runAv1Quality({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        quantizers: Array.isArray(args?.quantizers) ? (args.quantizers as number[]) : undefined,
+        avcQps: Array.isArray(args?.avcQps) ? (args.avcQps as number[]) : undefined,
+      })
+    },
+  },
+  {
     id: 'o9draw',
     title: 'O9(a) — what does the export DRAW cost the colour, and does drawing bigger get it back?',
     detail:

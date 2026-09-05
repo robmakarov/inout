@@ -250,8 +250,13 @@ export async function encodeDeterministic(opts: {
       })
       try {
         const encodeOpts: VideoEncoderEncodeOptions = { keyFrame: i % keyEvery === 0 }
-        if (opts.quantizer !== undefined && family === 'avc') {
-          encodeOpts.avc = { quantizer: opts.quantizer }
+        if (opts.quantizer !== undefined) {
+          // J9: the per-frame quantizer rides on a codec-specific key, and the
+          // scales are NOT the same — H.264 is 0-51, AV1 is 0-63 on its own
+          // curve. Setting the wrong key is silent: the encoder takes its
+          // implementation default and the lane measures nothing.
+          if (family === 'avc') encodeOpts.avc = { quantizer: opts.quantizer }
+          else if (family === 'av1') encodeOpts.av1 = { quantizer: opts.quantizer }
         }
         encoder.encode(frame, encodeOpts)
       } finally {
