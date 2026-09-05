@@ -215,6 +215,22 @@ const LABEL: Record<ChannelKind, string> = {
   'system-audio': 'tab audio',
 }
 
+/**
+ * B15 — CALL THE DISPLAY-AUDIO CHANNEL WHAT IT ACTUALLY WAS.
+ *
+ * "tab audio" is right for a browser share and wrong for every other surface,
+ * and the wrong word cost this project weeks: three field deaths on whole-SCREEN
+ * shares were read as tab-audio deaths, and every lab cell chasing them captured
+ * a tab — a different Chrome source with a different failure mode (see
+ * CapturedSurface). A take made before `capturedSurface` existed keeps the old
+ * word, because that is all it can honestly say.
+ */
+function labels(recording: Recording): Record<ChannelKind, string> {
+  const kind = recording.capturedSurface?.kind
+  if (!kind || kind === 'browser') return LABEL
+  return { ...LABEL, 'system-audio': 'system audio' }
+}
+
 /** Take-scale time, in the unit a person says it in. */
 const dur = (ms: number): string =>
   ms >= 90_000 ? `${(ms / 60_000).toFixed(1)} min` : `${(ms / 1000).toFixed(1)}s`
@@ -255,6 +271,8 @@ const silenceMeasured = (c: ChannelRecording): boolean => {
 }
 
 export function buildReportCard(recording: Recording, evidence: ReportEvidence = {}): ReportCard {
+  // B15: 'tab audio' only when the picker actually returned a tab (see labels()).
+  const LABEL = labels(recording)
   const dims: ReportDimension[] = []
   const take = recording.durationMs
   const audio = recording.channels.filter((c) => c.media === 'audio')

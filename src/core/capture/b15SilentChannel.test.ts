@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest'
 import { ReviveSchedule, SILENCE_CONVICTS_AT_ATTEMPT } from './reviveSchedule'
 import { channelLabel, silentChannelMessage, takeLosses } from '@app/lib/channels'
 import { detectCapabilities } from '@core/capabilities'
+import { buildReportCard } from '@core/report/reportCard'
+import type { Recording } from '@core/types'
 
 const RATE = 48_000
 const sec = (n: number): number => Math.round(n * RATE)
@@ -91,5 +93,55 @@ describe('B15 — a monitor share is not a tab', () => {
     expect(msg).toContain('chip')
     // NOT the frozen-source instruction: the picture is fine.
     expect(msg).not.toContain('still image')
+  })
+})
+
+describe('B15 — the card names the audio path it graded', () => {
+  const take = (surface: 'monitor' | 'browser' | undefined): Recording =>
+    ({
+      id: 'rec_b15',
+      createdAt: 0,
+      durationMs: 350_872,
+      channels: [
+        {
+          kind: 'system-audio',
+          media: 'audio',
+          mimeType: 'audio/webm',
+          blobKey: 'k',
+          startOffsetMs: 0,
+          durationMs: 350_872,
+          diagnostics: { silentTailMs: 195_108, silentTotalMs: 195_108, paddedMs: 835 },
+        },
+      ],
+      ...(surface
+        ? {
+            capturedSurface: {
+              kind: surface,
+              videoLabel: surface === 'monitor' ? 'screen:1:0' : 'web-contents-media-stream://7:1',
+              audioLabel: surface === 'monitor' ? null : 'Tab audio',
+              audioDeviceId: null,
+            },
+          }
+        : null),
+    }) as unknown as Recording
+
+  it("a whole-screen take is not told its TAB audio died", () => {
+    const card = buildReportCard(take('monitor'))
+    const dim = card.dimensions.find((d) => d.id === 'audio-continuity')!
+    expect(dim.status).toBe('fail')
+    expect(dim.headline).toContain('system audio')
+    expect(dim.headline).not.toContain('tab audio')
+    expect(dim.detail).toContain('monitor share')
+  })
+
+  it('a tab share keeps the word that is right for it', () => {
+    const dim = buildReportCard(take('browser')).dimensions.find((d) => d.id === 'audio-continuity')!
+    expect(dim.headline).toContain('tab audio')
+  })
+
+  it('a take made before the field says only what it can', () => {
+    const dim = buildReportCard(take(undefined)).dimensions.find((d) => d.id === 'audio-continuity')!
+    expect(dim.headline).toContain('tab audio')
+    expect(dim.detail).not.toContain('share')
   })
 })
