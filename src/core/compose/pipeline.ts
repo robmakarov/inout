@@ -35,7 +35,12 @@ import { chunkedRenderEnabled } from './chunkedFlag'
 import { fullColourEnabled } from './fullColour'
 import { audioTrackMode } from './audioTracks'
 import { noiseGateEnabled } from './gateFlag'
-import { ChunkedRenderUnavailable, getLastChunkedStats, renderChunked, type ChunkedRenderStats } from './chunkedRender'
+import {
+  ChunkedRenderUnavailable,
+  getLastChunkedStats,
+  renderChunkedResuming,
+  type ChunkedRenderStats,
+} from './chunkedRender'
 import { keyframeIntervalSec } from './keyframeInterval'
 import { loudnessMode } from './loudnessMode'
 import { isExportScratchEnabled, setLastScratchStats } from './scratch'
@@ -115,7 +120,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
    */
   if (chunkedRenderEnabled()) {
     try {
-      const result = await renderChunked({
+      const result = await renderChunkedResuming({
         recording: opts.recording,
         edit: opts.edit,
         settings: opts.settings,

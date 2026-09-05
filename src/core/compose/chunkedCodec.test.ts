@@ -105,6 +105,11 @@ describe('the chunked path does not refuse full colour any more', () => {
 
   it('checks every chunk after the first against it', () => {
     expect(chunked).toContain('const disagreement = sameTrack(opened, reference)')
-    expect(chunked).toContain('throw new ChunkedRenderUnavailable(`chunk ${chunk.index} ${disagreement}`)')
+    // J9: the odd chunk out is dropped and the failure is marked recoverable,
+    // so the second pass re-renders that one piece instead of the whole take.
+    expect(chunked).toContain('await removeChunk(chunkKeys[i]!)')
+    expect(chunked).toContain(
+      'throw new ChunkedRenderUnavailable(`chunk ${chunk.index} ${disagreement}`, true)',
+    )
   })
 })

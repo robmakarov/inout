@@ -31,7 +31,7 @@ import { getLastRenderStats, renderExport, type RenderStats } from './render'
 import {
   ChunkedRenderUnavailable,
   getLastChunkedStats,
-  renderChunked,
+  renderChunkedResuming,
   type ChunkedRenderStats,
 } from './chunkedRender'
 import { chunkedRenderActive as chunkedActive, setChunkedRenderOverride } from './chunkedFlag'
@@ -183,7 +183,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     }
     if (chunkedActive() && !separateAudioTracks()) {
       try {
-        const result = await renderChunked({
+        const result = await renderChunkedResuming({
           recording: msg.recording,
           edit: msg.edit,
           settings: msg.settings,

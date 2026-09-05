@@ -170,6 +170,16 @@ export async function readChunk(hash: string): Promise<Blob> {
   return blobStore.read(chunkKeyFor(hash))
 }
 
+/** Bytes a finished chunk occupies, 0 when it is not there. */
+export async function chunkSize(key: string): Promise<number> {
+  return blobStore.size(key).catch(() => 0)
+}
+
+/** Drop one chunk by key. Used when a chunk is unusable and must be remade. */
+export async function removeChunk(key: string): Promise<void> {
+  await blobStore.remove(key).catch(() => undefined)
+}
+
 function bornAt(key: string, prefix: string): number {
   const stamp = key.slice(prefix.length).split('-')[0]
   const t = parseInt(stamp ?? '', 36)
@@ -184,19 +194,37 @@ function bornAt(key: string, prefix: string): number {
  *
  * `keep` holds the keys a live plan is about to use, so a sweep that lands
  * beside a running export cannot delete the work in front of it.
+ *
+ * AND `keep` IS ONLY EVER THIS TAB'S (J9, 2026-09-05). Every caller on the
+ * shipped path is a BOOT sweep, which by definition has no plan and passes
+ * nothing — so before J9 a second tab opening (a recovery check, a second
+ * window, an agent reading a take) swept with an empty keep set and could
+ * delete the chunks a 90-minute export running in the FIRST tab was about to
+ * concatenate. The concatenation then failed to open one, and the whole take
+ * re-rendered unbroken: two full generations of picture on a machine that has
+ * exactly one media engine. A live render now leaves a CLAIM on the disk and
+ * this sweep stands down while one is fresh — the only statement about another
+ * tab that a fresh page session can honestly read.
  */
 export async function sweepChunks(keep: ReadonlySet<string> = new Set()): Promise<{
   removed: number
   freedBytes: number
   heldBytes: number
   capBytes: number
+  deferred: boolean
 }> {
   const now = Date.now()
   let removed = 0
   let freedBytes = 0
   const survivors: { key: string; size: number; touched: number }[] = []
 
-  for (const f of await blobStore.list()) {
+  const files = await blobStore.list()
+  if (await liveClaimAmong(files, now)) {
+    console.info('[compose] chunk sweep stood down — an export is running (J9)')
+    return { removed: 0, freedBytes: 0, heldBytes: 0, capBytes: 0, deferred: true }
+  }
+
+  for (const f of files) {
     const isPart = f.key.startsWith(CHUNK_PART_PREFIX)
     const isChunk = !isPart && f.key.startsWith(CHUNK_PREFIX)
     if (!isPart && !isChunk) continue
@@ -252,12 +280,12 @@ export async function sweepChunks(keep: ReadonlySet<string> = new Set()): Promis
       )
     }
   }
-  return { removed, freedBytes, heldBytes, capBytes }
+  return { removed, freedBytes, heldBytes, capBytes, deferred: false }
 }
 
 /** A quarter of what this origin may still store, or 0 when nobody will say. */
 const CHUNK_CAP_SHARE = 0.25
-async function chunkCapBytes(): Promise<number> {
+export async function chunkCapBytes(): Promise<number> {
   try {
     const est = await navigator.storage?.estimate?.()
     const quota = est?.quota ?? 0
@@ -265,6 +293,131 @@ async function chunkCapBytes(): Promise<number> {
   } catch {
     return 0
   }
+}
+
+/**
+ * THE CLAIM A RUNNING EXPORT LEAVES ON THE DISK — J9.
+ *
+ * One file, and its NAME is the whole record: `rclaim-<base36 heartbeat>-<id>`.
+ * Nothing is ever read out of it, so a beat is a rename and a sweep is a string
+ * compare over the listing it already has. There is no content to corrupt, no
+ * lock to leak past its own staleness, and a tab killed mid-render leaves at
+ * most one file that the next sweep past CLAIM_STALE_MS removes.
+ *
+ * It is deliberately COARSE — it says "somebody is exporting", not which chunks
+ * — because a sweep in another tab cannot act on a key list it has no way to
+ * keep current, and the expensive mistake is not "kept a chunk too long", it is
+ * "deleted the render in front of a user and made it twice".
+ */
+export const CHUNK_CLAIM_PREFIX = 'rclaim-'
+
+/** How long a claim speaks for. Beats are far shorter, so a live render always
+ *  has a fresh one and a dead tab's goes quiet inside two minutes. */
+const CLAIM_STALE_MS = 2 * 60 * 1000
+const CLAIM_BEAT_MS = 20 * 1000
+
+export interface ChunkCacheClaim {
+  /** Release it. Safe to call twice; never throws. */
+  release(): Promise<void>
+}
+
+async function liveClaimAmong(
+  files: readonly { key: string }[],
+  now: number,
+): Promise<boolean> {
+  for (const f of files) {
+    if (!f.key.startsWith(CHUNK_CLAIM_PREFIX)) continue
+    if (now - bornAt(f.key, CHUNK_CLAIM_PREFIX) < CLAIM_STALE_MS) return true
+    await blobStore.remove(f.key).catch(() => undefined)
+  }
+  return false
+}
+
+/**
+ * Claim the cache for the duration of one export. Null when OPFS refuses — a
+ * render that cannot claim still renders, it just loses this protection, which
+ * is the same contract every other part of this file keeps.
+ */
+export async function claimChunkCache(): Promise<ChunkCacheClaim | null> {
+  const id = newId('k')
+  const nameAt = (t: number): string => `${CHUNK_CLAIM_PREFIX}${t.toString(36)}-${id}`
+  let key = nameAt(Date.now())
+  try {
+    const w = await createPositionedWriter(key)
+    await w.write(new Uint8Array(1), 0)
+    await w.close()
+  } catch {
+    return null
+  }
+  let done = false
+  const timer = setInterval(() => {
+    void (async () => {
+      if (done) return
+      const next = nameAt(Date.now())
+      try {
+        await blobStore.move(key, next)
+        key = next
+      } catch {
+        /* a beat that misses is a claim that ages; the next one repairs it. */
+      }
+    })()
+  }, CLAIM_BEAT_MS)
+  // A worker or a page must never be held open by a heartbeat.
+  ;(timer as unknown as { unref?: () => void }).unref?.()
+  return {
+    async release() {
+      if (done) return
+      done = true
+      clearInterval(timer)
+      await blobStore.remove(key).catch(() => undefined)
+    },
+  }
+}
+
+/**
+ * MAKE ROOM BEFORE THE RENDER, NOT AFTER IT FAILS — J9.
+ *
+ * `sweepChunks` is a BOOT sweep and runs nowhere else, so an export that needs
+ * more than the cap holds has never had anything to ask. This is that ask:
+ * evict least-recently-used chunks that THIS plan does not need, until what is
+ * held plus what this export is about to write fits under the cap.
+ *
+ * It reports honestly rather than promising: `fits` false means the take is
+ * bigger than the cache can ever hold, and the caller's job is then to decide
+ * that up front instead of discovering it an hour in.
+ */
+export async function makeRoomForChunks(
+  wantBytes: number,
+  keep: ReadonlySet<string>,
+): Promise<{ fits: boolean; capBytes: number; heldBytes: number; freedBytes: number }> {
+  const capBytes = await chunkCapBytes()
+  const files = await blobStore.list()
+  let heldBytes = 0
+  const evictable: { key: string; size: number; touched: number }[] = []
+  for (const f of files) {
+    if (!f.key.startsWith(CHUNK_PREFIX)) continue
+    heldBytes += f.size
+    if (keep.has(f.key)) continue
+    evictable.push({ key: f.key, size: f.size, touched: await chunkTouchedAt(f.key) })
+  }
+  // Nobody will say what the quota is: keep today's behaviour exactly.
+  if (capBytes <= 0) return { fits: true, capBytes: 0, heldBytes, freedBytes: 0 }
+
+  let freedBytes = 0
+  if (heldBytes + wantBytes > capBytes) {
+    evictable.sort((a, b) => a.touched - b.touched)
+    for (const f of evictable) {
+      if (heldBytes + wantBytes <= capBytes) break
+      await blobStore.remove(f.key).then(
+        () => {
+          freedBytes += f.size
+          heldBytes -= f.size
+        },
+        () => undefined,
+      )
+    }
+  }
+  return { fits: heldBytes + wantBytes <= capBytes, capBytes, heldBytes, freedBytes }
 }
 
 /**

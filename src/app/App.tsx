@@ -24,6 +24,42 @@ function Main() {
   // instead of sitting behind it.
   const docked = useAppStore((s) => s.exportJobs.length > 0)
 
+  /**
+   * ASK THE BROWSER NOT TO DELETE THE TAKES — J9, 2026-09-05.
+   *
+   * Everything this app keeps — every take's raw channels, every render chunk,
+   * every scratch export — lives in "best effort" storage, which is the
+   * browser's own term for data it may throw away on its own when the disk gets
+   * tight. Nothing here had ever opted out, so on a nearly-full disk Chrome was
+   * free to delete a 90-minute recording that had not been exported yet, and
+   * render chunks between the pre-render and the press. This asks once, per
+   * load, for the storage to be durable instead.
+   *
+   * IT IS NOT A PROMPT AND MUST NOT BE TREATED AS ONE. Chrome never shows a
+   * dialog for this; it decides silently from its own engagement signals
+   * (installed as an app, bookmarked, visited often) and answers yes or no.
+   * Firefox is the one that asks. So this is fire-and-forget on every engine.
+   *
+   * IT DOES NOT RAISE THE QUOTA — that is computed from disk space either way.
+   * It only changes whether what fits may later be deleted, so it is not a fix
+   * for a take that is bigger than the quota; chunkedRender's own room check is.
+   */
+  useEffect(() => {
+    const s = navigator.storage
+    if (!s?.persist || !s.persisted) return
+    void s
+      .persisted()
+      .then((already) => (already ? true : s.persist()))
+      .then((granted) => {
+        console.info(
+          granted
+            ? '[store] storage is durable — the browser will not evict takes on its own (J9)'
+            : '[store] storage is best-effort: the browser may evict takes when the disk is tight (J9)',
+        )
+      })
+      .catch(() => undefined)
+  }, [])
+
   // Never lose a recording to a refresh: salvage interrupted sessions and
   // re-open the latest un-dismissed recording straight in the editor.
   useEffect(() => {

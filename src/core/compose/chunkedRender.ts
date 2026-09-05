@@ -82,9 +82,13 @@ import {
 import { audioPresent, currentRenderFlags, planChunks, type ChunkPlan, type PlannedChunk } from './chunkPlan'
 import {
   chunkKeyFor,
+  chunkSize,
+  claimChunkCache,
   hashDescriptor,
   listChunkKeys,
+  makeRoomForChunks,
   openChunkWriter,
+  removeChunk,
   touchChunk,
 } from './chunkStore'
 import { buildCertification, certificationComment } from './certify'
@@ -105,10 +109,30 @@ import {
 /** Timestamps within this of each other are the same instant (half a frame at 60). */
 const EPS_SEC = 1 / 120
 
+/** Bytes in the unit a person reads a disk in. Console lines only. */
+const mb = (n: number): string =>
+  n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.round(n / 1e6)} MB`
+
 export class ChunkedRenderUnavailable extends Error {
-  constructor(reason: string) {
+  /**
+   * J9: CAN A SECOND ATTEMPT DO BETTER THAN A FULL UNBROKEN RENDER?
+   *
+   * `false` is the original meaning of this error and the safe one — this take
+   * cannot be chunked at all, so the caller renders it unbroken, once. `true`
+   * says a PIECE went missing or disagreed under a plan that is otherwise
+   * sound: a chunk was swept out from under the concatenation, or its codec did
+   * not match its neighbours. The plan is deterministic and the cache is
+   * content-addressed, so re-entering renderChunked re-renders exactly the
+   * pieces that are gone and reuses every other one.
+   *
+   * That distinction is the difference between losing one 2.5-second chunk and
+   * losing a 90-minute render, which is what this cost before J9.
+   */
+  readonly recoverable: boolean
+  constructor(reason: string, recoverable = false) {
     super(`chunked render: ${reason}`)
     this.name = 'ChunkedRenderUnavailable'
+    this.recoverable = recoverable
   }
 }
 
@@ -244,15 +268,30 @@ export interface OpenChunkVideo {
 export type ChunkTrackShape = Pick<OpenChunkVideo, 'codec' | 'config'>
 
 async function openChunkVideo(key: string, index: number): Promise<OpenChunkVideo> {
-  const blob = await blobStore.read(key)
+  /**
+   * J9 — A CHUNK THAT IS NOT THERE IS A RECOVERABLE MISS, NOT A DEAD EXPORT.
+   *
+   * `blobStore.read` throws OPFS's own NotFoundError, which is not a
+   * ChunkedRenderUnavailable, so before J9 a chunk swept out from under this
+   * concatenation (another tab's boot sweep — see chunkStore's sweepChunks)
+   * did not fall back to anything: it came out of the export as a raw error and
+   * the user's press failed outright after the whole render. Named here so the
+   * caller can do the only sensible thing, which is re-render that one piece.
+   */
+  let blob: Blob
+  try {
+    blob = await blobStore.read(key)
+  } catch {
+    throw new ChunkedRenderUnavailable(`chunk ${index} is gone from the cache`, true)
+  }
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
     const track = await input.getPrimaryVideoTrack()
-    if (!track) throw new ChunkedRenderUnavailable(`chunk ${index} has no video track`)
+    if (!track) throw new ChunkedRenderUnavailable(`chunk ${index} has no video track`, true)
     const codec = await track.getCodec()
-    if (!codec) throw new ChunkedRenderUnavailable(`chunk ${index} names no codec`)
+    if (!codec) throw new ChunkedRenderUnavailable(`chunk ${index} names no codec`, true)
     const config = await track.getDecoderConfig()
-    if (!config) throw new ChunkedRenderUnavailable(`chunk ${index} has no decoder config`)
+    if (!config) throw new ChunkedRenderUnavailable(`chunk ${index} has no decoder config`, true)
     return { index, input, track, codec, config }
   } catch (err) {
     input.dispose()
@@ -319,6 +358,13 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
    */
   const plan = planChunks({ recording, edit, settings, flags })
   if (!plan.chunkable) throw new ChunkedRenderUnavailable(plan.unchunkableReason ?? 'no plan')
+
+  /**
+   * J9: tell every other tab that this cache is in use before touching it. The
+   * claim is released in the `finally` below on every path — done, thrown or
+   * aborted — and ages out on its own if this tab dies holding it.
+   */
+  const claim = await claimChunkCache()
 
   const throwIfAborted = (): void => {
     if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError')
@@ -413,6 +459,56 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     rollup.probeDecodes += s.probeDecodes
   }
 
+  /**
+   * DOES THE REST OF THIS TAKE STILL FIT? — J9, and it is measured, not predicted.
+   *
+   * The declared bitrate is a CEILING and a bad estimator (the shipped qp20
+   * path came in at 10.0 Mbps against a `max` ceiling of ~45), so this asks the
+   * only honest source there is: the chunks this very export has already
+   * written. After a handful of them the bytes-per-chunk is known exactly, and
+   * the rest of the take is that number times what is left.
+   *
+   * WHY IT RUNS AT ALL. `sweepChunks` is a BOOT sweep; nothing on the shipped
+   * path ever asked whether an export's output fits under the cache's cap. So a
+   * 90-minute take — 6.8 GB of chunks at the rate his own max60 export measured
+   * — rendered for over an hour, hit a cache that could not take it, and fell
+   * all the way back to an unbroken render from frame zero. Two full
+   * generations. This turns that into a decision made in the first few seconds:
+   * evict other takes' chunks to make the room, and if the take is simply
+   * bigger than the cache can ever hold, say so NOW and render it unbroken once.
+   */
+  const planKeys = new Set(plan.chunks.map((c) => chunkKeyFor(hashes[c.index]!)))
+  if (needAudio) planKeys.add(audioKey)
+  /** Chunks written before the projection is worth trusting. */
+  const ROOM_SAMPLE = 4
+  /** How often the projection is re-checked once it is trusted. */
+  const ROOM_EVERY = 64
+  let renderedSoFar = 0
+  let renderedBytes = 0
+  const keepRoom = async (index: number): Promise<void> => {
+    renderedSoFar += 1
+    renderedBytes += await chunkSize(chunkKeyFor(hashes[index]!))
+    if (renderedSoFar < ROOM_SAMPLE) return
+    if (renderedSoFar > ROOM_SAMPLE && renderedSoFar % ROOM_EVERY !== 0) return
+    const perChunk = renderedBytes / renderedSoFar
+    const wantBytes = Math.round(perChunk * (missing.size - renderedSoFar))
+    if (wantBytes <= 0) return
+    const room = await makeRoomForChunks(wantBytes, planKeys)
+    if (room.fits) {
+      if (room.freedBytes > 0) {
+        console.info(
+          `[compose] chunk cache: freed ${mb(room.freedBytes)} to fit ${mb(wantBytes)} more (J9)`,
+        )
+      }
+      return
+    }
+    throw new ChunkedRenderUnavailable(
+      `this take needs ${mb(room.heldBytes + wantBytes)} of chunk cache and the cap is ` +
+        `${mb(room.capBytes)} — rendering it unbroken instead of twice`,
+      false,
+    )
+  }
+
   try {
     // ---- the video chunks that are missing, run by run --------------------
     for (const run of missingRuns(plan.chunks, missing)) {
@@ -423,7 +519,9 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
           throwIfAborted()
           const hash = hashes[chunk.index]!
           const writer = await openChunkWriter(hash)
-          if (!writer) throw new ChunkedRenderUnavailable('the chunk cache could not be written')
+          if (!writer) {
+            throw new ChunkedRenderUnavailable('the chunk cache could not be written', true)
+          }
           await renderExport({
             recording,
             edit,
@@ -439,6 +537,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
           })
           addUp()
           tick()
+          await keepRoom(chunk.index)
         }
       } finally {
         for (const r of readers) r.dispose()
@@ -542,7 +641,11 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
         // unbroken render is right there. `sameTrack` is what "agree" means.
         const disagreement = sameTrack(opened, reference)
         if (disagreement) {
-          throw new ChunkedRenderUnavailable(`chunk ${chunk.index} ${disagreement}`)
+          // J9: the odd one out is DROPPED, so a second pass re-renders exactly
+          // it against the ladder the rest of the set already agrees on. Before
+          // this the whole take re-rendered unbroken over one stale piece.
+          await removeChunk(chunkKeys[i]!)
+          throw new ChunkedRenderUnavailable(`chunk ${chunk.index} ${disagreement}`, true)
         }
         const sink = new EncodedPacketSink(opened.track)
         for await (const packet of sink.packets()) {
@@ -652,6 +755,40 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     head?.input.dispose()
     await scratch?.discard().catch(() => undefined)
     throw err
+  } finally {
+    await claim?.release()
+  }
+}
+
+/**
+ * THE CHUNKED EXPORT, AND ONE SECOND CHANCE — J9. This is what callers use.
+ *
+ * `renderChunked` gives up by throwing, and every caller answers a throw the
+ * same way: render the whole take unbroken, from frame zero. That answer is
+ * right when the take cannot be chunked at all and catastrophically wrong when
+ * one 2.5-second piece went missing under an otherwise sound plan — it was the
+ * difference between re-rendering 2.5 seconds and re-rendering 90 minutes on a
+ * machine that renders max60 at about one times realtime.
+ *
+ * So a RECOVERABLE failure re-enters instead. Nothing is passed between the two
+ * attempts and nothing needs to be: the plan is deterministic and the cache is
+ * content-addressed, so the second pass re-lists the disk, finds every chunk
+ * the first pass made, and renders only the ones that are gone. Exactly once —
+ * a second failure means the disk is losing chunks faster than we make them,
+ * and an unbroken render is then genuinely the shorter road.
+ */
+export async function renderChunkedResuming(
+  opts: ChunkedRenderOptions,
+  /** Test seam. The retry policy is the thing worth pinning, and it cannot be
+   *  reached through a real render without a browser and an hour. */
+  attempt: (o: ChunkedRenderOptions) => Promise<ExportResult> = renderChunked,
+): Promise<ExportResult> {
+  try {
+    return await attempt(opts)
+  } catch (err) {
+    if (!(err instanceof ChunkedRenderUnavailable) || !err.recoverable) throw err
+    console.info(`[compose] ${err.message} — resuming from what is on disk (J9)`)
+    return await attempt(opts)
   }
 }
 
