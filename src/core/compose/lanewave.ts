@@ -33,15 +33,30 @@ export interface LaneWave {
   decoded: number
   /** Peak of the loudest column, 0..1. Zero means the take is silent. */
   peak: number
+  /**
+   * WHAT THIS PICTURE WAS DRAWN AGAINST — carried out so a zoomed window can be
+   * drawn against the same level as the whole channel. Without it the height of
+   * a lane would mean a different thing at every zoom, and the same second of
+   * audio would grow and shrink as the window moved over it.
+   */
+  reference: number
   /** What it cost. A budget that is not measured is not a budget (F8's gate). */
   wallMs: number
 }
 
-/** Column peaks, 0..1, sampled at `atSec`. Exported for testing the shape. */
-export function columnTimes(durationSec: number, columns: number): number[] {
+/**
+ * Column peaks, 0..1, sampled at `atSec`. Exported for testing the shape.
+ *
+ * `spanSec` is the stretch being drawn and `fromSec` where it starts, so the
+ * same function answers for a whole channel and for one second of it. The
+ * default is the whole channel, which is what every caller meant before the
+ * timeline could zoom.
+ */
+export function columnTimes(spanSec: number, columns: number, fromSec = 0): number[] {
   const out: number[] = []
+  const last = fromSec + spanSec - 1e-3
   for (let i = 0; i < columns; i++) {
-    out.push(Math.min(durationSec - 1e-3, Math.max(0, ((i + 0.5) / columns) * durationSec)))
+    out.push(Math.min(last, Math.max(0, fromSec + ((i + 0.5) / columns) * spanSec)))
   }
   return out
 }
@@ -73,16 +88,36 @@ export function waveScale(peaks: ArrayLike<number>): { peak: number; reference: 
 
 export async function buildLaneWave(
   blob: Blob,
-  durationSec: number,
+  /** The stretch to draw, seconds. The whole channel unless `fromSec` says otherwise. */
+  spanSec: number,
   width: number,
   height: number,
-  opts: { signal?: AbortSignal; columns?: number } = {},
+  opts: {
+    signal?: AbortSignal
+    columns?: number
+    fromSec?: number
+    /**
+     * The level to draw against, from a picture of the WHOLE channel. A window
+     * that computed its own would renormalise as the user zoomed — a quiet
+     * passage drawn tall the moment you looked closely at it — and the lane's
+     * height would stop meaning what it means at rest. Absent (the first,
+     * whole-channel build) it is computed here, exactly as it always was.
+     */
+    reference?: number
+  } = {},
 ): Promise<LaneWave | null> {
-  if (!(durationSec > 0) || width <= 0 || height <= 0) return null
+  if (!(spanSec > 0) || width <= 0 || height <= 0) return null
   const t0 = performance.now()
   // One column per device pixel is wasted work — a lane is ~30 px tall and the
   // eye reads envelope, not detail. Two pixels per column keeps the shape and
   // halves the seeks.
+  //
+  // THE CEILING IS A SEEK BUDGET AND IT SCALES WITH THE STRETCH, not with the
+  // take: 512 columns across 90 minutes is 512 seeks over an hour and a half,
+  // and 512 across two seconds is a straight decode of two seconds. Since the
+  // timeline can ask for a window, the caller is allowed to ask for more of
+  // them — it is buying detail in a span that got shorter, which is cheaper,
+  // not dearer.
   const columns = opts.columns ?? Math.max(8, Math.min(512, Math.round(width / 2)))
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
@@ -94,7 +129,9 @@ export async function buildLaneWave(
     const peaks = new Float32Array(columns)
     let decoded = 0
     let i = 0
-    for await (const sample of sink.samplesAtTimestamps(columnTimes(durationSec, columns))) {
+    for await (const sample of sink.samplesAtTimestamps(
+      columnTimes(spanSec, columns, opts.fromSec ?? 0),
+    )) {
       if (opts.signal?.aborted) return null
       if (sample) {
         try {
@@ -133,7 +170,10 @@ export async function buildLaneWave(
      * the loudness pipeline own that question. What it is normalised AGAINST is
      * waveScale's business.
      */
-    const { peak, scale } = waveScale(peaks)
+    const own = waveScale(peaks)
+    const reference = opts.reference && opts.reference > SILENCE ? opts.reference : own.reference
+    const scale = reference > SILENCE ? 1 / reference : 0
+    const peak = own.peak
     const mid = height / 2
     const colW = width / columns
     ctx.fillStyle = 'rgba(255,255,255,0.92)'
@@ -148,6 +188,7 @@ export async function buildLaneWave(
       height,
       decoded,
       peak,
+      reference,
       wallMs: Math.round(performance.now() - t0),
     }
   } catch (err) {

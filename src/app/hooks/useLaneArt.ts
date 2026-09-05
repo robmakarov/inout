@@ -47,6 +47,20 @@ export interface LaneArt {
   wallMs: number
   /** Frames or columns that actually decoded. */
   decoded: number
+  /**
+   * THE STRETCH OF THE TAKE THIS PICTURE IS OF, in recording ms — without it a
+   * lane cannot draw a windowed strip in the right place, and it is what lets
+   * the OLD picture keep being drawn correctly (stretched) while the new one
+   * for a closer window is still decoding.
+   */
+  fromMs: number
+  toMs: number
+}
+
+/** The stretch of the take the timeline is showing, in recording ms. */
+export interface ArtWindow {
+  fromMs: number
+  toMs: number
 }
 
 /**
@@ -65,10 +79,13 @@ export interface LaneArt {
  */
 async function waveInWorker(
   blob: Blob,
+  /** The stretch to draw, seconds — a whole channel or one zoomed window of it. */
   durationSec: number,
   width: number,
   height: number,
   signal: AbortSignal,
+  fromSec = 0,
+  reference?: number,
 ): Promise<{ wave: LaneWave | null } | null> {
   if (typeof Worker === 'undefined') return null
   let worker: Worker
@@ -94,7 +111,15 @@ async function waveInWorker(
       signal.addEventListener('abort', onAbort, { once: true })
       worker.onmessage = (ev: MessageEvent<LaneWaveReply>) => done({ wave: ev.data.wave })
       worker.onerror = () => done(null)
-      const req: LaneWaveRequest = { id: 'wave', blob, durationSec, width, height }
+      const req: LaneWaveRequest = {
+        id: 'wave',
+        blob,
+        durationSec,
+        width,
+        height,
+        fromSec,
+        reference,
+      }
       worker.postMessage(req)
     })
   } finally {
@@ -107,31 +132,153 @@ const WIDTH_BUCKET = 48
 /** How tall an audio lane's waveform is drawn, CSS px (the lane is 24). */
 const WAVE_HEIGHT_PX = 22
 
+/**
+ * ART FOR A ZOOMED WINDOW — Robert 2026-09-05: "frames and beatrate stretches,
+ * must adapt smoothly, to show more frames or details".
+ *
+ * The strip and the waveform were built once, for the whole channel, at the
+ * lane's width. Zooming in therefore magnified a picture instead of drawing a
+ * closer one: 48 thumbnails of a 90-minute take stay 48 thumbnails however
+ * close you get, and at a two-second window one of them is smeared across the
+ * screen. So the picture is now made for the WINDOW, and three rules keep it
+ * from costing anything:
+ *
+ * 1. IT COVERS MORE THAN THE SCREEN. The art spans the window plus a quarter of
+ *    one either side, so small pans need no new picture at all — and the drawn
+ *    bars are clipped tighter than that, so a bar can never reach past the
+ *    picture it is showing a slice of.
+ * 2. IT ONLY REBUILDS WHEN IT HAS TO: when the window leaves what was built, or
+ *    when the zoom has moved by half again. A settle delay swallows the rest of
+ *    a pinch, and an in-flight build is aborted the moment it is superseded.
+ * 3. THE OLD PICTURE STAYS UP UNTIL THE NEW ONE LANDS. Each art carries the
+ *    stretch it is of, so the lane keeps drawing the right slice of the old one
+ *    — magnified, exactly as before — and swaps to the sharp one when it
+ *    arrives. Nothing ever blanks, which is what "smoothly" has to mean.
+ *
+ * A SHORTER WINDOW IS CHEAPER, NOT DEARER: the same 48 seeks land within
+ * seconds of each other instead of across an hour.
+ */
+/** How much beyond the window the picture reaches, in window widths, each side. */
+const ART_SLACK = 0.25
+/** A zoom that has moved by this factor is a new picture. */
+const ZOOM_TOLERANCE = 1.5
+/** A pinch is many events; wait for the hand to stop before decoding. */
+const SETTLE_MS = 260
+
+/** The window the art should cover for a given view — the view plus its slack. */
+function artWindowFor(view: ArtWindow | null, totalMs: number): ArtWindow {
+  if (!view) return { fromMs: 0, toMs: totalMs }
+  const span = Math.max(1, view.toMs - view.fromMs)
+  return {
+    fromMs: Math.max(0, view.fromMs - span * ART_SLACK),
+    toMs: Math.min(totalMs, view.toMs + span * ART_SLACK),
+  }
+}
+
+/** Is the picture that was built still the right one for this view? */
+function artHolds(built: ArtWindow | null, view: ArtWindow | null, totalMs: number): boolean {
+  if (!built) return false
+  const want = artWindowFor(view, totalMs)
+  const shown = view ?? { fromMs: 0, toMs: totalMs }
+  // It must still COVER what is on screen...
+  if (shown.fromMs < built.fromMs - 0.5 || shown.toMs > built.toMs + 0.5) {
+    // ...unless it already reaches the ends of the take, where there is no more
+    // to cover and a pan against the edge must not rebuild forever.
+    if (!(built.fromMs <= 0.5 && built.toMs >= totalMs - 0.5)) return false
+  }
+  // ...and be of roughly the right closeness.
+  const builtSpan = Math.max(1, built.toMs - built.fromMs)
+  const wantSpan = Math.max(1, want.toMs - want.fromMs)
+  const ratio = Math.max(builtSpan / wantSpan, wantSpan / builtSpan)
+  return ratio <= ZOOM_TOLERANCE
+}
+
 export function useLaneArt(
   recording: Recording,
   trackWidthPx: number,
   thumbHeightPx: number,
+  /** What the timeline is showing. `null` (or absent) is the whole take, which
+   *  is the identity: every number below is what it was before the zoom. */
+  view: ArtWindow | null = null,
 ): Record<string, LaneArt> {
   const [art, setArt] = useState<Record<string, LaneArt>>({})
-  // Revoked on unmount and on every rebuild; an object URL that outlives its
-  // take is a leak nobody sees until a long session runs out of them.
+  // Revoked on unmount and when a take is replaced; an object URL that outlives
+  // its take is a leak nobody sees until a long session runs out of them.
   const urls = useRef<string[]>([])
 
   const bucket = Math.round(trackWidthPx / WIDTH_BUCKET)
   const totalMs = Math.max(1, recording.durationMs)
   const channelKey = recording.channels.map((c) => `${c.id}:${c.media}:${c.durationMs}`).join('|')
 
+  /**
+   * WHAT IS BEING BUILT, and the only thing the build effect depends on. Held
+   * as state (not read from `view` directly) so a drag that moves the window
+   * every frame cannot restart a decoder every frame: the check below runs on
+   * every render, the request changes only when the answer does.
+   */
+  const [request, setRequest] = useState<ArtWindow>(() => artWindowFor(view, totalMs))
+  const builtRef = useRef<ArtWindow | null>(null)
+  /**
+   * EACH CHANNEL'S OWN LEVEL, learnt from the first picture — the one of the
+   * whole channel, which the editor always draws before anything is zoomed.
+   * Every later window is drawn against it, so the height of a lane means the
+   * same thing however close you are. Without this a quiet passage would stand
+   * up the moment you looked at it closely, and the same second of audio would
+   * change height as the window slid over it.
+   */
+  const waveRefs = useRef<Record<string, number>>({})
+  const viewFrom = view?.fromMs ?? null
+  const viewTo = view?.toMs ?? null
+  useEffect(() => {
+    const now: ArtWindow | null = viewFrom === null || viewTo === null ? null : { fromMs: viewFrom, toMs: viewTo }
+    if (artHolds(builtRef.current, now, totalMs)) return
+    const want = artWindowFor(now, totalMs)
+    // Already asked for this one and it has not landed yet.
+    if (Math.abs(want.fromMs - request.fromMs) < 0.5 && Math.abs(want.toMs - request.toMs) < 0.5) return
+    const t = setTimeout(() => setRequest(want), SETTLE_MS)
+    return () => clearTimeout(t)
+  }, [viewFrom, viewTo, totalMs, request.fromMs, request.toMs])
+
+  // A different take starts from nothing — the old take's pictures are of
+  // material that is no longer on the screen.
+  useEffect(() => {
+    builtRef.current = null
+    waveRefs.current = {}
+    setArt({})
+    for (const u of urls.current) URL.revokeObjectURL(u)
+    urls.current = []
+  }, [channelKey])
+
   useEffect(() => {
     let alive = true
     const abort = new AbortController()
     const widthPx = bucket * WIDTH_BUCKET
     if (widthPx <= 0 || !channelKey) return
+    const artFrom = Math.max(0, Math.min(request.fromMs, totalMs))
+    const artTo = Math.max(artFrom + 1, Math.min(request.toMs, totalMs))
+    /** What one ms of the take is worth on screen right now. */
+    const pxPerMs = widthPx / Math.max(1, artTo - artFrom)
     const release = holdEditorAhead('the timeline lane art')
     void (async () => {
       const dpr = Math.min(2, globalThis.devicePixelRatio || 1)
-      const publish = (id: string, art: LaneArt): void => {
-        urls.current.push(art.url)
-        setArt((prev) => ({ ...prev, [id]: art }))
+      /**
+       * The new picture goes up and the one it replaces is let go a moment
+       * later — not in the same breath, because the browser may still be
+       * painting the frame that used it, and a background that vanishes for one
+       * frame is exactly the flicker this whole hook is trying not to cause.
+       */
+      const publish = (id: string, next: LaneArt): void => {
+        urls.current.push(next.url)
+        setArt((prev) => {
+          const old = prev[id]
+          if (old) {
+            setTimeout(() => {
+              URL.revokeObjectURL(old.url)
+              urls.current = urls.current.filter((u) => u !== old.url)
+            }, 1000)
+          }
+          return { ...prev, [id]: next }
+        })
       }
       // Video first — see note 3.
       const ordered = [
@@ -143,9 +290,22 @@ export function useLaneArt(
 
       for (const ch of ordered) {
         if (!alive || abort.signal.aborted) return
-        const barPx = (ch.durationMs / totalMs) * widthPx
-        const durationSec = ch.durationMs / 1000
-        if (!(barPx > 0) || !(durationSec > 0)) continue
+        /**
+         * THE PART OF THIS CHANNEL THE PICTURE IS OF — the requested window
+         * intersected with the file's own place in the take. A channel that
+         * starts at minute 40 is not asked for its first second when the window
+         * is at minute 41, and a channel nowhere near the window is not decoded
+         * at all: at a close zoom, most of a take is not drawn.
+         */
+        const chStart = ch.startOffsetMs
+        const chEnd = chStart + ch.durationMs
+        const fromMs = Math.max(chStart, artFrom)
+        const toMs = Math.min(chEnd, artTo)
+        if (!(toMs > fromMs)) continue
+        const barPx = (toMs - fromMs) * pxPerMs
+        const spanSec = (toMs - fromMs) / 1000
+        const fromSec = (fromMs - chStart) / 1000
+        if (!(barPx > 0) || !(spanSec > 0)) continue
         let blob: Blob
         try {
           blob = await blobStore.read(ch.blobKey)
@@ -153,7 +313,7 @@ export function useLaneArt(
           continue
         }
         if (ch.media === 'video') {
-          const plan = planFilmstrip(barPx, durationSec, thumbHeightPx)
+          const plan = planFilmstrip(barPx, spanSec, thumbHeightPx, fromSec)
           if (!plan) continue
           filmstrip ??= (await import('@core/compose/filmstrip')).buildFilmstrip
           const strip = await filmstrip(
@@ -173,6 +333,8 @@ export function useLaneArt(
             kind: 'film',
             wallMs: strip.wallMs,
             decoded: strip.decoded,
+            fromMs,
+            toMs,
           })
         } else {
           // B10 — THE AUDIO DECODER GOES TO A WORKER, THE VIDEO ONE DOES NOT.
@@ -182,10 +344,12 @@ export function useLaneArt(
           // frame the editor does not get to draw.
           const offThread = await waveInWorker(
             blob,
-            durationSec,
+            spanSec,
             Math.round(barPx * dpr),
             Math.round(WAVE_HEIGHT_PX * dpr),
             abort.signal,
+            fromSec,
+            waveRefs.current[ch.id],
           )
           // `null` here means NO WORKER (an old browser, a blocked
           // construction, a test environment) — not "no waveform". A worker
@@ -196,27 +360,38 @@ export function useLaneArt(
             offThread === null
               ? await (lanewave ??= (await import('@core/compose/lanewave')).buildLaneWave)(
                   blob,
-                  durationSec,
+                  spanSec,
                   Math.round(barPx * dpr),
                   Math.round(WAVE_HEIGHT_PX * dpr),
-                  { signal: abort.signal },
+                  { signal: abort.signal, fromSec, reference: waveRefs.current[ch.id] },
                 )
               : offThread.wave
           if (!alive || abort.signal.aborted) return
           if (!wave) continue
+          // The whole-channel picture sets the level for every window after it.
+          if (fromMs <= chStart + 0.5 && toMs >= chEnd - 0.5) waveRefs.current[ch.id] = wave.reference
           console.info(
             `[timeline] waveform ${ch.kind}: ${wave.decoded}/${wave.columns} columns in ` +
-              `${wave.wallMs} ms, peak ${wave.peak.toFixed(3)}`,
+              `${wave.wallMs} ms, peak ${wave.peak.toFixed(3)}, ref ${wave.reference.toFixed(3)}`,
           )
           publish(ch.id, {
             url: URL.createObjectURL(wave.blob),
             kind: 'wave',
             wallMs: wave.wallMs,
             decoded: wave.decoded,
+            fromMs,
+            toMs,
           })
         }
       }
-    })().finally(release)
+    })()
+      .then(() => {
+        // What is on the screen now, so the next render can tell whether it
+        // still holds. Only on a build that ran to the end: a superseded one
+        // must not claim a window it never finished drawing.
+        if (alive && !abort.signal.aborted) builtRef.current = { fromMs: artFrom, toMs: artTo }
+      })
+      .finally(release)
     return () => {
       alive = false
       abort.abort()
@@ -224,16 +399,18 @@ export function useLaneArt(
       // here as well means an editor that closes never leaves the render held
       // down waiting for art nobody will see. Releasing twice is a no-op.
       release()
-      for (const u of urls.current) URL.revokeObjectURL(u)
-      urls.current = []
-      setArt({})
+      // THE PICTURES ARE NOT THROWN AWAY HERE ANY MORE. This effect re-runs
+      // every time the window moves far enough to want a closer picture, and
+      // clearing the art on the way out is what would make every zoom step
+      // blink through an empty lane. They are released with the TAKE (the
+      // effect above) and replaced one at a time by `publish`.
     }
     // `recording` itself is deliberately not a dependency: the object identity
     // changes whenever anything upstream re-renders, and re-decoding a take on
     // an unrelated state change is exactly the cost this hook is written to
     // avoid. The channels' ids, media and lengths ARE the take, for this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelKey, bucket, thumbHeightPx, totalMs])
+  }, [channelKey, bucket, thumbHeightPx, totalMs, request.fromMs, request.toMs])
 
   return art
 }

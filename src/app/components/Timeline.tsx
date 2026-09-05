@@ -14,7 +14,7 @@ import {
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
 import { timelineLanes } from '@app/lib/timelineLanes'
-import { useLaneArt } from '@app/hooks/useLaneArt'
+import { useLaneArt, type LaneArt } from '@app/hooks/useLaneArt'
 import { FILM_LANE_HEIGHT_PX } from '@app/lib/filmstripPlan'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -348,22 +348,27 @@ export function Timeline({
   }, [])
 
   /**
-   * A DRAWN PIECE NEVER LEAVES THE SCREEN BY MORE THAN A SCREENFUL.
+   * A DRAWN PIECE NEVER LEAVES THE SCREEN BY MORE THAN A FIFTH OF ONE.
    *
    * A lane bar is one element whose width is the whole of its file, so at the
    * zoom floor of a 90-minute take that element would be five million pixels
    * wide with a background scaled to match — which is not a wide bar, it is a
-   * layer no compositor will make. Clipped to the window (with a screenful of
-   * slack either side so a pan has something to slide in), the widest bar on
-   * screen is about three times the lane and the art still lands on the exact
-   * frames it belongs on, because the slice is computed from the clipped span.
+   * layer no compositor will make. Clipped to the window (with a little slack
+   * either side so a pan has something to slide in), the widest bar on screen
+   * is under one and a half lanes, and the art still lands on the exact frames
+   * it belongs on because the slice is computed from the clipped span.
+   *
+   * THE SLACK IS SMALLER THAN THE ART'S (0.2 against ART_SLACK's 0.25) and that
+   * is the whole reason both numbers are written down: a bar that reached past
+   * the picture built for it would run off the end of its own background and
+   * draw blank.
    *
    * Empty when the file is nowhere near the window, which is the other half of
    * the saving: at deep zoom most of the take is not drawn at all.
    */
   const clipToView = (sp: { startMs: number; endMs: number }) => {
-    const from = msAtShown(viewStart - viewSpan)
-    const to = msAtShown(viewStart + viewSpan * 2)
+    const from = msAtShown(viewStart - viewSpan * 0.2)
+    const to = msAtShown(viewStart + viewSpan * 1.2)
     const startMs = Math.max(sp.startMs, from)
     const endMs = Math.min(sp.endMs, to)
     return endMs > startMs ? [{ startMs, endMs }] : []
@@ -532,8 +537,24 @@ export function Timeline({
    */
   const headShown = shownAt(playheadRecMs)
   const headFrac = (headShown - viewStart) / Math.max(1, viewSpan)
+  /**
+   * IT FOLLOWS THE PLAYHEAD MOVING, NOT THE WINDOW MOVING — and the difference
+   * is the whole of whether a zoomed timeline can be scrolled at all.
+   *
+   * Written to depend on the window as well, it fought the hand: sliding away
+   * from a playhead sitting at 0:00 made the playhead leave the window, which
+   * is exactly the condition this re-centres on, so every pan was undone in the
+   * same frame it was made. Measured before this line: twenty two-finger slides
+   * left the window at 0:00.0-0:01.5, unmoved.
+   *
+   * So the only thing it watches is the playhead's own position. A pan does not
+   * re-run it; playing, seeking or scrubbing does.
+   */
+  const lastHeadRef = useRef(headShown)
   useEffect(() => {
-    if (!zoomed) return
+    const moved = Math.abs(headShown - lastHeadRef.current) > 0.5
+    lastHeadRef.current = headShown
+    if (!moved || !zoomed) return
     if (headFrac >= 0 && headFrac <= 1) return
     setView((prev) => {
       if (!prev) return prev
@@ -543,7 +564,9 @@ export function Timeline({
         spanMs: cur.spanMs,
       }
     })
-  }, [headShown, headFrac, zoomed, shownMs])
+    // Only the playhead. See above — adding the window here is the bug.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headShown])
 
   /** The − / + / fit control, anchored on the playhead when it is on screen so
    *  a press zooms into the frame the user is looking at. */
@@ -750,7 +773,18 @@ export function Timeline({
    * sound on an audio one. Two pixels off the lane height because the bar is
    * inset 1 px top and bottom, so the art fills it exactly.
    */
-  const laneArt = useLaneArt(recording, width, FILM_LANE_HEIGHT_PX - 2)
+  /**
+   * THE PICTURE FOLLOWS THE ZOOM (Robert 2026-09-05: "frames and beatrate
+   * stretches, must adapt smoothly, to show more frames or details"). The hook
+   * is handed the stretch that is on screen, in RECORDING ms — `null` while the
+   * whole take is showing, which is the identity it had before the zoom. It
+   * decides for itself when that is worth a new decode; every rule about how
+   * often, and about never blanking a lane, lives there.
+   */
+  const artView = zoomed
+    ? { fromMs: msAtShown(viewStart), toMs: msAtShown(viewStart + viewSpan) }
+    : null
+  const laneArt = useLaneArt(recording, width, FILM_LANE_HEIGHT_PX - 2, artView)
   const anyStrip = Object.values(laneArt).some((a) => a.kind === 'film')
 
   /** One row per INPUT, holding every file that input wrote. See timelineLanes. */
@@ -886,17 +920,27 @@ export function Timeline({
                   pieces.map((p, pi) => {
                     const left = x(p.startMs)
                     const w = Math.max(2, spanW(p.startMs, p.endMs))
-                    // Where this piece sits inside the channel, 0..1 — the
-                    // strip and the waveform are both sliced by these.
-                    const f0 = (p.startMs - chStart) / Math.max(1, ch.durationMs)
-                    const f1 = (p.endMs - chStart) / Math.max(1, ch.durationMs)
-                    const fullW = w / Math.max(1e-6, f1 - f0)
-                    const slice = (url: string) => ({
-                      backgroundImage: `url(${url})`,
-                      backgroundSize: `${fullW}px 100%`,
-                      backgroundPosition: `${-f0 * fullW}px 0`,
-                      backgroundRepeat: 'no-repeat' as const,
-                    })
+                    /**
+                     * Where this piece sits inside THE PICTURE, 0..1 — and the
+                     * picture is of whatever stretch it was built for, which
+                     * since the zoom is not always the whole channel. Reading
+                     * these off the channel instead would put a windowed strip
+                     * in the wrong place, and reading them off the CURRENT
+                     * window would put the picture still decoding in the wrong
+                     * place, which is the same bug one frame wide.
+                     */
+                    const slice = (a: LaneArt) => {
+                      const span = Math.max(1, a.toMs - a.fromMs)
+                      const g0 = (p.startMs - a.fromMs) / span
+                      const g1 = (p.endMs - a.fromMs) / span
+                      const full = w / Math.max(1e-6, g1 - g0)
+                      return {
+                        backgroundImage: `url(${a.url})`,
+                        backgroundSize: `${full}px 100%`,
+                        backgroundPosition: `${-g0 * full}px 0`,
+                        backgroundRepeat: 'no-repeat' as const,
+                      }
+                    }
                     // The kept window, clipped to this piece, in piece pixels.
                     const kFrom = Math.max(p.startMs, Math.min(keptStart, p.endMs))
                     const kTo = Math.max(p.startMs, Math.min(keptEnd, p.endMs))
@@ -909,7 +953,7 @@ export function Timeline({
                            and rebuild every bar on the screen each frame. */
                         key={`${ch.id}-${pi}`}
                         className={`lane__bar${ce.enabled ? '' : ' lane__bar--disabled'}`}
-                        style={{ left, width: w, ...(strip ? slice(strip.url) : null) }}
+                        style={{ left, width: w, ...(strip ? slice(strip) : null) }}
                       >
                         <div
                           className="lane__seg lane__seg--cut"
@@ -924,7 +968,7 @@ export function Timeline({
                             the colour is the background and the wave is the
                             content. Pointer-events off so the lane still seeks
                             when clicked. */}
-                        {wave && <div className="lane__wave" style={slice(wave.url)} />}
+                        {wave && <div className="lane__wave" style={slice(wave)} />}
                         <div
                           className="lane__seg lane__seg--cut"
                           style={{ left: kLeft + kWidth, right: 0, ...cutPaint }}

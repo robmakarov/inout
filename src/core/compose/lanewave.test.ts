@@ -53,3 +53,43 @@ describe('waveScale', () => {
     expect(waveScale(new Array(100).fill(0.0001)).scale).toBe(0)
   })
 })
+
+describe('columnTimes over a window', () => {
+  it('starts where the window starts and stays inside it', () => {
+    const t = columnTimes(2, 8, 90)
+    expect(t[0]).toBeGreaterThanOrEqual(90)
+    expect(t[t.length - 1]!).toBeLessThan(92)
+    expect(t.length).toBe(8)
+  })
+
+  it('puts the same number of columns in a shorter stretch — the detail is the point', () => {
+    const whole = columnTimes(5400, 64)
+    const window = columnTimes(2, 64, 1200)
+    expect(window.length).toBe(whole.length)
+    expect(window[1]! - window[0]!).toBeLessThan(whole[1]! - whole[0]!)
+  })
+
+  it('is unchanged when no window is named', () => {
+    expect(columnTimes(10, 5)).toEqual(columnTimes(10, 5, 0))
+  })
+})
+
+describe('waveScale against a given reference', () => {
+  // The zoom made this a real question: a window that computed its own level
+  // would draw a quiet passage tall the moment you looked closely at it, and
+  // the same second of audio would change height as the window slid over it.
+  it('a loud stretch and a quiet one of the same channel do not agree on their own', () => {
+    const loud = waveScale([0.8, 0.9, 1.0, 0.85])
+    const quiet = waveScale([0.02, 0.03, 0.025, 0.02])
+    expect(quiet.scale).toBeGreaterThan(loud.scale * 10)
+  })
+
+  it('the channel level is what a window must be drawn against', () => {
+    // Given the whole channel's reference, a quiet window draws quiet: the
+    // column at 0.03 lands at 3% of the lane, not at 100% of it.
+    const channel = waveScale([0.02, 0.03, 0.8, 0.9, 1.0])
+    const drawnWith = (peak: number, reference: number) => peak * (1 / reference)
+    expect(drawnWith(0.03, channel.reference)).toBeLessThan(0.05)
+    expect(drawnWith(0.03, waveScale([0.02, 0.03, 0.025]).reference)).toBeGreaterThan(0.9)
+  })
+})

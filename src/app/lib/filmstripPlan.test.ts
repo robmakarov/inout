@@ -59,3 +59,31 @@ describe('planFilmstrip', () => {
     }
   })
 })
+
+describe('planFilmstrip over a window', () => {
+  it('samples inside the window it was given, not the whole channel', () => {
+    // 90 seconds into a channel, two seconds wide.
+    const plan = planFilmstrip(760, 2, 32, 90)!
+    expect(plan.atSec[0]).toBeGreaterThanOrEqual(90)
+    expect(plan.atSec[plan.atSec.length - 1]!).toBeLessThan(92)
+  })
+
+  it('gives a two-second window the same frame COUNT as the whole take', () => {
+    // This is the fix Robert asked for: the pitch is the rule, so zooming buys
+    // more frames of less time rather than the same frames stretched.
+    const whole = planFilmstrip(760, 5400, 32)!
+    const window = planFilmstrip(760, 2, 32, 1200)!
+    expect(window.count).toBe(whole.count)
+    // ...and they cover two seconds instead of an hour and a half. Centre to
+    // centre, so a count of n spans (n-1)/n of the stretch.
+    const spread = (p: { atSec: number[] }) => p.atSec[p.atSec.length - 1]! - p.atSec[0]!
+    expect(spread(whole)).toBeGreaterThan(4000)
+    expect(spread(window)).toBeLessThan(2)
+  })
+
+  it('is unchanged when no window is named', () => {
+    const plan = planFilmstrip(760, 10, 32)!
+    expect(plan.atSec[0]).toBeGreaterThan(0)
+    expect(plan.atSec[plan.atSec.length - 1]!).toBeLessThan(10)
+  })
+})

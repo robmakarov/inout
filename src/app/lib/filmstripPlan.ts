@@ -76,26 +76,36 @@ export interface FilmstripPlan {
 }
 
 /**
- * @param trackWidthPx  the lane bar's width on screen — the strip covers the
- *                      channel's own window, not the whole timeline.
- * @param durationSec   the channel's own length.
+ * @param trackWidthPx  the strip's width on screen — the pixels it has to fill,
+ *                      which is what decides how many frames go in it.
+ * @param spanSec       the stretch of the channel being drawn. The whole
+ *                      channel unless `fromSec` says otherwise.
+ * @param fromSec       where that stretch starts inside the channel.
+ *
+ * THE PITCH IS THE RULE AND THE SPAN IS FREE, which is what lets the timeline
+ * zoom: the same 38 px between frames buys twelve frames of an hour or twelve
+ * frames of two seconds, and the second one is a strip you can cut against.
+ * The count is still bounded by MAX_THUMBS, and a shorter span makes the
+ * budget go further rather than costing more — the seeks land near each other.
  */
 export function planFilmstrip(
   trackWidthPx: number,
-  durationSec: number,
+  spanSec: number,
   thumbHeightPx: number,
+  fromSec = 0,
 ): FilmstripPlan | null {
   const thumbWidthPx = Math.max(1, Math.round(thumbHeightPx * THUMB_ASPECT))
-  if (!(trackWidthPx > 0) || !(durationSec > 0) || !Number.isFinite(durationSec)) return null
+  if (!(trackWidthPx > 0) || !(spanSec > 0) || !Number.isFinite(spanSec)) return null
   if (trackWidthPx < thumbWidthPx) return null
   const wanted = Math.round(trackWidthPx / thumbPitchPx(thumbHeightPx))
   const count = Math.max(1, Math.min(MAX_THUMBS, wanted))
   const atSec: number[] = []
+  const last = fromSec + spanSec - 1e-3
   for (let i = 0; i < count; i++) {
     // The CENTRE of each cell, so the first thumbnail is not the capture's
     // first frame (often a blank surface) and the last is not the stop itself.
-    const t = ((i + 0.5) / count) * durationSec
-    atSec.push(Math.min(durationSec - 1e-3, Math.max(0, t)))
+    const t = fromSec + ((i + 0.5) / count) * spanSec
+    atSec.push(Math.min(last, Math.max(0, t)))
   }
   return { count, thumbWidthPx, atSec }
 }

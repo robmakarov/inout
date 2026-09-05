@@ -25,10 +25,15 @@ import { buildLaneWave, type LaneWave } from './lanewave'
 export interface LaneWaveRequest {
   id: string
   blob: Blob
+  /** The stretch to draw, seconds — the whole channel, or one zoomed window of it. */
   durationSec: number
   width: number
   height: number
   columns?: number
+  /** Where that stretch starts inside the channel. Absent means the start. */
+  fromSec?: number
+  /** The whole channel's own level, so a window is drawn against the same one. */
+  reference?: number
 }
 
 export interface LaneWaveReply {
@@ -38,9 +43,13 @@ export interface LaneWaveReply {
 }
 
 self.onmessage = async (ev: MessageEvent<LaneWaveRequest>): Promise<void> => {
-  const { id, blob, durationSec, width, height, columns } = ev.data
+  const { id, blob, durationSec, width, height, columns, fromSec, reference } = ev.data
   try {
-    const wave = await buildLaneWave(blob, durationSec, width, height, { columns })
+    const wave = await buildLaneWave(blob, durationSec, width, height, {
+      columns,
+      fromSec,
+      reference,
+    })
     const reply: LaneWaveReply = { id, wave }
     self.postMessage(reply)
   } catch (err) {
