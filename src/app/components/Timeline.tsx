@@ -13,15 +13,66 @@ import {
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
+import { timelineLanes } from '@app/lib/timelineLanes'
 import { useLaneArt } from '@app/hooks/useLaneArt'
 import { FILM_LANE_HEIGHT_PX } from '@app/lib/filmstripPlan'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
+/**
+ * Tick spacings, coarse to fine. The five under a second are new with the zoom:
+ * a ruler whose finest mark is one second says nothing useful about a window
+ * two seconds wide, which is exactly where a fine adjustment is made.
+ */
 const TICK_STEPS_MS = [
-  1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 900000,
+  20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000,
+  900000, 1800000, 3600000,
 ]
 const MIN_TICK_PX = 64
+
+/**
+ * THE FINEST WINDOW THE TIMELINE WILL SHOW, and it is one second across the
+ * whole width — about a millisecond per pixel on the editor's own 900 px lane,
+ * which is finer than a frame at any rate this product records. Zooming past
+ * that would buy nothing and start losing the shape of the thing being cut.
+ */
+const MIN_VIEW_MS = 1000
+/** One press of − or +. Doubling reaches a second of a 90-minute take in 13. */
+const ZOOM_STEP = 2
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/** The window of the take the timeline draws, in shown-ms. `null` = all of it. */
+type Viewport = { startMs: number; spanMs: number } | null
+
+/** A stored window, bounded by the take as it is drawn NOW — a collapsed hole
+ *  shortens the axis under a zoom that was set before it, so every read goes
+ *  through here rather than trusting what was stored. */
+function fitView(v: Viewport, shownMs: number): { startMs: number; spanMs: number } {
+  if (!v) return { startMs: 0, spanMs: shownMs }
+  const spanMs = clamp(v.spanMs, Math.min(MIN_VIEW_MS, shownMs), shownMs)
+  return { startMs: clamp(v.startMs, 0, Math.max(0, shownMs - spanMs)), spanMs }
+}
+
+/**
+ * A tick's label. `formatClock` is m:ss, which is the right thing for a take
+ * measured in minutes and useless at both ends of a zoom: an hour-long take
+ * reads "78:24" and a two-second window reads "0:03" three times in a row.
+ * Hours appear when the take has them, tenths when the spacing is finer than a
+ * second — nothing is rounded away that the eye can see it was told
+ * (DECISIONS robert (21)).
+ */
+function tickLabel(ms: number, stepMs: number, totalMs: number): string {
+  const t = Math.max(0, ms)
+  const h = Math.floor(t / 3600000)
+  const m = Math.floor((t % 3600000) / 60000)
+  const s = (t % 60000) / 1000
+  const secs = stepMs < 1000 ? s.toFixed(stepMs < 100 ? 2 : 1) : String(Math.round(s))
+  const pad = secs.indexOf('.') === 1 || secs.length === 1 ? `0${secs}` : secs
+  return totalMs >= 3600000
+    ? `${h}:${String(m).padStart(2, '0')}:${pad}`
+    : `${h * 60 + m}:${pad}`
+}
 
 function startDrag(
   e: React.PointerEvent,
@@ -92,6 +143,7 @@ export function Timeline({
    *  apply them live in ToolsBar, under the picture (UI1). */
   proposal?: TightenProposal | null
 }) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const editRef = useRef(edit)
@@ -185,7 +237,57 @@ export function Timeline({
     }
     return out
   }
-  const x = (ms: number) => (shownAt(ms) / shownMs) * width
+
+  /**
+   * ZOOM — THE WINDOW OF THE TAKE THE TIMELINE DRAWS (Robert 2026-09-05: "i
+   * also need zoom for timeline for fine adjustment at long take").
+   *
+   * A 90-minute take on a 900 px lane is six seconds per pixel: every cut, trim
+   * and split on it is made with a tolerance of six seconds, which is not an
+   * adjustment. The window is held in SHOWN-ms — the axis after collapsed holes
+   * are removed — so zooming and collapsing compose instead of fighting: a hole
+   * the user closed stays closed at every magnification.
+   *
+   * `null` is the whole take, and it is the identity: every number below
+   * reduces to exactly the arithmetic this timeline had before the zoom
+   * existed, so a take nobody zooms behaves as it always did.
+   */
+  const [view, setView] = useState<Viewport>(null)
+  useEffect(() => setView(null), [recording.id])
+  const { startMs: viewStart, spanMs: viewSpan } = fitView(view, shownMs)
+  const zoomed = viewSpan < shownMs - 0.5
+  /**
+   * Zoom by a FACTOR, holding one fraction of the window still — the point the
+   * gesture was aimed at, so the thing being looked at stays where it is.
+   *
+   * EVERY UPDATE HERE IS FUNCTIONAL, and that is not style. React batches, so
+   * three quick presses of + are three handlers reading ONE window: written the
+   * obvious way they all compute "half of 20 s" and the third press does
+   * nothing the first did not. Caught on the rig — twelve presses of + moved a
+   * 20 s take to 10 s and stopped, because eleven of them were arguing about
+   * the same number. Written this way each one halves what the last one left.
+   */
+  const zoomBy = (factor: number, anchorFrac: number) => {
+    setView((prev) => {
+      const cur = fitView(prev, shownMs)
+      const span = clamp(cur.spanMs * factor, Math.min(MIN_VIEW_MS, shownMs), shownMs)
+      if (span >= shownMs) return null
+      const anchor = cur.startMs + anchorFrac * cur.spanMs
+      return { startMs: clamp(anchor - anchorFrac * span, 0, shownMs - span), spanMs: span }
+    })
+  }
+  const panBy = (deltaShownMs: number) => {
+    setView((prev) => {
+      if (!prev) return prev
+      const cur = fitView(prev, shownMs)
+      return {
+        startMs: clamp(cur.startMs + deltaShownMs, 0, Math.max(0, shownMs - cur.spanMs)),
+        spanMs: cur.spanMs,
+      }
+    })
+  }
+
+  const x = (ms: number) => ((shownAt(ms) - viewStart) / viewSpan) * width
   /** A WIDTH, not a position. `x(duration)` is only the width of a span when
    *  the axis is linear, and across a collapsed hole it is not. */
   const spanW = (aMs: number, bMs: number) => Math.max(0, x(bMs) - x(aMs))
@@ -197,12 +299,74 @@ export function Timeline({
     }
     return Math.min(totalMs, Math.max(0, out))
   }
-  const msAtClient = (clientX: number) => {
+  /** Where the pointer is ACROSS the drawn window, 0..1. Pure geometry, so it
+   *  is the same answer whatever the window is — which is what lets a batch of
+   *  wheel events zoom around one point instead of drifting. */
+  const fracAtClient = (clientX: number) => {
     const el = trackRef.current
-    if (!el) return 0
+    if (!el) return 0.5
     const r = el.getBoundingClientRect()
-    const f = Math.min(1, Math.max(0, (clientX - r.left) / Math.max(1, r.width)))
-    return msAtShown(f * shownMs)
+    return clamp((clientX - r.left) / Math.max(1, r.width), 0, 1)
+  }
+  /** Where the pointer is on the drawn axis, in shown-ms. */
+  const shownAtClient = (clientX: number) => viewStart + fracAtClient(clientX) * viewSpan
+  const msAtClient = (clientX: number) => msAtShown(shownAtClient(clientX))
+
+  /**
+   * PINCH TO ZOOM, TWO FINGERS TO SLIDE — the gesture every timeline on this
+   * machine already answers to, so nothing has to be learnt. A trackpad pinch
+   * arrives as a wheel event with `ctrlKey`, which is also the browser's own
+   * page-zoom gesture: it MUST be prevented, and a passive listener cannot,
+   * which is why this is attached by hand rather than through `onWheel` (React
+   * registers that one passive and the preventDefault would be ignored).
+   *
+   * Held in a ref and re-pointed every render, so the listener is attached once
+   * and still sees the current window instead of the one it was born with.
+   */
+  const wheelRef = useRef<(e: WheelEvent) => void>(() => undefined)
+  wheelRef.current = (e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      // Exponential in the wheel delta: the same flick zooms by the same
+      // FACTOR wherever it is made, which is the only way a zoom feels linear.
+      zoomBy(Math.exp(e.deltaY * 0.006), fracAtClient(e.clientX))
+      return
+    }
+    // A horizontal swipe slides the window; a vertical one is left alone, so a
+    // page that scrolls still scrolls under the pointer.
+    if (zoomed && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      e.preventDefault()
+      panBy((e.deltaX / Math.max(1, width)) * viewSpan)
+    }
+  }
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => wheelRef.current(e)
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  /**
+   * A DRAWN PIECE NEVER LEAVES THE SCREEN BY MORE THAN A SCREENFUL.
+   *
+   * A lane bar is one element whose width is the whole of its file, so at the
+   * zoom floor of a 90-minute take that element would be five million pixels
+   * wide with a background scaled to match — which is not a wide bar, it is a
+   * layer no compositor will make. Clipped to the window (with a screenful of
+   * slack either side so a pan has something to slide in), the widest bar on
+   * screen is about three times the lane and the art still lands on the exact
+   * frames it belongs on, because the slice is computed from the clipped span.
+   *
+   * Empty when the file is nowhere near the window, which is the other half of
+   * the saving: at deep zoom most of the take is not drawn at all.
+   */
+  const clipToView = (sp: { startMs: number; endMs: number }) => {
+    const from = msAtShown(viewStart - viewSpan)
+    const to = msAtShown(viewStart + viewSpan * 2)
+    const startMs = Math.max(sp.startMs, from)
+    const endMs = Math.min(sp.endMs, to)
+    return endMs > startMs ? [{ startMs, endMs }] : []
   }
 
   /** `[a, b)` broken into the stretches the timeline actually draws. */
@@ -318,6 +482,20 @@ export function Timeline({
     })
   }
 
+  /**
+   * The eye belongs to the INPUT now, so it takes every file that input wrote —
+   * one press, one gesture. Hiding "the camera" and getting two of its three
+   * stretches back would be the same defect one layer down.
+   */
+  const setLaneEnabled = (channels: readonly ChannelRecording[], enabled: boolean) => {
+    const ids = new Set(channels.map((c) => c.id))
+    const cur = editRef.current
+    onEdit({
+      ...cur,
+      channels: cur.channels.map((c) => (ids.has(c.channelId) ? { ...c, enabled } : c)),
+    })
+  }
+
   const dragChannelTrim =
     (ch: ChannelRecording, side: 'start' | 'end') => (e: React.PointerEvent) => {
       e.stopPropagation()
@@ -339,6 +517,39 @@ export function Timeline({
   const playheadAt = outputToRecordingMs(edit, Math.min(timeMs, durationMs))
   /** Never null for DRAWING: past the last frame the playhead sits at the end. */
   const playheadRecMs = playheadAt ?? edit.globalTrimEndMs
+
+  /**
+   * A ZOOMED TIMELINE FOLLOWS THE PLAYHEAD OUT OF ITS OWN WINDOW. Without this
+   * the picture plays on and the timeline sits on a stretch that is no longer
+   * happening — the one behaviour that would make the zoom useless for the
+   * thing it was asked for.
+   *
+   * It moves ONLY when the playhead has actually left the window, so it can
+   * never fight a hand that is panning or scrubbing: during a scrub the
+   * playhead is under the pointer, which is inside the window by construction.
+   * The window jumps a page rather than centring, so the eye is not asked to
+   * track a constantly sliding ruler.
+   */
+  const headShown = shownAt(playheadRecMs)
+  const headFrac = (headShown - viewStart) / Math.max(1, viewSpan)
+  useEffect(() => {
+    if (!zoomed) return
+    if (headFrac >= 0 && headFrac <= 1) return
+    setView((prev) => {
+      if (!prev) return prev
+      const cur = fitView(prev, shownMs)
+      return {
+        startMs: clamp(headShown - cur.spanMs * 0.1, 0, Math.max(0, shownMs - cur.spanMs)),
+        spanMs: cur.spanMs,
+      }
+    })
+  }, [headShown, headFrac, zoomed, shownMs])
+
+  /** The − / + / fit control, anchored on the playhead when it is on screen so
+   *  a press zooms into the frame the user is looking at. */
+  const zoomAnchor = () => (headFrac >= 0 && headFrac <= 1 ? headFrac : 0.5)
+  const zoomIn = () => zoomBy(1 / ZOOM_STEP, zoomAnchor())
+  const zoomOut = () => zoomBy(ZOOM_STEP, zoomAnchor())
   const dropSegment = (index: number) => {
     onEdit(removeSegment(editRef.current, index))
   }
@@ -542,17 +753,64 @@ export function Timeline({
   const laneArt = useLaneArt(recording, width, FILM_LANE_HEIGHT_PX - 2)
   const anyStrip = Object.values(laneArt).some((a) => a.kind === 'film')
 
-  const step = TICK_STEPS_MS.find((s) => (s / totalMs) * width >= MIN_TICK_PX) ?? 900000
+  /** One row per INPUT, holding every file that input wrote. See timelineLanes. */
+  const lanes = timelineLanes(recording.channels)
+
+  /**
+   * The ruler reads the WINDOW, not the take: the spacing is chosen for what is
+   * on screen and only the marks inside it are built. At a second per screen on
+   * a 90-minute take, marking the whole take at that spacing would be a third
+   * of a million DOM nodes to draw twenty.
+   */
+  const step =
+    TICK_STEPS_MS.find((s) => (s / Math.max(1, viewSpan)) * width >= MIN_TICK_PX) ?? 3600000
   const ticks: number[] = []
-  for (let t = 0; t <= totalMs; t += step) ticks.push(t)
+  {
+    const from = Math.max(0, Math.floor(msAtShown(viewStart) / step) * step)
+    const to = Math.min(totalMs, msAtShown(viewStart + viewSpan))
+    for (let t = from; t <= to; t += step) ticks.push(t)
+  }
 
   const gStart = edit.globalTrimStartMs
   const gEnd = edit.globalTrimEndMs
 
   return (
-    <div className={`tl${sliding ? ' tl--sliding' : ''}`}>
+    <div ref={rootRef} className={`tl${sliding ? ' tl--sliding' : ''}`}>
       <div className="tl__row tl__row--ruler">
-        <div className="tl__gutter" />
+        {/* THE ZOOM LIVES IN THE RULER'S OWN GUTTER — dead space until now, and
+            the one place on this control where a length belongs. The readout is
+            what is ON SCREEN, not a magnification factor: "0:12" answers the
+            question a person actually has, and pressing it fits the take back.
+            Robert 2026-09-05: "i also need zoom for timeline for fine
+            adjustment at long take". */}
+        <div className="tl__gutter tl__zoombar">
+          <button
+            className="tl__zoombtn"
+            onClick={zoomOut}
+            disabled={!zoomed}
+            title="Show more of the take (or pinch on the timeline)"
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <button
+            className="tl__zoomspan"
+            onClick={() => setView(null)}
+            disabled={!zoomed}
+            title={zoomed ? 'Fit the whole take' : 'The whole take is on screen'}
+          >
+            {formatClock(viewSpan)}
+          </button>
+          <button
+            className="tl__zoombtn"
+            onClick={zoomIn}
+            disabled={viewSpan <= Math.min(MIN_VIEW_MS, shownMs) + 0.5}
+            title="Zoom in for a finer cut (or pinch on the timeline)"
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
         <div
           ref={trackRef}
           className="tl__ruler"
@@ -561,16 +819,39 @@ export function Timeline({
           {width > 0 &&
             ticks.map((t) => (
               <div key={t} className="tl__tick" style={{ left: x(t) }}>
-                <span className="tl__tick-label">{formatClock(t)}</span>
+                <span className="tl__tick-label">{tickLabel(t, step, totalMs)}</span>
               </div>
             ))}
         </div>
       </div>
 
       <div className={`tl__lanes${anyStrip ? ' tl__lanes--film' : ''}`}>
-        {recording.channels.map((ch) => {
-          const meta = CHANNEL_META[ch.kind]
-          const ce = edit.channels.find((c) => c.channelId === ch.id) ?? fallbackChannelEdit(ch)
+        {lanes.map(({ kind, channels }) => {
+        const meta = CHANNEL_META[kind]
+        const laneEdits = channels.map(
+          (c) => edit.channels.find((ce) => ce.channelId === c.id) ?? fallbackChannelEdit(c),
+        )
+        const laneShown = laneEdits.some((ce) => ce.enabled)
+        const laneFilm = channels.some((c) => laneArt[c.id]?.kind === 'film')
+        return (
+          <div key={kind} className={`tl__row lane${laneFilm ? ' lane--film' : ''}`}>
+            <div className="tl__gutter lane__gutter">
+              <span className="lane__icon" style={{ color: meta.colorVar }}>
+                <Icon name={meta.icon} size={14} />
+              </span>
+              <span className="lane__label">{meta.label}</span>
+              <button
+                className="lane__eye"
+                title={laneShown ? 'Hide channel' : 'Show channel'}
+                aria-pressed={laneShown}
+                onClick={() => setLaneEnabled(channels, !laneShown)}
+              >
+                <Icon name={laneShown ? 'eye' : 'eye-off'} size={14} />
+              </button>
+            </div>
+            <div className="lane__track" onPointerDown={(e) => startSeekDrag(e)}>
+              {channels.map((ch, ci) => {
+          const ce = laneEdits[ci]!
           /**
            * THE LANE IS DRAWN IN PIECES, one per stretch of this channel the
            * timeline still shows. With no collapsed hole that is exactly one
@@ -585,7 +866,7 @@ export function Timeline({
            */
           const chStart = ch.startOffsetMs
           const chEnd = ch.startOffsetMs + ch.durationMs
-          const pieces = visibleSpans(chStart, chEnd)
+          const pieces = visibleSpans(chStart, chEnd).flatMap(clipToView)
           /** The kept window, on the RECORDING timeline. */
           const keptStart = chStart + ce.trimStartMs
           const keptEnd = chStart + ce.trimEndMs
@@ -600,24 +881,9 @@ export function Timeline({
           const wave = laneArt[ch.id]?.kind === 'wave' ? laneArt[ch.id] : undefined
           const cutPaint = { background: strip ? 'rgba(6,6,10,1)' : meta.colorVar }
           return (
-            <div key={ch.id} className={`tl__row lane${strip ? ' lane--film' : ''}`}>
-              <div className="tl__gutter lane__gutter">
-                <span className="lane__icon" style={{ color: meta.colorVar }}>
-                  <Icon name={meta.icon} size={14} />
-                </span>
-                <span className="lane__label">{meta.label}</span>
-                <button
-                  className="lane__eye"
-                  title={ce.enabled ? 'Hide channel' : 'Show channel'}
-                  aria-pressed={ce.enabled}
-                  onClick={() => updateChannel(ch.id, { enabled: !ce.enabled })}
-                >
-                  <Icon name={ce.enabled ? 'eye' : 'eye-off'} size={14} />
-                </button>
-              </div>
-              <div className="lane__track" onPointerDown={(e) => startSeekDrag(e)}>
+            <div key={ch.id} className="lane__clip">
                 {width > 0 &&
-                  pieces.map((p) => {
+                  pieces.map((p, pi) => {
                     const left = x(p.startMs)
                     const w = Math.max(2, spanW(p.startMs, p.endMs))
                     // Where this piece sits inside the channel, 0..1 — the
@@ -638,7 +904,10 @@ export function Timeline({
                     const kWidth = spanW(kFrom, kTo)
                     return (
                       <div
-                        key={`${ch.id}-${p.startMs}`}
+                        /* By POSITION, not by instant: a clipped piece's start
+                           moves with every pan, and keying on it would unmount
+                           and rebuild every bar on the screen each frame. */
+                        key={`${ch.id}-${pi}`}
                         className={`lane__bar${ce.enabled ? '' : ' lane__bar--disabled'}`}
                         style={{ left, width: w, ...(strip ? slice(strip.url) : null) }}
                       >
@@ -680,9 +949,12 @@ export function Timeline({
                     />
                   </>
                 )}
-              </div>
             </div>
           )
+              })}
+            </div>
+          </div>
+        )
         })}
       </div>
 

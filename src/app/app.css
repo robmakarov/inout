@@ -890,6 +890,48 @@
   flex: none;
   height: 26px;
 }
+/* THE ZOOM, in the ruler's own gutter — 100 px that held nothing until now, and
+   the only place on this control where a LENGTH belongs beside the clock it
+   labels. Three items: less, what is on screen, more. The middle one is the
+   readout and the fit button at once, because "how much am I looking at" and
+   "give me all of it back" are the same thought. */
+.tl__zoombar {
+  gap: 2px;
+  justify-content: space-between;
+}
+.tl__zoombtn {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tl__zoomspan {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tl__zoombtn:hover:not(:disabled),
+.tl__zoomspan:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.tl__zoombtn:disabled,
+.tl__zoomspan:disabled {
+  opacity: 0.35;
+}
+
 .tl__ruler {
   position: relative;
   flex: 1;
@@ -915,13 +957,34 @@
   white-space: nowrap;
 }
 
+/* THE LANES THAT WERE NEVER ON SCREEN (Robert 2026-09-05: "some pieces of it
+   missing in timeline at all, screen lane not shown at all, despite record is
+   still correct").
+
+   `justify-content: center` in a SCROLLING flex column is a trap, and this is
+   what it cost. When the content is taller than the box, centring pushes it out
+   of BOTH ends — and the overflow at the START is unreachable, because scrollTop
+   cannot go below zero. Measured on prod before this line changed, on a take
+   with three chip toggles in it: seven lanes, box 116 px, scrollHeight 165 px,
+   scrollTop 0, and the first row's rectangle ending 4 px ABOVE the top of the
+   box with no way to reach it. 49 px of lanes existed and could not be scrolled
+   to. He was not missing a lane, he was missing a row that had been pushed off
+   the top of a container that would not scroll up.
+
+   `safe center` is the fix in one word: centre while it fits, top-align the
+   moment it does not, so nothing is ever above the scroll origin. The plain
+   value stays as the fallback for an engine that does not know the keyword —
+   which is where the padding and gap come in: with one lane per INPUT the list
+   is at most four rows, and 4x24 + 3x4 + 8 = 116 px is exactly the box, so the
+   healthiest take there is does not scroll at all. */
 .tl__lanes {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 0;
+  justify-content: safe center;
+  gap: 4px;
+  padding: 4px 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -945,7 +1008,7 @@
   height: 24px;
 }
 .tl__lanes--film {
-  gap: 5px;
+  gap: 4px;
 }
 /* Over a picture the colour language has to change register: the kept span
    keeps its channel tint but thin enough to read through, and a cut span turns
@@ -1000,6 +1063,15 @@
   flex: 1;
   cursor: pointer;
   touch-action: none;
+  /* Zoomed in, most of the take is off both sides of this box. Without this the
+     bars would paint over the gutter and out past the timeline's edge. */
+  overflow: hidden;
+}
+/* One input's files share one lane (see timelineLanes.ts). The wrapper carries
+   no box of its own, so every bar and edge inside it still positions against
+   the track exactly as it did when a lane held a single file. */
+.lane__clip {
+  display: contents;
 }
 .lane__bar {
   position: absolute;
@@ -1072,6 +1144,10 @@
   bottom: 10px;
   pointer-events: none;
   z-index: 3;
+  /* Zoomed in, a trim handle or a cut can be far off either side. Clipped
+     SIDEWAYS ONLY — `overflow: hidden` would also cut the playhead, which
+     deliberately reaches up into the ruler (top: -26px). */
+  clip-path: inset(-26px 0 0 0);
 }
 .tl__trim {
   position: absolute;
