@@ -58,9 +58,17 @@ const { CHUNK_PREFIX, claimChunkCache, makeRoomForChunks, resetChunkStoreForTest
 const RESULT = { fileName: 'x.mp4', durationMs: 1 } as unknown as ExportResult
 const opts = {} as Parameters<typeof renderChunkedResuming>[0]
 
-/** A finished chunk of `size` bytes, last touched `agoMs` ago. */
+/**
+ * A finished chunk of `size` bytes, last touched `agoMs` ago.
+ *
+ * J11: the key must NAME A TAKE. Written as `${CHUNK_PREFIX}${name}` these
+ * tests still passed, but for the wrong reason — a key with no recording
+ * segment is a pre-J11 key and the sweep now removes it on sight, so a TTL
+ * assertion would have been proving the pre-J11 rule instead.
+ */
+const TAKE = 'rec_cccccccccccc'
 function chunk(name: string, size: number, agoMs = 0): string {
-  const key = `${CHUNK_PREFIX}${name}`
+  const key = `${CHUNK_PREFIX}${TAKE}-${name}`
   files.set(key, { size, mtime: Date.now() - agoMs })
   return key
 }
@@ -120,7 +128,7 @@ describe("another tab's sweep cannot eat a live render", () => {
     const during = await sweepChunks()
     expect(during.deferred).toBe(true)
     expect(during.removed).toBe(0)
-    expect(files.has(`${CHUNK_PREFIX}old`)).toBe(true)
+    expect(files.has(`${CHUNK_PREFIX}${TAKE}-old`)).toBe(true)
 
     await claim!.release()
     const after = await sweepChunks()
@@ -161,7 +169,7 @@ describe('the cache is asked whether the take fits, before the hour is spent', (
     expect(room.freedBytes).toBe(800)
     expect(files.has(mine)).toBe(true)
     // Least recently used went first.
-    expect(files.has(`${CHUNK_PREFIX}staler`)).toBe(false)
+    expect(files.has(`${CHUNK_PREFIX}${TAKE}-staler`)).toBe(false)
   })
 
   it('says so when the take is simply bigger than the cache can hold', async () => {
@@ -180,6 +188,23 @@ describe('the cache is asked whether the take fits, before the hour is spent', (
     const room = await makeRoomForChunks(1e12, new Set())
     expect(room.fits).toBe(true)
     expect(room.freedBytes).toBe(0)
-    expect(files.has(`${CHUNK_PREFIX}a`)).toBe(true)
+    expect(files.has(`${CHUNK_PREFIX}${TAKE}-a`)).toBe(true)
+  })
+})
+
+describe('a chunk key from before J11 is unreachable, not merely old', () => {
+  it('is swept on sight, whatever its age, because its shape can never be hit again', async () => {
+    // Fresh: a TTL rule would keep this for 24 hours.
+    files.set(`${CHUNK_PREFIX}deadbeefcafe`, { size: 2_686_000_000, mtime: Date.now() })
+    const swept = await sweepChunks()
+    expect(swept.removed).toBe(1)
+    expect(swept.freedBytes).toBe(2_686_000_000)
+    expect(files.has(`${CHUNK_PREFIX}deadbeefcafe`)).toBe(false)
+  })
+
+  it('keeps a key that does name a take', async () => {
+    const mine = chunk('h1', 10)
+    expect((await sweepChunks()).removed).toBe(0)
+    expect(files.has(mine)).toBe(true)
   })
 })

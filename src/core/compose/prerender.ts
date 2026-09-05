@@ -267,6 +267,26 @@ export function cancelPrerender(): void {
 }
 
 /**
+ * J11 — CANCEL AND DROP A PRE-RENDER BELONGING TO A DELETED TAKE.
+ *
+ * A pre-render blob is a whole export file (6.8 GB for a 90-minute max60 take),
+ * so a take deleted while one is in flight, or after one finished, left the
+ * biggest single file this app writes sitting on the disk until the page
+ * session ended. `cancelPrerender` could not be used for this: it stops
+ * WHATEVER is running, and a delete must never cancel a render for a take the
+ * user is still working on.
+ */
+export function prerenderBlobFor(recordingId: string): string | null {
+  return job && job.input.recording.id === recordingId ? job.blobKey : null
+}
+
+export function cancelPrerenderFor(recordingId: string): boolean {
+  if (!job || job.input.recording.id !== recordingId) return false
+  cancelPrerender()
+  return true
+}
+
+/**
  * Begin a render for this exact output, or keep the one already running for it.
  * Returns nothing: nobody waits on a pre-render, that is the whole point.
  */

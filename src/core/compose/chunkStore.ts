@@ -73,8 +73,60 @@ export async function hashDescriptor(descriptor: string): Promise<string> {
   return `f${h.toString(16).padStart(8, '0')}${bytes.length.toString(36)}`
 }
 
-export function chunkKeyFor(hash: string): string {
-  return `${CHUNK_PREFIX}${hash}`
+/**
+ * THE KEY NAMES ITS TAKE — J11, 2026-09-05, Robert: "i need deleting video in
+ * app delet all this video junk too, users disk must not get trashed by our
+ * app".
+ *
+ * A chunk's name was the hash of its descriptor and nothing else. The
+ * descriptor CONTAINS the recording id (chunkPlan.ts) — but a hash cannot be
+ * reversed, so once a take was deleted there was no way on earth to find the
+ * chunks it had made. `recordingsRepo.remove` dropped the take's channels and
+ * its composite and left its render behind: measured on Robert's own Chrome
+ * 2026-09-05, 1,855 chunk files, 2.686 GB, sitting at the cache ceiling, for
+ * takes he had already dealt with. They expired on a 24-hour timer and were
+ * held under a cap, so this was never unbounded — but "bounded by 2.7 GB for a
+ * day" is not what a person means when they delete a video.
+ *
+ * The id goes in the NAME rather than into an index, because an index is a
+ * second copy of the truth to keep in sync with the disk, and this file's whole
+ * design (see the header) is that the disk IS the truth. `rec_` ids are
+ * `[a-z0-9_]` and both hash forms above are hex, so neither half can contain
+ * the `-` that separates them and the split is exact.
+ */
+export function chunkKeyFor(recordingId: string, hash: string): string {
+  return `${CHUNK_PREFIX}${recordingId}-${hash}`
+}
+
+/**
+ * Which take a chunk belongs to, or null for a key written before J11 — those
+ * carry a bare hash, can never be hit again (the shape changed), and are swept
+ * on sight by the boot sweep below.
+ */
+export function recordingOfChunk(key: string): string | null {
+  if (!key.startsWith(CHUNK_PREFIX)) return null
+  const rest = key.slice(CHUNK_PREFIX.length)
+  const cut = rest.indexOf('-')
+  return cut > 0 ? rest.slice(0, cut) : null
+}
+
+/** Every chunk this take ever made. What "delete the video" has to include. */
+export async function removeChunksFor(
+  recordingId: string,
+): Promise<{ removed: number; bytes: number }> {
+  let removed = 0
+  let bytes = 0
+  for (const f of await blobStore.list()) {
+    if (recordingOfChunk(f.key) !== recordingId) continue
+    await blobStore.remove(f.key).then(
+      () => {
+        removed += 1
+        bytes += f.size
+      },
+      () => undefined,
+    )
+  }
+  return { removed, bytes }
 }
 
 /** Every finished chunk on disk, by key. One directory pass, not one per chunk. */
@@ -105,7 +157,10 @@ export interface ChunkWriter {
  * falls back to the unbroken render, which is what the product did before J1
  * and must always still be able to do.
  */
-export async function openChunkWriter(hash: string): Promise<ChunkWriter | null> {
+export async function openChunkWriter(
+  recordingId: string,
+  hash: string,
+): Promise<ChunkWriter | null> {
   const partKey = `${CHUNK_PART_PREFIX}${Date.now().toString(36)}-${newId('c')}`
   try {
     const writer = await createPositionedWriter(partKey)
@@ -143,7 +198,7 @@ export async function openChunkWriter(hash: string): Promise<ChunkWriter | null>
          * open for the concatenation is the one way that could go wrong, so the
          * loser drops its own copy instead.
          */
-        const key = chunkKeyFor(hash)
+        const key = chunkKeyFor(recordingId, hash)
         if ((await blobStore.size(key).catch(() => 0)) > 0) {
           await blobStore.remove(partKey).catch(() => undefined)
         } else {
@@ -166,8 +221,8 @@ export async function openChunkWriter(hash: string): Promise<ChunkWriter | null>
   }
 }
 
-export async function readChunk(hash: string): Promise<Blob> {
-  return blobStore.read(chunkKeyFor(hash))
+export async function readChunk(recordingId: string, hash: string): Promise<Blob> {
+  return blobStore.read(chunkKeyFor(recordingId, hash))
 }
 
 /** Bytes a finished chunk occupies, 0 when it is not there. */
@@ -230,6 +285,22 @@ export async function sweepChunks(keep: ReadonlySet<string> = new Set()): Promis
     if (!isPart && !isChunk) continue
     if (keep.has(f.key)) {
       if (isChunk) survivors.push({ key: f.key, size: f.size, touched: Number.MAX_SAFE_INTEGER })
+      continue
+    }
+    /**
+     * J11: a finished chunk that names no take is a key from before the id went
+     * into the name. Its shape can never be produced or matched again, so it is
+     * not "old", it is unreachable — swept on sight rather than left to serve
+     * out a 24-hour timer holding real disk.
+     */
+    if (isChunk && recordingOfChunk(f.key) === null) {
+      await blobStore.remove(f.key).then(
+        () => {
+          removed += 1
+          freedBytes += f.size
+        },
+        () => undefined,
+      )
       continue
     }
     const touched = isChunk ? await chunkTouchedAt(f.key) : 0

@@ -103,6 +103,20 @@ export const recordingsRepo = {
     return rows.sort((a, b) => b.createdAt - a.createdAt)
   },
 
+  /**
+   * J11 — AND EVERYTHING THE TAKE CAUSED TO EXIST. This used to drop the
+   * channels, the composite, the row and the edit, and leave the take's RENDER
+   * on the disk: its chunks (2.686 GB of them on Robert's own machine, for
+   * takes already dealt with), its pre-render, and every finished export job's
+   * private copy of the output. Robert, 2026-09-05: "users disk must not get
+   * trashed by our app".
+   *
+   * It lives behind `remove` rather than at the Delete button because there is
+   * more than one way to delete a take, and a cleanup at one caller is a
+   * cleanup the others forget. The import is dynamic to keep the store→compose
+   * edge from closing a cycle, and the purge never throws — a delete that
+   * half-fails must still delete the take.
+   */
   async remove(id: string): Promise<void> {
     const r = await get(id)
     if (r) {
@@ -111,6 +125,12 @@ export const recordingsRepo = {
     }
     await withStore('readwrite', (s) => s.delete(id))
     await editsRepo.remove(id)
+    try {
+      const { purgeDerivedFor } = await import('@core/compose/purge')
+      await purgeDerivedFor(id)
+    } catch (err) {
+      console.warn('[store] the take is gone but its derived files are not', err)
+    }
   },
 }
 

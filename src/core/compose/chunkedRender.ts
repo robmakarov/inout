@@ -381,11 +381,11 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   const onDisk = await listChunkKeys()
   const missing = new Set<number>()
   for (const c of plan.chunks) {
-    const key = chunkKeyFor(hashes[c.index]!)
+    const key = chunkKeyFor(recording.id, hashes[c.index]!)
     if (onDisk.has(key)) touchChunk(key)
     else missing.add(c.index)
   }
-  const audioKey = chunkKeyFor(audioHash)
+  const audioKey = chunkKeyFor(recording.id, audioHash)
   const audioMissing = needAudio && !onDisk.has(audioKey)
   if (needAudio && !audioMissing) touchChunk(audioKey)
 
@@ -477,7 +477,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
    * evict other takes' chunks to make the room, and if the take is simply
    * bigger than the cache can ever hold, say so NOW and render it unbroken once.
    */
-  const planKeys = new Set(plan.chunks.map((c) => chunkKeyFor(hashes[c.index]!)))
+  const planKeys = new Set(plan.chunks.map((c) => chunkKeyFor(recording.id, hashes[c.index]!)))
   if (needAudio) planKeys.add(audioKey)
   /** Chunks written before the projection is worth trusting. */
   const ROOM_SAMPLE = 4
@@ -487,7 +487,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
   let renderedBytes = 0
   const keepRoom = async (index: number): Promise<void> => {
     renderedSoFar += 1
-    renderedBytes += await chunkSize(chunkKeyFor(hashes[index]!))
+    renderedBytes += await chunkSize(chunkKeyFor(recording.id, hashes[index]!))
     if (renderedSoFar < ROOM_SAMPLE) return
     if (renderedSoFar > ROOM_SAMPLE && renderedSoFar % ROOM_EVERY !== 0) return
     const perChunk = renderedBytes / renderedSoFar
@@ -518,7 +518,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
         for (const chunk of run) {
           throwIfAborted()
           const hash = hashes[chunk.index]!
-          const writer = await openChunkWriter(hash)
+          const writer = await openChunkWriter(recording.id, hash)
           if (!writer) {
             throw new ChunkedRenderUnavailable('the chunk cache could not be written', true)
           }
@@ -547,7 +547,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     // ---- the audio artifact, once ----------------------------------------
     if (audioMissing) {
       throwIfAborted()
-      const writer = await openChunkWriter(audioHash)
+      const writer = await openChunkWriter(recording.id, audioHash)
       if (!writer) throw new ChunkedRenderUnavailable('the audio artifact could not be written')
       await renderExport({
         recording,
@@ -580,7 +580,7 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
      * is checked against below. It is not opened twice: the copy loop takes
      * this one for index 0.
      */
-    const chunkKeys = plan.chunks.map((c) => chunkKeyFor(hashes[c.index]!))
+    const chunkKeys = plan.chunks.map((c) => chunkKeyFor(recording.id, hashes[c.index]!))
     const firstKey = chunkKeys[0]
     if (!firstKey) throw new ChunkedRenderUnavailable('the plan has no chunks to concatenate')
     const reference = await openChunkVideo(firstKey, plan.chunks[0]!.index)
@@ -834,7 +834,7 @@ export async function shippableChunks(input: {
   const onDisk = await listChunkKeys()
   const out: ShippableChunk[] = []
   for (const c of plan.chunks) {
-    const key = chunkKeyFor(await hashDescriptor(c.descriptor))
+    const key = chunkKeyFor(input.recording.id, await hashDescriptor(c.descriptor))
     const bytes = onDisk.get(key) ?? 0
     out.push({ index: c.index, startSec: c.startSec, endSec: c.endSec, key, ready: bytes > 0, bytes })
   }
