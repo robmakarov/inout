@@ -36,9 +36,11 @@ import {
   describePlan,
   getLastChunkedStats,
   renderChunked,
+  renderChunkedResuming,
+  shippableChunks,
   type ChunkedRenderStats,
 } from '@core/compose/chunkedRender'
-import { CHUNK_PART_PREFIX, CHUNK_PREFIX } from '@core/compose/chunkStore'
+import { CHUNK_PART_PREFIX, CHUNK_PREFIX, sweepChunks } from '@core/compose/chunkStore'
 import { renderExport } from '@core/compose/render'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
 import { newId } from '@core/id'
@@ -533,6 +535,101 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
   )
   await blobStore.remove(stray).catch(() => undefined)
 
+  /**
+   * ---- 9. J9: A CHUNK SWEPT OUT FROM UNDER A LIVE EXPORT -----------------
+   *
+   * The defect Robert paid an hour for on 2026-09-05. THE FIRST WRITING OF THIS
+   * LANE STAGED IT WRONG AND THE RIG SAID SO — it deleted a chunk BEFORE the
+   * export, which is not the defect at all: the missing set is computed at the
+   * start, so a chunk that is already gone is an ordinary cache miss and the
+   * content-addressed design re-renders exactly it. That lane read "0 of 12
+   * re-rendered, completed" and was right to.
+   *
+   * The real shape needs the chunk to disappear AFTER the missing set is taken
+   * and BEFORE the concatenation reaches it — which is precisely what another
+   * tab's boot sweep does, because it runs on its own clock. So the deletion is
+   * hung off the export's own progress: at `finalizing`, the concatenation has
+   * started and every chunk it is about to open has already been counted present.
+   */
+  await clearChunks()
+  await run('j9-warm', 'fill the cache so there is something to lose', () =>
+    renderChunked({ recording, edit: baseEdit, settings }),
+  )
+  /**
+   * THE VICTIM IS CHOSEN BY PLAN ORDER, NOT BY KEY. An earlier writing listed
+   * OPFS and took the middle key, which is a content hash — it drew the AUDIO
+   * artifact, which lives under the same prefix, and staged nothing.
+   */
+  const shippable = await shippableChunks({ recording, edit: baseEdit, settings })
+  const ready = shippable.filter((c) => c.ready)
+  const victim = ready[Math.floor(ready.length / 2)]?.key ?? null
+  let sweptBare: LaneReport | null = null
+  let sweptResuming: LaneReport | null = null
+  let standDown: string | null = null
+
+  if (!victim) {
+    notes.push('j9: the warm lane left no chunks to delete — nothing staged')
+  } else {
+    /** Delete the victim the instant the concatenation begins. */
+    const stealAtConcat = () => {
+      let stolen = false
+      return (p: { phase: string }): void => {
+        if (stolen || p.phase !== 'finalizing') return
+        stolen = true
+        void blobStore.remove(victim).catch(() => undefined)
+      }
+    }
+
+    sweptBare = await run(
+      'j9-swept-bare',
+      'a chunk vanishes mid-concat, through renderChunked — what shipped before J9',
+      () => renderChunked({ recording, edit: baseEdit, settings, onProgress: stealAtConcat() }),
+    )
+    sweptResuming = await run(
+      'j9-swept-resuming',
+      'the same theft, through renderChunkedResuming — what ships now',
+      () =>
+        renderChunkedResuming({ recording, edit: baseEdit, settings, onProgress: stealAtConcat() }),
+    )
+
+    /**
+     * AND THE OTHER HALF: the sweep itself must stand down. This is a second
+     * tab's boot landing in the middle of an export — the call App.tsx makes,
+     * with no keep set, because a boot has no plan to pass.
+     */
+    await clearChunks()
+    // A holder, not a bare `let`: assigning only inside a callback narrows the
+    // variable to `never` for every read outside it.
+    const swept: { at: Awaited<ReturnType<typeof sweepChunks>> | null; asked: boolean } = {
+      at: null,
+      asked: false,
+    }
+    const live = renderChunked({
+      recording,
+      edit: baseEdit,
+      settings,
+      onProgress: (p) => {
+        if (p.phase !== 'rendering' || swept.asked) return
+        swept.asked = true
+        void sweepChunks().then((s) => {
+          swept.at = s
+        })
+      },
+    })
+    const liveOk = await live.then(
+      () => true,
+      () => false,
+    )
+    standDown =
+      `a boot sweep landing mid-export ${
+        swept.at === null
+          ? 'did not run'
+          : swept.at.deferred
+            ? 'STOOD DOWN'
+            : `swept ${swept.at.removed} files`
+      }; the export ${liveOk ? 'completed' : 'FAILED'}`
+  }
+
   const footprint = await chunkFootprint()
 
   // ---- the verdict, in words a gate can read -----------------------------
@@ -631,6 +728,32 @@ export async function runChunkRender(opts: ChunkRenderOptions = {}): Promise<Chu
   verdict.strayPart =
     `a stray part file left ${withStray.chunks?.rendered ?? '?'} chunks to render ` +
     `(the whole plan, as it must) and the export ${withStray.error ? 'FAILED' : 'completed'}`
+
+  /**
+   * J9 — WHAT ONE LOST CHUNK COSTS. The pre-J9 row is the defect: a chunk that
+   * OPFS no longer has throws its own NotFoundError, which is not a
+   * ChunkedRenderUnavailable, so the press did not fall back to anything — it
+   * failed, after the whole render. The row beside it must complete and must
+   * have re-rendered ONE piece, not the plan.
+   */
+  if (sweptBare && sweptResuming) {
+    const rendered = sweptResuming.chunks?.rendered ?? null
+    const packets = sweptResuming.file?.videoPackets ?? null
+    verdict.sweptChunk =
+      `one chunk deleted under the concatenation: pre-J9 ${
+        sweptBare.error ? `FAILED — ${sweptBare.error}` : 'completed (defect did not stage)'
+      }; resuming ${sweptResuming.error ? `FAILED — ${sweptResuming.error}` : 'completed'} ` +
+      `having re-rendered ${rendered ?? '?'} of ${plan.chunks.length} chunks, ` +
+      `${packets ?? '?'} video packets against the plan's ${plan.totalFrames}`
+    if (standDown) verdict.sweepStandDown = standDown
+    verdict.sweptChunkGate =
+      sweptBare.error !== null &&
+      sweptResuming.error === null &&
+      rendered === 1 &&
+      packets === plan.totalFrames
+        ? 'PASS — the miss costs one chunk, and it used to cost the whole take'
+        : 'FAIL — see sweptChunk'
+  }
   verdict.footprint = `${footprint.files} chunk files, ${footprint.parts} parts, ${footprint.mb} MB on disk`
 
   for (const [k, v] of Object.entries(verdict)) console.info(`[j1] ${k}: ${v}`)
