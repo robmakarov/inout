@@ -43,7 +43,7 @@ import type {
   Recording,
 } from '@core/types'
 import { newId } from '@core/id'
-import { blobStore, persistBlobCopy } from '@core/store'
+import { blobStore, createPositionedWriter, persistBlobCopy } from '@core/store'
 import { createJobPace, type JobPace } from '@core/backgroundWork'
 import { keptSegments } from '@core/timeline'
 import { currentRenderFlags } from './chunkPlan'
@@ -80,6 +80,78 @@ import { exportRecording } from './pipeline'
  */
 export const PRERENDER_PREFIX = 'prerender-'
 const OWN_PREFIX = PRERENDER_PREFIX
+
+/**
+ * WHOSE PRE-RENDER IS IT? — J10, 2026-09-05, and it is the same defect J9 fixed
+ * one file over.
+ *
+ * `sweepPrerenderBlobs` deletes every `prerender-*` blob except the one claimed
+ * by THIS page's in-memory `job`, and `job` is module state — so a second tab
+ * knows nothing about the first tab's. Any second boot (a recovery check, a
+ * second window, an agent opening a take) therefore deleted a FINISHED
+ * pre-render another tab was about to hand to an export, and that export then
+ * rendered the take from scratch. On a 90-minute max60 take that is a whole
+ * ~81-minute generation thrown away, which is exactly the class of bug Robert
+ * was paying for on 2026-09-05.
+ *
+ * The rule the sweep was reaching for is right and stays: a pre-render belongs
+ * to the page session that made it, and one left by a session that is GONE is
+ * an export nobody will ask for. It just had no way to tell a live sibling from
+ * a dead ancestor. So the blob now NAMES its session, and a session that holds
+ * one keeps a heartbeat file whose own name is its timestamp. The sweep reads
+ * both out of the listing it already has: no content, no lock, no bookkeeping
+ * to keep in sync with the disk.
+ *
+ * A blob written before J10 carries no session segment, so it belongs to no
+ * live session and is swept exactly as it was — which is what it deserves.
+ */
+const SESSION = newId('s')
+export const PRERENDER_CLAIM_PREFIX = 'pclaim-'
+const CLAIM_PREFIX = PRERENDER_CLAIM_PREFIX
+/** How long a heartbeat speaks for its session. */
+const CLAIM_STALE_MS = 2 * 60 * 1000
+/** Far shorter, so a live session is never mistaken for a dead one. */
+const CLAIM_BEAT_MS = 20 * 1000
+
+/** The session that owns this blob, or null for a key written before J10. */
+function sessionOf(key: string): string | null {
+  const rest = key.slice(OWN_PREFIX.length)
+  const cut = rest.indexOf('-')
+  return cut > 0 ? rest.slice(0, cut) : null
+}
+
+let beat: ReturnType<typeof setInterval> | null = null
+let claimKey: string | null = null
+
+/**
+ * Start this session's heartbeat, once, the first time it owns a pre-render.
+ * It is never stopped on purpose: the session owning a blob IS the page, so the
+ * page going away is what ends it, and the file ages out two minutes later.
+ */
+function holdClaim(): void {
+  if (beat) return
+  const nameAt = (t: number): string => `${CLAIM_PREFIX}${t.toString(36)}-${SESSION}`
+  claimKey = nameAt(Date.now())
+  void createPositionedWriter(claimKey)
+    .then(async (w) => {
+      await w.write(new Uint8Array(1), 0)
+      await w.close()
+    })
+    .catch(() => undefined)
+  beat = setInterval(() => {
+    void (async () => {
+      const next = nameAt(Date.now())
+      if (!claimKey) return
+      try {
+        await blobStore.move(claimKey, next)
+        claimKey = next
+      } catch {
+        /* a missed beat ages the claim; the next one repairs it. */
+      }
+    })()
+  }, CLAIM_BEAT_MS)
+  ;(beat as unknown as { unref?: () => void }).unref?.()
+}
 
 export interface PrerenderKeyInput {
   recording: Recording
@@ -204,7 +276,10 @@ export function startPrerender(input: PrerenderKeyInput, origin: PrerenderOrigin
   cancelPrerender()
 
   const abort = new AbortController()
-  const blobKey = `${OWN_PREFIX}${newId('p')}`
+  // J10: the key names its owning session, so another tab's sweep can tell a
+  // live sibling's pre-render from one left by a session that is gone.
+  const blobKey = `${OWN_PREFIX}${SESSION}-${newId('p')}`
+  holdClaim()
   const pace = createJobPace()
   const started: Job = {
     key,
@@ -432,14 +507,40 @@ export function takePrerender(key: string): TakenPrerender | null {
 /** Test seam — module state outlives test cases. */
 export function resetPrerenderForTests(): void {
   job = null
+  if (beat) clearInterval(beat)
+  beat = null
+  claimKey = null
 }
 
-/** Boot sweep: pre-render files from a previous page session belong to nobody. */
+/**
+ * Boot sweep: pre-render files from a page session that is GONE belong to
+ * nobody. One from a session still beating belongs to it — see SESSION above
+ * for the tab-versus-tab defect this exists to stop.
+ */
 export async function sweepPrerenderBlobs(): Promise<number> {
   let removed = 0
-  for (const f of await blobStore.list()) {
+  const now = Date.now()
+  const files = await blobStore.list()
+
+  // Who is still here. Ours counts even before its first beat is written.
+  const live = new Set<string>([SESSION])
+  for (const f of files) {
+    if (!f.key.startsWith(CLAIM_PREFIX)) continue
+    const rest = f.key.slice(CLAIM_PREFIX.length)
+    const cut = rest.indexOf('-')
+    const stamp = parseInt(rest.slice(0, Math.max(0, cut)), 36)
+    if (cut > 0 && Number.isFinite(stamp) && now - stamp < CLAIM_STALE_MS) {
+      live.add(rest.slice(cut + 1))
+    } else {
+      await blobStore.remove(f.key).catch(() => undefined)
+    }
+  }
+
+  for (const f of files) {
     if (!f.key.startsWith(OWN_PREFIX)) continue
     if (job && f.key === job.blobKey) continue
+    const owner = sessionOf(f.key)
+    if (owner && live.has(owner)) continue
     await blobStore.remove(f.key).then(
       () => {
         removed += 1

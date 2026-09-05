@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditState, ExportResult, Recording } from '@core/types'
 
 /**
@@ -73,6 +73,7 @@ const {
   prerenderStatus,
   resetPrerenderForTests,
   startPrerender,
+  sweepPrerenderBlobs,
   takePrerender,
 } = await import('./prerender')
 const { noteTakeActive, resetBackgroundWorkForTests } = await import('@core/backgroundWork')
@@ -384,5 +385,62 @@ describe('an edit that lands while a job works', () => {
     editBindsPrerender({ recording, edit: cut, settings })
     expect(takePrerender(prerenderKey({ recording, edit: cut, settings }))).toBeNull()
     expect(takePrerender(prerenderKey({ recording, edit, settings }))).toBeNull()
+  })
+})
+
+/**
+ * J10 — A SECOND TAB'S BOOT SWEEP MUST NOT EAT A LIVE SIBLING'S PRE-RENDER.
+ *
+ * `sweepPrerenderBlobs` kept only the blob claimed by THIS page's in-memory
+ * `job`, and `job` is module state, so any second boot — a recovery check, a
+ * second window, an agent opening a take — deleted a finished pre-render
+ * another tab was about to hand to an export. That export then rendered the
+ * take from scratch: on a 90-minute max60 take, a whole ~81-minute generation.
+ *
+ * The rule it was reaching for is kept: a pre-render belongs to the page
+ * session that made it, and one from a session that is GONE belongs to nobody.
+ * These pin that it can now tell those two apart.
+ */
+describe("a sibling tab's pre-render survives this tab's boot sweep", () => {
+  beforeEach(() => {
+    written.clear()
+    resetPrerenderForTests()
+  })
+
+  const beat = (session: string, agoMs: number): string => {
+    const key = `pclaim-${(Date.now() - agoMs).toString(36)}-${session}`
+    written.set(key, 1)
+    return key
+  }
+
+  it('keeps a blob whose session is still beating', async () => {
+    written.set('prerender-sLIVE-p1', 4242)
+    beat('sLIVE', 5_000)
+    expect(await sweepPrerenderBlobs()).toBe(0)
+    expect(written.has('prerender-sLIVE-p1')).toBe(true)
+  })
+
+  it('removes a blob whose session stopped beating, and the stale claim with it', async () => {
+    written.set('prerender-sDEAD-p1', 4242)
+    const stale = beat('sDEAD', 5 * 60 * 1000)
+    expect(await sweepPrerenderBlobs()).toBe(1)
+    expect(written.has('prerender-sDEAD-p1')).toBe(false)
+    expect(written.has(stale)).toBe(false)
+  })
+
+  it('removes a blob that names no session at all — every key written before J10', async () => {
+    written.set('prerender-p1', 4242)
+    expect(await sweepPrerenderBlobs()).toBe(1)
+    expect(written.has('prerender-p1')).toBe(false)
+  })
+
+  it('sweeps a dead session while keeping a live one, in the same pass', async () => {
+    written.set('prerender-sLIVE-p1', 10)
+    written.set('prerender-sDEAD-p2', 10)
+    beat('sLIVE', 1_000)
+    beat('sDEAD', 10 * 60 * 1000)
+    expect(await sweepPrerenderBlobs()).toBe(1)
+    expect(written.has('prerender-sLIVE-p1')).toBe(true)
+    expect(written.has('prerender-sDEAD-p2')).toBe(false)
   })
 })

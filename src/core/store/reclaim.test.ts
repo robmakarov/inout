@@ -68,6 +68,27 @@ describe('the orphan sweep', () => {
     expect(r.bytes).toBe(50)
   })
 
+  /**
+   * J10 — AND IT WOULD HAVE SILENTLY UNDONE J9. A claim file is referenced by
+   * nothing on purpose: its whole content is its name, so `keepSet` can never
+   * hold it, and this sweep would have deleted the one record that tells
+   * another tab an export is running — at boot, beside the very sweeps that
+   * read it. Found by reading this file rather than by a failure, which is why
+   * it is pinned here.
+   */
+  it('leaves the render and pre-render claims alone — deleting them re-opens J9', async () => {
+    files.push(
+      { key: 'rclaim-abc-k1', size: 1 },
+      { key: 'pclaim-abc-s1', size: 1 },
+      { key: 'junk', size: 50 },
+    )
+    // The count first: a claim must not even be OFFERED as reclaimable.
+    expect(await orphanBlobBytes()).toBe(50)
+    const r = await reclaimOrphanBlobs()
+    expect(removed).toEqual(['junk'])
+    expect(r.bytes).toBe(50)
+  })
+
   it('does not COUNT the export scratch either — the number and the button agree', async () => {
     files.push({ key: 'xport-abc', size: 900 }, { key: 'junk', size: 50 })
     expect(await orphanBlobBytes()).toBe(50)

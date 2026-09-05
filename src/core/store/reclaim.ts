@@ -1,8 +1,8 @@
 import { blobStore, recordingsRepo } from './index'
 import { pendingBlobKeys } from '@core/capture/recovery'
 import { SCRATCH_PREFIX } from '@core/compose/scratch'
-import { PRERENDER_PREFIX } from '@core/compose/prerender'
-import { CHUNK_PART_PREFIX, CHUNK_PREFIX } from '@core/compose/chunkStore'
+import { PRERENDER_CLAIM_PREFIX, PRERENDER_PREFIX } from '@core/compose/prerender'
+import { CHUNK_CLAIM_PREFIX, CHUNK_PART_PREFIX, CHUNK_PREFIX } from '@core/compose/chunkStore'
 import { EXPORTJOB_PREFIX } from './recordingsRepo'
 
 /**
@@ -73,6 +73,18 @@ function isSweepable(key: string): boolean {
     !key.startsWith(PRERENDER_PREFIX) &&
     !key.startsWith(CHUNK_PREFIX) &&
     !key.startsWith(CHUNK_PART_PREFIX) &&
+    /**
+     * J10 — THE CLAIM FILES ARE NOT ORPHANS, and leaving them out of this list
+     * would have silently undone J9. A claim is referenced by nothing on
+     * purpose: it is a heartbeat whose whole content is its name, so `keepSet`
+     * can never hold it and this sweep would have deleted the very record that
+     * tells another tab an export is running. It runs at boot BESIDE those
+     * sweeps (App.tsx fires all three together), so it would have raced them.
+     * Both are self-expiring — two minutes — which is what makes excluding them
+     * safe rather than a new way to leave junk.
+     */
+    !key.startsWith(CHUNK_CLAIM_PREFIX) &&
+    !key.startsWith(PRERENDER_CLAIM_PREFIX) &&
     !key.startsWith(EXPORTJOB_PREFIX)
   )
 }
