@@ -1712,3 +1712,20 @@ starting footprints (1257 MB and ~700 MB), the same answer: nothing grows.
 WHETHER THAT MEANS PHASE 1 IS DONE IS ROBERT'S CALL and always was. What is no longer true is that the
 hours had not been run.
 Both cards carry `build 5d8e19a0`, which is tonight's build stamp doing its job on prod.
+
+session 2026-09-05 (5) — robert (28): **"stays opt-in until J1 learns AV1."**
+Asked what happens to the colour default now that O9(b)'s precondition is finished and measured. The
+number the ruling had been waiting for: **the export press at 4:4:4 is 2.4 ms** with the pre-made file
+served, against 11.5 ms at 4:2:0 on the same fixture the same hour, `path=render` on both. J6's claim
+held exactly — with the export made while he edits there is no instant path left for full colour to
+kill, and choose.ts no longer refuses a pre-render under `?colour=all`.
+BUT THE MEASUREMENT MOVED THE BILL RATHER THAN CANCELLING IT, and that is what he ruled on: a second
+small edit re-renders THE WHOLE TAKE at 4:4:4 (9533.9 ms, 0 of 12 chunks reused) where 4:2:0 re-renders
+3 chunks in 2729.5 ms, because `renderChunked` declines at 4:4:4 (one AVC track, AV1 packets). That cost
+scales with the TAKE and not with the EDIT — an hour take is one chunk at 4:2:0 and a full background
+re-render per nudge at 4:4:4.
+His ruling: `?colour=all` keeps shipping OFF, and the muxer work becomes a task — **J8**, the chunk
+concatenation opening its track from the codec the chunks were actually encoded with. Its gate is the
+j5 rig's own `invalidated` reading the same 3-of-12 reuse at `--query=colour=all` that it reads at
+4:2:0. After that the colour default is a question about his eye on `~/Downloads/inout-o9` and nothing
+else. Evidence: docs/qa/o9b-precondition-press.json.
