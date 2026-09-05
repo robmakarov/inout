@@ -1801,3 +1801,16 @@ when it is on. `?cq=off` is still the way back to the bitrate target.
 Gates: typecheck + 1416 tests · oracle PASS sync=58.1/72.8ms, instant 76.8 ms, smartcut 79.0 ms · j5 at
 --query=colour=all all four green, press 2.9 ms, invalidated 3 of 12.
 Evidence: docs/qa/j9-av1-quality-target.json.
+
+robert (31) 2026-09-05 — A CAPTURE-TIME PROXY IS REFUSED, AND IT WAS REFUSED THE DAY BEFORE IT WAS
+OFFERED. Offered PROPOSALS G (capture writes a small second stream so the export stops decoding a
+5.94 Mpx picture to draw a 0.6 Mpx one): "are you fucking offering what we deleted yesterday asshole?
+that shit that not editable?" He is right on both counts. J6 (2026-09-04) DELETED the third encoder and
+its file — 99.1 -> 36.9 Mpx/s — and that file could only ever serve a PACKET COPY OF AN UNEDITED TAKE:
+a composed picture has the camera burned into it, so the moment he edits it is dead weight and the
+render goes back to the raw channels anyway. A max take never opened a compositor at all
+(`singleGenerationTake` refuses one when the raw screen channel already exceeds the composite), so for
+the takes he actually records the idea was empty before it was written. G is deleted. NO SESSION OFFERS
+A SECOND CAPTURE-TIME FILE AGAIN, in any wrapping — proxy, ladder, sidecar, glued copy. The lesson for
+the offering: R1b's measurements were sound and the conclusion drawn from them was not checked against
+what shipped three days earlier. Read git log and the last week of this file before proposing an engine.
