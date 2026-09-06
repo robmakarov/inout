@@ -43,40 +43,6 @@ path runs `'quality'`; if the composite becomes the shipped file that has to cha
 WHAT IT DOES NOT BUY: an edited export. A camera move over the whole take, a frame preset, a step
 change — all still render. This buys the unedited and cut cases at max, nothing more.
 
-## B — "SAME AS LAST FRAME" FRAMES [light-medium · compose · nothing a user sees changes]
-THE FACT, already in DECISIONS 2026-08-25 (4) and never acted on: capture is frame-driven and stores
-~1 fps while the screen is still, and the render then re-inflates that to constant rate and encodes
-30-60 identical pictures per second of a motionless screen. It was written down as "the order-of-
-magnitude lever on screen content" and parked as X10=O5e because the fix on the table made the file
-variable-rate, and Robert said "fuck this".
-THE DIFFERENT FIX: every video format already has a picture that means "identical to the previous
-one" — all blocks skipped, no residual. It costs ~10 bytes, needs no encoder, no decoder and no draw,
-every player on earth plays it, and THE FILE STAYS CONSTANT RATE. Same duration, same timestamps, same
-pixels. So when an output frame is identical to the one before it, write that instead of making a new
-one. We already know which frames those are without touching a pixel: capture told us when it stored
-one frame instead of sixty.
-NOT A FORMAT AND NOT AN ENCODER: one all-skip P-slice against the stream's own SPS/PPS. Days of work,
-and the gate is exact — the file must decode to the same pixels as today, frame for frame.
-WHAT IT DOES NOT BUY, said plainly so nobody oversells it: WITH THE CAMERA ON THE PICTURE IS NEVER
-STILL, so this does nothing for a camera take. It is a large win for screen-only exports and zero for
-Robert's own headline case.
-ROBERT ASKED THE RIGHT QUESTION, 2026-09-04: "is there risk that small movements like cursor or tiny
-text like clock will be lost with this same as last frame". THE ANSWER, and it is a GATE, not an
-assurance: NOTHING IS DETECTED. The duplicate frames this writes are the ones THE RENDER ITSELF INVENTED
-— capture is frame-driven and stored one picture, the render re-inflated it to 30-60, and those copies
-are the same frame, not a similar one. A cursor move or a clock digit CHANGES THE SCREEN, so capture
-stores a new picture and it is encoded normally. THE BUILD THAT WOULD LOSE HIS CURSOR is the other one —
-compare pixels, decide "close enough" — and it is FORBIDDEN by DECISIONS robert (8) ("EVERY MOVEMENT IS
-KEPT ... no threshold, no 'too small to matter' heuristic"), the same rule that binds X17's census and
-that AI1's picker broke. GATE: the duplicate set comes from CAPTURE'S OWN record of what it stored, never
-from a pixel comparison, and a run that cannot prove the provenance of a skipped frame fails.
-THE ONE RISK THAT IS REAL AND IS NOT THIS PROPOSAL'S: if CAPTURE does not deliver a frame when only the
-cursor moves, that movement is already lost TODAY, in the recording, before any of this. B inherits that
-risk and does not create it. X17 counts exactly this (cursor-only frames, separately) and is where the
-answer comes from.
-MEASURE FIRST, one number: what fraction of a real ≥60-min take is byte-identical frame to frame. The
-detector exists (X17's census). That number decides whether the days are worth spending.
-
 ## F — A ZOOM COSTS THE ZOOM, NOT THE TAKE [medium · compose · offered 2026-09-04]
 WHAT IT TAKES AWAY: rendering. Nothing else — no feature, no picture change, no format. The file must
 decode to the same pixels as today, and that is the gate.

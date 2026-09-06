@@ -46,28 +46,112 @@ body {
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 select { font: inherit; }
 a { color: inherit; text-decoration: none; }
-.bar {
-  flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
-  padding: 8px 14px; border-bottom: 1px solid #232327; background: #141418; user-select: none;
+/* the icon sprite is <svg hidden>, and the UA's [hidden] rule is namespaced to HTML — an SVG
+   element ignores it, so the sprite was laying out a 150 px blank band above the whole tool. */
+svg[hidden] { display: none; }
+/* squeeze-panels (org lib) — desktop side panels that take REAL width: the centre column
+   shrinks and the whole cluster stays centred and grows outward. No overlay, no floating.
+   Contract: .cluster wraps .row; body gets .f / .d when a panel opens.
+   [copied verbatim from proto/style.html, which adapted it the same way: the centre here is
+    a viewport-filling stage, not a fixed list column, so --list is `auto` and .cluster is
+    width:100%. The proto UI's two tabs must read as ONE tool — same shell, same panels.] */
+:root {
+  --ease-h: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 0.34s;
+  --fw: 0px;       /* left panel  + its gap, 0 when closed */
+  --dw: 0px;       /* right panel + its gap, 0 when closed */
 }
-.bar__title { font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #6a6a74; white-space: nowrap; }
-.bar__title em { font-style: normal; color: #d8d8dc; }
-.bar__group { display: flex; align-items: center; gap: 2px; }
-.bar__label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #55555e; margin-right: 6px; white-space: nowrap; }
-.tab { padding: 5px 9px; border-radius: 6px; color: #85858f; font-size: 12px; white-space: nowrap; transition: background 120ms, color 120ms; }
-.tab:hover { color: #d8d8dc; background: #1c1c21; }
+body.f { --fw: 228px; }
+body.d { --dw: 268px; }
+
+.cluster { width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.row { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+.col { min-height: 0; overflow: hidden; }
+.col-list { flex: 1; min-width: 0; }
+.col-filters { width: var(--fw); flex: none; transition: width var(--dur) var(--ease-h); }
+.col-detail { width: var(--dw); flex: none; transition: width var(--dur) var(--ease-h); }
+/* panels keep their own fixed width so the content never squishes */
+.col-filters .panel { width: 228px; }
+.col-detail .panel { width: 268px; }
+/* [adapted: the app inside the frame has a .panel of its own (the takes card), so every
+   harness panel rule is scoped to its column. Unscoped, the harness set the app's takes
+   panel to opacity:0 and it vanished.] */
+:is(.col-filters, .col-detail) .panel {
+  height: 100%;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-h);
+  background: #101012;
+  padding: 14px 14px 20px;
+}
+.col-filters .panel { border-right: 1px solid #232327; }
+.col-detail .panel { border-left: 1px solid #232327; }
+body.f .filters, body.d .detail { opacity: 1; }
+
+.panel__title { font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #6a6a74; white-space: nowrap; margin-bottom: 12px; }
+.panel__title em { font-style: normal; color: #d8d8dc; }
+.panel__group { margin-bottom: 18px; }
+.panel__label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #55555e; margin-bottom: 6px; }
+:is(.col-filters, .col-detail) .panel :is(select, .btn-h) {
+  width: 100%; background: #17171a; color: #d8d8dc; border: 1px solid #2b2b31;
+  border-radius: 6px; padding: 6px 8px; font: inherit; text-align: left;
+}
+:is(.col-filters, .col-detail) .panel .btn-h { text-align: center; cursor: pointer; }
+:is(.col-filters, .col-detail) .panel .btn-h:hover { background: #212126; color: #fff; }
+:is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='true'] { background: #2b2b31; color: #fff; }
+.tab {
+  display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px;
+  color: #85858f; font-size: 12px; transition: background 120ms, color 120ms;
+}
+.tab:hover { color: #d8d8dc; background: #17171a; }
 .tab[aria-selected='true'] { background: #2b2b31; color: #fff; }
-.tab--link { color: #6a6a74; }
-.tab--link::after { content: ' ↗'; opacity: 0.6; }
-.tab kbd { font: 10px ui-monospace, monospace; color: #55555e; margin-left: 5px; }
-.bar select, .bar .btn-h { background: #17171a; color: #d8d8dc; border: 1px solid #2b2b31; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 11px; }
-.bar .btn-h:hover { background: #212126; color: #fff; }
-.bar .btn-h[aria-pressed='true'] { background: #2b2b31; color: #fff; }
-.sim { display: flex; align-items: center; gap: 6px; }
-.sim label { font-size: 11px; color: #85858f; }
-.readout { font: 11px/1.4 ui-monospace, monospace; color: #6a6a74; white-space: nowrap; }
-.bar__spacer { flex: 1; }
-.canvas { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; background: radial-gradient(ellipse 60% 50% at 50% 60%, #16161b, transparent 70%), #101014; }
+.tab kbd { float: right; font: 10px/1.5 ui-monospace, monospace; color: #55555e; }
+.readout { font: 11px/1.5 ui-monospace, monospace; color: #55555e; white-space: pre-line; }
+.perm {
+  display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 6px;
+  margin-top: 6px; font: 10px/1 ui-monospace, monospace; color: #6a6a74;
+}
+.perm select { padding: 3px 6px; font: 10px/1.4 ui-monospace, monospace; }
+.rowbtns { display: flex; gap: 6px; margin-top: 9px; }
+.rowbtns .btn-h { padding: 5px 6px; font: 11px/1.3 ui-monospace, monospace; }
+.slider {
+  display: grid; grid-template-columns: 52px 1fr 34px; align-items: center; gap: 6px;
+  margin-top: 7px; font: 10px/1 ui-monospace, monospace; color: #6a6a74;
+}
+.slider output { text-align: right; color: #a8a8b2; }
+.slider input[type='range'] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+  border-radius: 2px; background: #2b2b31; outline: none;
+}
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+  background: #00f0ff; cursor: pointer;
+}
+
+/* edge handles — the only chrome left when both panels are shut */
+.edge {
+  position: absolute; top: 50%; z-index: 20; width: 16px; height: 54px;
+  transform: translateY(-50%); display: grid; place-items: center;
+  background: #1b1b20; border: 1px solid #2b2b31; color: #85858f; font-size: 10px;
+  transition: background 140ms, color 140ms;
+}
+.edge:hover { background: #2b2b31; color: #fff; }
+.edge--l { left: 0; border-left: none; border-radius: 0 8px 8px 0; }
+.edge--r { right: 0; border-right: none; border-radius: 8px 0 0 8px; }
+
+/* screen-zone controls sit on the zone itself, not in a panel — the thing they
+   size is directly under them, so the number and the picture read as one. */
+.zonebar { flex: none; display: flex; align-items: center; gap: 10px; font: 11px/1 ui-monospace, monospace; color: #6a6a74; }
+.zonebar select { background: #17171a; color: #d8d8dc; border: 1px solid #2b2b31; border-radius: 6px; padding: 4px 7px; font: inherit; }
+.zonebar__size { color: #d8d8dc; }
+.zonebar__hint { color: #4b4b54; }
+
+.canvas {
+  position: relative; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; padding: 18px 24px 24px;
+  overflow: hidden;
+  background: radial-gradient(ellipse 60% 50% at 50% 60%, #16161b, transparent 70%), #101014;
+}
 .slot { position: relative; flex: none; }
 .frame { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px #26262c; }
 [data-frame='phone'] .frame { border-radius: 36px; }
@@ -594,36 +678,64 @@ a { color: inherit; text-decoration: none; }
   <symbol id="i-bang" viewBox="0 0 24 24"><path d="M12 5v9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="18.5" r="1.6" fill="currentColor"/></symbol>
 </svg>
 
-<header class="bar">
-  <span class="bar__title"><em>INOUT</em> proto</span>
-  <nav class="bar__group" aria-label="Prototype"><span class="bar__label">Proto</span><a class="tab tab--link" href="style.html" title="The first prototype — proto/style.html">Style</a><span class="tab" aria-selected="true">Neon</span></nav>
-  <div class="bar__group" role="tablist" id="tabs"><span class="bar__label">Screen</span></div>
-  <div class="bar__group"><span class="bar__label">Frame</span>
-    <select id="frame"><option value="desktop">desktop</option><option value="wide">wide</option><option value="laptop">laptop</option><option value="phone">phone</option></select>
-    <span class="readout" id="zsize">1040 × 660</span>
-  </div>
-  <div class="bar__group sim" id="sim"><span class="bar__label">Simulate</span>
-    <label>screen <select data-avail="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></label>
-    <label>camera <select data-avail="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></label>
-    <label>mic <select data-avail="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></label>
-    <label>sound <select data-avail="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></label>
-    <label>loss <select id="simLoss"><option value="none">none</option><option value="mic">mic stopped mid-take</option><option value="camera">camera never connected</option><option value="sys">sound went silent</option><option value="stall">encoder stalled</option></select></label>
-    <label>export <select id="simExport"><option value="ok">ok</option><option value="failed">failed</option></select></label>
-    <label>cloud <select id="simCloud"><option value="out">signed out</option><option value="in">signed in</option><option value="link">link made</option></select></label>
-    <button class="btn-h" id="simDialog">dialog</button>
-    <button class="btn-h" id="simToast">toast</button>
-  </div>
-  <div class="bar__group"><span class="bar__label">Look</span>
-    <button class="btn-h" id="gridBtn" aria-pressed="true">grid</button>
-    <button class="btn-h" id="takesBtn" aria-pressed="true">takes</button>
-    <label class="readout">glow <input type="range" id="glow" min="0" max="2" step="0.1" value="1" style="width:70px;vertical-align:middle"></label>
-    <button class="btn-h" id="resetBtn" title="Forget every choice and reload">reset</button>
-  </div>
-  <span class="bar__spacer"></span>
-  <span class="readout">1–8 screen · F frame · G grid · T takes · Esc</span>
-</header>
+<div class="cluster">
+ <div class="row">
 
-<main class="canvas" id="canvas"><div class="slot" id="slot"><div class="frame" id="frameEl"><div class="app" id="app" data-phase="idle">
+  <!-- left panel: what you are looking at — the same shell style.html has, so the
+       proto UI's tabs read as one tool instead of two different tools. -->
+  <div class="col col-filters">
+    <aside class="panel filters">
+      <div class="panel__title"><em>INOUT</em> proto</div>
+      <div class="panel__group" role="tablist" aria-label="Prototype">
+        <div class="panel__label">Proto</div>
+        <a class="tab" role="tab" href="style.html" aria-selected="false" title="The first prototype — proto/style.html">Style ↗</a>
+        <button class="tab" role="tab" aria-selected="true">Neon</button>
+        <a class="tab" role="tab" href="app.html" aria-selected="false" title="The app as it ships — proto/app.html">App ↗</a>
+      </div>
+      <div class="panel__group" role="tablist" id="tabs">
+        <div class="panel__label">Screen</div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Simulate availability</div>
+        <div class="perm"><label>screen</label><select data-avail="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></div>
+        <div class="perm"><label>camera</label><select data-avail="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></div>
+        <div class="perm"><label>mic</label><select data-avail="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></div>
+        <div class="perm"><label>sound</label><select data-avail="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="unavailable">unavailable</option></select></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Simulate what goes wrong</div>
+        <select id="simLoss"><option value="none">nothing goes wrong</option><option value="mic">mic stopped mid-take</option><option value="camera">camera never connected</option><option value="sys">sound went silent</option><option value="stall">encoder stalled</option></select>
+        <div class="perm" style="margin-top:8px"><label>export</label><select id="simExport"><option value="ok">ok</option><option value="failed">failed</option></select></div>
+        <div class="perm"><label>cloud</label><select id="simCloud"><option value="out">signed out</option><option value="in">signed in</option><option value="link">link made</option></select></div>
+        <div class="rowbtns">
+          <button class="btn-h" id="simDialog">dialog</button>
+          <button class="btn-h" id="simToast">toast</button>
+        </div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Keys</div>
+        <div class="readout">1–8  screen
+F    frame
+G T  grid · takes
+[ ]  panels
+Esc  close</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- centre: the screen zone -->
+  <div class="col col-list">
+    <main class="canvas" id="canvas">
+      <button class="edge edge--l" id="tgl-l" aria-label="Toggle left panel">◧</button>
+      <button class="edge edge--r" id="tgl-r" aria-label="Toggle right panel">◨</button>
+
+      <div class="zonebar">
+        <select id="frame"><option value="desktop">desktop</option><option value="wide">wide</option><option value="laptop">laptop</option><option value="phone">phone</option></select>
+        <span class="zonebar__size" id="zsize">1040 × 660</span>
+        <span class="zonebar__hint" id="zfit">100%</span>
+      </div>
+
+      <div class="slot" id="slot"><div class="frame" id="frameEl"><div class="app" id="app" data-phase="idle">
   <div class="ground"></div>
 
   <!-- ============ capture: idle · arming · recording · paused — the app's screen ============ -->
@@ -745,7 +857,32 @@ a { color: inherit; text-decoration: none; }
       <div class="dialog__row"><button class="btn btn--ghost" data-dlg="cancel">Cancel</button><button class="btn" data-dlg="keep">Keep</button><button class="btn btn--danger" data-dlg="discard">Discard</button></div>
     </div>
   </div>
-</div></div></div></main>
+      </div></div></div>
+    </main>
+  </div>
+
+  <!-- right panel: how it looks -->
+  <div class="col col-detail">
+    <aside class="panel detail">
+      <div class="panel__title">Look</div>
+      <div class="panel__group">
+        <div class="panel__label">Ground</div>
+        <button class="btn-h" id="gridBtn" aria-pressed="true">Cell grid</button>
+        <button class="btn-h" id="takesBtn" aria-pressed="true" style="margin-top:6px">Takes panel</button>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Neon</div>
+        <div class="slider"><label for="glow">glow</label><input type="range" id="glow" min="0" max="2" step="0.1" value="1"><output id="glowOut">1.0</output></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Start over</div>
+        <button class="btn-h" id="resetBtn" title="Forget every choice and reload">Reset to defaults</button>
+      </div>
+    </aside>
+  </div>
+
+ </div>
+</div>
 
 <script>
 /* ======================================================================
@@ -782,15 +919,18 @@ PHASES.forEach((p, i) => tabs.insertAdjacentHTML('beforeend', `<button class="ta
 function fit() {
   const [w, h] = SIZES[S.frame]
   const box = $('#canvas').getBoundingClientRect()
-  const s = Math.min(1, (box.width - 48) / w, (box.height - 48) / h)
+  // never negative: a collapsed pane must not flip or zero the frame. 76 = padding + zone bar.
+  const s = Math.min(1, Math.max(120, box.width - 48) / w, Math.max(120, box.height - 76) / h)
   const f = $('#frameEl'), slot = $('#slot')
   f.style.width = w + 'px'; f.style.height = h + 'px'; f.style.transform = `scale(${s})`
   slot.style.width = w * s + 'px'; slot.style.height = h * s + 'px'
-  $('#zsize').textContent = `${w} × ${h} · ${Math.round(s * 100)}%`
+  $('#zsize').textContent = `${w} × ${h}`
+  $('#zfit').textContent = `${Math.round(s * 100)}%`
   document.documentElement.dataset.frame = S.frame
   if (typeof render === 'function' && $('#chips').innerHTML) render()
 }
 addEventListener('resize', fit)
+new ResizeObserver(fit).observe($('#canvas')) // keeps the fit honest while a panel slides
 
 /* ---------- helpers ---------- */
 const fmt = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
@@ -1132,7 +1272,12 @@ $('#takesBtn').addEventListener('click', toggleTakes)
 $('#glow').addEventListener('input', (e) => { S.glow = e.target.value; syncLook(); save() })
 $('#resetBtn').addEventListener('click', () => { try { localStorage.removeItem(STORE) } catch {} try { history.replaceState(null, '', location.pathname + location.search) } catch { location.hash = '' } location.reload() })
 $('#veil').addEventListener('click', (e) => { if (e.target === e.currentTarget) dialog(false) })
-function syncLook() { document.documentElement.dataset.grid = S.grid; $('#gridBtn').setAttribute('aria-pressed', String(S.grid === 'on')); $('#glow').value = S.glow; app.style.setProperty('--glow', S.glow) }
+
+/* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
+const togglePanel = (c) => { document.body.classList.toggle(c); save() }
+$('#tgl-l').addEventListener('click', () => togglePanel('f'))
+$('#tgl-r').addEventListener('click', () => togglePanel('d'))
+function syncLook() { document.documentElement.dataset.grid = S.grid; $('#gridBtn').setAttribute('aria-pressed', String(S.grid === 'on')); $('#glow').value = S.glow; $('#glowOut').textContent = (+S.glow).toFixed(1); app.style.setProperty('--glow', S.glow) }
 addEventListener('keydown', (e) => {
   if (['SELECT', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
   const n = Number(e.key)
@@ -1140,12 +1285,14 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'f' || e.key === 'F') { const k = Object.keys(SIZES); S.frame = k[(k.indexOf(S.frame) + 1) % k.length]; $('#frame').value = S.frame; fit(); save() }
   else if (e.key === 'g' || e.key === 'G') { S.grid = S.grid === 'on' ? 'off' : 'on'; syncLook(); save() }
   else if (e.key === 't' || e.key === 'T') toggleTakes()
+  else if (e.key === '[') togglePanel('f')
+  else if (e.key === ']') togglePanel('d')
   else if (e.key === 'Escape') { dialog(false); S.menu = null; render() }
 })
 
 /* ---------- remember every choice: the fragment first, storage second ---------- */
 const STORE = 'inout-proto/neon/v2'
-const paramString = () => `s=${S.screen}&p=${S.phase}&f=${S.frame}&a=${CH.map((c) => S.avail[c.key]).join(',')}&on=${CH.map((c) => +S.on[c.key]).join(',')}&l=${S.loss}&x=${S.exportSim}&c=${S.cloud}&g=${S.grid}&k=${S.glow}&t=${S.takesOpen === null ? 'a' : +S.takesOpen}`
+const paramString = () => `s=${S.screen}&p=${S.phase}&f=${S.frame}&a=${CH.map((c) => S.avail[c.key]).join(',')}&on=${CH.map((c) => +S.on[c.key]).join(',')}&l=${S.loss}&x=${S.exportSim}&c=${S.cloud}&g=${S.grid}&k=${S.glow}&t=${S.takesOpen === null ? 'a' : +S.takesOpen}&z=${(document.body.classList.contains('f') ? 'f' : '') + (document.body.classList.contains('d') ? 'd' : '') || '-'}`
 function save() {
   const s = paramString(); let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch {}
@@ -1169,6 +1316,10 @@ function restore() {
   if (st.g === 'on' || st.g === 'off') S.grid = st.g
   if (st.k && !isNaN(+st.k)) S.glow = st.k
   if (st.t === '0' || st.t === '1') S.takesOpen = st.t === '1'; else if (st.t === 'a') S.takesOpen = null
+  if (st.z) {
+    document.body.classList.toggle('f', st.z.includes('f'))
+    document.body.classList.toggle('d', st.z.includes('d'))
+  }
 }
 function syncControls() {
   $('#frame').value = S.frame; $$('[data-avail]').forEach((sel) => (sel.value = S.avail[sel.dataset.avail]))
@@ -1176,6 +1327,7 @@ function syncControls() {
 }
 
 /* ---------- go ---------- */
+document.body.classList.add('f', 'd')
 restore(); syncControls()
 $('#lanes').innerHTML = buildLanes()
 if (live()) { S.t0 = Date.now() - 42000; if (S.phase === 'paused') S.pauseAt = Date.now() }
