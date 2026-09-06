@@ -322,8 +322,8 @@
   field-sizing: content;
   width: fit-content;
   min-width: 3ch;
-  max-width: 100%;
-  margin: 0 0 2px;
+  max-width: calc(100% - var(--tools-band) - var(--tag-inset));
+  margin: 0 0 2px var(--tag-inset);
   padding: 0;
   border: 0;
   border-bottom: 1px solid transparent;
@@ -350,29 +350,68 @@
 /* while a selection is being made the row is not a text field */
 .app-proto .takes.is-picking .takename { pointer-events: none; }
 
-/* the top line reads: when it was taken, then how big it is — and with a name
-   above it, it is the SECOND line now, so it steps down out of the way */
-.app-proto .takecard__top { gap: 8px; align-items: baseline; flex-wrap: wrap; }
+/* THE ROWS LINE UP ON THE FIRST TAG'S GLYPH (Robert, 2026-09-06), not on the
+   pill's outer edge. The tag is a border and 5px of padding before its icon, so
+   a name set flush with the pill starts a column the eye reads as two columns.
+   ONE NUMBER, spent by the name and by the date row, and it is the .kind's own
+   border + padding-left — move that padding and move this with it. */
+.app-proto .takecard { --tag-inset: 6px; }
+
+/* THE LAST LINE SAYS ONLY WHEN. The size and the quality went up to the tag row
+   where they belong, so what is left is the date — the footnote under the name. */
+.app-proto .takecard__top { gap: 8px; align-items: baseline; flex-wrap: wrap; padding-left: var(--tag-inset); }
 /* the date is read, not scanned, so it takes the app's own text face rather than
    the condensed display one — Barlow is for labels */
 .app-proto .takecard__when {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   font-family: var(--font);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-dim);
 }
-.app-proto .takecard__size { color: var(--text-dim); font-size: 12px; }
+/* THE DAY IS CONTEXT, THE TIME IS THE THING (Robert, 2026-09-06). Ten takes off
+   one afternoon all carry the same date, and the only part of this line that
+   tells them apart is the clock — so the date stays the secondary grey it
+   always was and the time comes up to full white. The extra letter-spacing is
+   for the same reason: four digits and a colon at 11px are a smudge, and a
+   hair of air between them makes them read as a time at a glance. */
+.app-proto .takecard__when .wdate { color: var(--text-dim); }
+.app-proto .takecard__when .wtime { color: var(--text); letter-spacing: 0.05em; }
 /* the length moved onto the picture, and the loss caption is gone from the card */
 .app-proto .takecard__len,
 .app-proto .takecard__loss { display: none !important; }
 
 /* the inputs the take used, as the chips in miniature — same shape, same type,
    no colour of their own */
-/* their own row, between the name and the date */
-.app-proto .takecard__kinds { display: flex; gap: 5px; flex-wrap: wrap; margin: 1px 0 0; }
+/* THE TOP ROW: what it was made of, then how good, then how big. The quality
+   badge and the size sit in this row with the tags, so `align-items: center`
+   rather than the tags' own baseline — three different type sizes on one line
+   read as one line only if their middles agree. */
+.app-proto .takecard__kinds {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 0 0 3px;
+}
+/* the quality badge keeps the app's own colour — it is the one coloured thing
+   on the card and it is the fact the card is judged on — and the size follows
+   it in the date's face and the date's grey, because it is the same kind of
+   footnote fact and this row should not gain a third voice. */
+.app-proto .takecard__kinds .takecard__step { margin-left: 3px; }
+.app-proto .takecard__kinds .takecard__size {
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+}
 .app-proto .kind {
   display: inline-flex;
   align-items: center;
@@ -396,10 +435,17 @@
    the file on this machine — so they get the same size and the same weight, and
    the labelled buttons below are left to the things that leave the machine. */
 .app-proto .takecard { position: relative; }
+/* AND THE GROUP IS AS TALL AS THE ICONS IN IT. It used to be pinned top-to-
+   bottom with its buttons centred inside, which paints the same but lays an
+   invisible 82px-wide sheet over the whole right of the card — and now that the
+   tag row runs the full width, the last thing in it (the size) sat under that
+   sheet and the row stopped answering the pointer there. Centred by position
+   instead, so nothing but the icons is in the way. */
 .app-proto .cardtools {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
   right: 6px;
   display: flex;
   align-items: center;
@@ -427,7 +473,16 @@
 /* the text sits on the picture's middle line, not on its top edge: the card is
    as tall as the preview and the words are two or three lines, so anchoring
    them to the top left the card bottom-heavy on every single row */
-.app-proto .takecard__body { padding-right: 92px; justify-content: center; }
+/* AND THE BAND THE TOOLS RESERVE IS ONE LINE'S BAND, NOT THE WHOLE BODY. The
+   92px used to be padding on the body, so every row paid for a group of icons
+   that is 26px tall and vertically CENTRED — it only ever crosses the middle
+   line. Four tags, the quality and the size did not fit in what was left and
+   the size fell to a line of its own. So the reservation moves onto the rows
+   that actually share the tools' line — the name, and the cloud actions — and
+   the tag row and the date get the card's full width. */
+.app-proto .takecard { --tools-band: 92px; }
+.app-proto .takecard__body { padding-right: 0; justify-content: center; }
+.app-proto .takecard__actions { padding-right: var(--tools-band); }
 
 /* SEND AND COPY LINK ARE CLOUD ACTIONS, so they are on cloud takes and nowhere
    else. A file that exists only on this machine has nothing to send and no link

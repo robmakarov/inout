@@ -117,10 +117,26 @@
         thumb.appendChild(c)
       }
 
-      // the full date and time, stamped onto the frozen card from the take's
-      // own record at capture time — the app's own label is only a clock
+      /* The full date and time, stamped onto the frozen card from the take's
+         own record at capture time — the app's own label is only a clock.
+         AND IT IS TWO FACTS, NOT ONE STRING (Robert, 2026-09-06): the DAY is
+         how you find the take and the TIME is how you tell two of them apart,
+         so they are separate spans and the comma between them goes — a gap
+         says the same thing without a mark on the line. */
       const when = card.querySelector('.takecard__when')
-      if (when && when.dataset.whenFull) when.textContent = when.dataset.whenFull
+      if (when && !when.querySelector('.wdate')) {
+        const full = ((when.dataset.whenFull || when.textContent) || '').trim()
+        const m = full.match(/^(.*?)[,\s]*(\d{1,2}:\d{2}(?::\d{2})?)$/)
+        const span = (cls, txt) => {
+          const s = document.createElement('span')
+          s.className = cls
+          s.textContent = txt
+          return s
+        }
+        when.textContent = ''
+        when.append(span('wdate', m ? m[1] : full))
+        if (m) when.append(span('wtime', m[2]))
+      }
 
       /* THE FILE HAS A NAME AND THE CARD SAYS IT. The take was a thing with a
          date on it and no identity; the name is what you will look for in a
@@ -149,15 +165,26 @@
         body.insertBefore(inp, body.firstChild)
       }
 
-      /* The inputs it used, as the chips in miniature — and ABOVE the date row
-         (Robert, 2026-09-06). What the take is MADE OF sits under its name; when
-         it was made and how big it came out are the footnote, so they read last. */
+      /* The inputs it used, as the chips in miniature — and they are the FIRST
+         line now, with the name under them (Robert, 2026-09-06; they and the
+         name traded places). What a take is made of is what your eye catches
+         from across the list, and it is the one thing on the card that is a
+         picture rather than words; the name is what you read once you have
+         found the row, and the date is the footnote under both.
+
+         THE QUALITY AND THE SIZE RIDE THE SAME ROW. How good it is and how big
+         it came out are the same sentence as what it was made of — screen and
+         mic AT 1080p COSTING 3.4 MB — so the row reads chips, quality, size,
+         and the line below is left to say only when. */
       const kinds = card.querySelector('.takecard__kinds')
-      const top = card.querySelector('.takecard__top')
       if (kinds && !kinds.querySelector('.kind')) {
         const names = kinds.textContent.split('·').map((s) => s.trim()).filter(Boolean)
         kinds.innerHTML = names.map((n) => `<span class="kind">${ic(glyphFor(n))}${n}</span>`).join('')
-        if (top && top.parentElement) top.parentElement.insertBefore(kinds, top)
+        if (body) body.insertBefore(kinds, body.firstChild)
+        const step = card.querySelector('.takecard__step')
+        const size = card.querySelector('.takecard__size')
+        if (step) kinds.appendChild(step)
+        if (size) kinds.appendChild(size)
       }
 
       /* ONE ICON SET IN THE FRAME. The chips and the kind badges already wear
