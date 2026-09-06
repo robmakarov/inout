@@ -878,7 +878,11 @@ body.f .filters, body.d .detail { opacity: 1; }
         <div id="newKinds" class="kindrow"></div>
         <select id="newWhere" style="margin-top:6px">
           <option value="device">kept on this device</option>
-          <option value="cloud">and in the cloud</option>
+          <option value="cloud">kept in the cloud</option>
+        </select>
+        <select id="newMade" style="margin-top:6px">
+          <option value="desktop">made on this computer</option>
+          <option value="phone">made on a phone</option>
         </select>
         <div class="readout" id="newNote" style="margin-top:6px"></div>
       </div>
@@ -1033,7 +1037,7 @@ function buildSim() {
      take put in the cloud stays in the cloud through every later refresh and
      the Cloud tab has something to show. Taking one away pops the last. */
   const NEWK = ['Screen', 'Camera', 'Mic', 'Tab Audio']
-  const newSpec = { kinds: ['Screen', 'Camera', 'Mic'], cloud: false }
+  const newSpec = { kinds: ['Screen', 'Camera', 'Mic'], cloud: false, device: 'desktop' }
   function drawNewKinds() {
     $('#newKinds').innerHTML = NEWK.map(
       (k) => '<button class="btn-h" data-nk="' + k + '" aria-pressed="' + (newSpec.kinds.includes(k) ? 'true' : 'false') + '">' + k + '</button>',
@@ -1050,20 +1054,28 @@ function buildSim() {
     }
   }
   function newNote() {
-    const cloud = newSpec.cloud
+    const phone = newSpec.device === 'phone'
     const noAcct = window.PROTO_SIM.account !== 'in'
-    $('#newWhere').disabled = noAcct
+    /* A PHONE TAKE IS A CLOUD TAKE. There is no other way one reaches this
+       machine, so the where row stops being a choice and says why. */
+    $('#newWhere').disabled = noAcct || phone
+    $('#newMade').disabled = noAcct
+    if (phone) newSpec.cloud = true
+    $('#newWhere').value = newSpec.cloud ? 'cloud' : 'device'
     $('#newNote').textContent = noAcct
-      ? 'sign in to keep the next one in the cloud'
-      : cloud
-        ? 'press + take and it appears under Cloud too'
-        : 'press + take and it appears under Device only'
+      ? 'sign in first — a take from elsewhere arrives through the cloud'
+      : phone
+        ? 'a phone take reaches you through the cloud, and its preview is upright'
+        : newSpec.cloud
+          ? 'press + take and it appears under Cloud, not Device'
+          : 'press + take and it appears under Device'
   }
+  $('#newMade').addEventListener('change', (e) => { newSpec.device = e.target.value; newNote() })
   $('#newWhere').addEventListener('change', (e) => { newSpec.cloud = e.target.value === 'cloud'; newNote() })
   drawNewKinds()
   newNote()
   $('#takeAdd').addEventListener('click', () => {
-    window.PROTO_SIM.added.push({ kinds: newSpec.kinds.slice(), cloud: newSpec.cloud })
+    window.PROTO_SIM.added.push({ kinds: newSpec.kinds.slice(), cloud: newSpec.cloud, device: newSpec.device })
     window.PROTO_SIM.takes = nowTakes() + 1
     show(S.id); save()
   })

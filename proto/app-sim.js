@@ -214,7 +214,12 @@
       if (spec) {
         const kindsEl = clone.querySelector('.takecard__kinds')
         if (kindsEl && spec.kinds && spec.kinds.length) kindsEl.textContent = spec.kinds.join(' · ')
-        clone.dataset.simCloud = spec.cloud ? '1' : '0'
+        /* WHAT IT WAS MADE ON. A cloud library is not one machine's — a take
+           can arrive in it from a phone, and a phone does not record 16:9. The
+           proposal reads data-device to shape the preview; a phone take is a
+           cloud take by definition, because that is the only way it got here. */
+        clone.dataset.device = spec.device === 'phone' ? 'phone' : 'desktop'
+        clone.dataset.simCloud = spec.cloud || spec.device === 'phone' ? '1' : '0'
       }
       const n = all.length + 1
       const when = clone.querySelector('.takecard__when')
@@ -225,6 +230,17 @@
           return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0')
         })
         when.textContent = when.dataset.whenFull
+        /* AND THE NAME GOES WITH THE CLOCK. A clone inherited the original's
+           auto filename, so seven takes in a row claimed to be the same file —
+           which made the search find six of them and made the one thing the
+           name is for, telling two takes apart, impossible. Shifted by the same
+           minutes the label is, so the two cannot disagree. */
+        if (when.dataset.autoName) {
+          when.dataset.autoName = when.dataset.autoName.replace(/-(\d\d)(\d\d)(\d\d)(\.[a-z0-9]+)$/i, (m, h, mm, ss, ext) => {
+            const t = (Number(h) * 60 + Number(mm) - n * 7 + 1440) % 1440
+            return '-' + String(Math.floor(t / 60)).padStart(2, '0') + String(t % 60).padStart(2, '0') + ss + ext
+          })
+        }
       }
       list.appendChild(clone)
     }

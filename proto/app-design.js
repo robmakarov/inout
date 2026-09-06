@@ -299,6 +299,9 @@
 
     total(takes)
     wireHead(root, takes, headEl)
+    /* run the filter once on the way in, so the Device tab opens holding only
+       what is on the device rather than everything and a correction later */
+    applyFilter(takes)
   }
 
   /* ANYTHING THAT CHANGES HOW MANY ROWS ARE SHOWING CHANGES THE HEIGHT OF THE
@@ -350,9 +353,15 @@
       const list = takes.querySelector('.takes__list')
       animateHeight(list, () => applyNow(list))
     }
+    FILTERS.set(takes, () => applyNow(takes.querySelector('.takes__list')))
     const applyNow = (list) => {
       const q = (input.value || '').trim().toLowerCase()
       const cards = [...takes.querySelectorAll('.takecard')]
+      /* WHERE IT IS KEPT IS THE FIRST FILTER and it is not negotiable — the
+         search and the kind menu narrow within the tab you are on, never across
+         it. Everything downstream counts what this leaves. */
+      const onCloud = takes.classList.contains('is-cloud')
+      for (const c of cards) c.dataset.here = (c.dataset.cloud === '1') === onCloud ? '1' : ''
       for (const c of cards) {
         /* a name you typed lives in a value, not in the text, so the search has
            to be told about it — and the one the app would give it too */
@@ -361,8 +370,10 @@
         const kinds = [...c.querySelectorAll('.kind')].map((k) => k.textContent.trim().toLowerCase())
         const okQ = !q || hay.includes(q)
         const okF = state.filter === 'all' || kinds.some((k) => k === state.filter)
-        c.hidden = !(okQ && okF)
+        c.hidden = !(c.dataset.here === '1' && okQ && okF)
       }
+      emptyNote(takes, cards.filter((c) => !c.hidden).length)
+      total(takes)
       const key = {
         new: (c) => -cards.indexOf(c),
         old: (c) => cards.indexOf(c),
@@ -383,35 +394,14 @@
       const w = e.target.closest('[data-where]')
       if (w) {
         for (const b of bar.querySelectorAll('[data-where]')) b.setAttribute('aria-selected', String(b === w))
-        /* THE CLOUD TAB IS THE SAME LIST, FILTERED. Device shows everything
-           kept on this computer; Cloud shows the takes that also have a copy up
-           there — the ones that carry Send and Copy link. It says the empty
-           thing only when there is genuinely nothing to show. */
-        const onCloud = w.dataset.where === 'cloud'
-        takes.classList.toggle('is-cloud', onCloud)
-        let n = 0
-        animateHeight(takes.querySelector('.takes__list'), () => {
-          for (const c of takes.querySelectorAll('.takecard')) {
-            const keep = !onCloud || c.dataset.cloud === '1'
-            c.hidden = !keep
-            if (onCloud && keep) n++
-          }
-        })
-        let empty = takes.querySelector('.cloud-empty')
-        if (onCloud) {
-          if (!empty) {
-            empty = document.createElement('div')
-            empty.className = 'cloud-empty room__note'
-            empty.style.padding = '18px 0'
-            empty.style.textAlign = 'center'
-            takes.querySelector('.takes__list').after(empty)
-          }
-          empty.textContent = cloudNote()
-          empty.hidden = n > 0
-        } else if (empty) {
-          empty.hidden = true
-          apply()
-        }
+        /* TWO PLACES, NOT ONE PLACE WITH A FLAG (Robert, 2026-09-06: "why the
+           fuck cloud records in device tab"). A take is kept HERE or it is kept
+           UP THERE, and each tab is that place's whole library — a cloud take
+           has no business under Device, which is what a tab called Device is
+           for. The device count and the cloud count are separate libraries now,
+           and both tabs can be empty on their own terms. */
+        takes.classList.toggle('is-cloud', w.dataset.where === 'cloud')
+        animateHeight(takes.querySelector('.takes__list'), () => applyNow(takes.querySelector('.takes__list')))
         return
       }
       /* All and Clear, as ~/Documents/inout copy has them (app.js:12518 and
@@ -467,6 +457,12 @@
      It also auto-enters select mode, so there is no button to press first.
      The one thing NOT copied is the source's checkbox with no transition,
      which BEHAVIORS.md lists as a known oversight; the CSS gives it one. */
+  /* head() wires the filter and then needs to run it; the closure that knows
+     about the search box and the kind menu lives inside wireHead, so it leaves
+     a handle here rather than either of them reaching into the other. */
+  const FILTERS = new WeakMap()
+  const applyFilter = (takes) => { const f = FILTERS.get(takes); if (f) f() }
+
   const PICKED = new WeakMap()
   function setPick(takes, on) {
     takes.classList.toggle('is-picking', on)
@@ -482,7 +478,7 @@
        slot it replaces was already showing the denominator */
     if (el) el.textContent = String(n)
     const tot = takes.querySelector('.picked__tot')
-    if (tot) tot.textContent = String(takes.querySelectorAll('.takecard').length)
+    if (tot) tot.textContent = String(inTab(takes).length)
     /* WHAT YOU DO WITH A SELECTION ARRIVES WITH THE SELECTION, not with the
        mode. Entering select mode opens All and Clear; picking something opens
        the count and its two buttons, to the right of the library count, which
@@ -499,12 +495,23 @@
     const n = takes.querySelector('.total__n')
     const w = takes.querySelector('.total__w')
     if (!n || !w) return
-    const all = takes.querySelectorAll('.takecard').length
-    const shown = [...takes.querySelectorAll('.takecard')].filter((c) => !c.hidden).length
+    /* the tab you are on IS the library, so this counts that one — "1 of 3
+       files" on Cloud while Device holds two others was two libraries being
+       added together and neither of them being reported */
+    const onCloud = takes.classList.contains('is-cloud')
+    const mine = [...takes.querySelectorAll('.takecard')].filter((c) => (c.dataset.cloud === '1') === onCloud)
+    const all = mine.length
+    const shown = mine.filter((c) => !c.hidden).length
     n.textContent = shown === all ? String(all) : `${shown} of ${all}`
     w.textContent = all === 1 && shown === all ? 'file' : 'files'
     const tot = takes.querySelector('.picked__tot')
     if (tot) tot.textContent = String(all)
+  }
+  /* and the same denominator for a selection: you can only ever pick out of the
+     library you are looking at */
+  const inTab = (takes) => {
+    const onCloud = takes.classList.contains('is-cloud')
+    return [...takes.querySelectorAll('.takecard')].filter((c) => (c.dataset.cloud === '1') === onCloud)
   }
   /* THE LIST IS INSIDE .takes, NOT ABOVE IT. This walked only upward, found
      nothing that scrolls, and fell back to `el.closest('.takes__list')` — which
@@ -711,11 +718,24 @@
     }
   }
 
-  /* one sentence for an empty cloud, and it names the reason it is empty */
-  const cloudNote = () =>
-    (window.PROTO_SIM || {}).account === 'in'
-      ? 'Nothing kept in the cloud yet — Send a take to put it there.'
-      : 'Sign in to keep takes in the cloud.'
+  /* ONE NOTE, EITHER LIBRARY, and it names the reason that one is empty. Both
+     tabs can be empty on their own now: everything sent up leaves Device with
+     nothing to show, and an account with nothing sent leaves Cloud the same. */
+  function emptyNote(takes, shown) {
+    const onCloud = takes.classList.contains('is-cloud')
+    let el = takes.querySelector('.cloud-empty')
+    if (!el) {
+      el = document.createElement('div')
+      el.className = 'cloud-empty room__note'
+      takes.querySelector('.takes__list').after(el)
+    }
+    el.textContent = onCloud
+      ? (window.PROTO_SIM || {}).account === 'in'
+        ? 'Nothing kept in the cloud yet — Send a take to put it there.'
+        : 'Sign in to keep takes in the cloud.'
+      : 'Nothing kept on this computer.'
+    el.hidden = shown > 0
+  }
 
   /* the account button and the cloud tab both read the same switch */
   function account(root) {
@@ -728,8 +748,10 @@
       if (inAcct) av.textContent = 'RM'
       else av.innerHTML = ic('user')
     }
-    const empty = root.querySelector('.cloud-empty')
-    if (empty) empty.textContent = cloudNote()
+    const takes = root.querySelector('.takes')
+    if (takes && takes.querySelector('.cloud-empty')) {
+      emptyNote(takes, [...takes.querySelectorAll('.takecard')].filter((c) => !c.hidden).length)
+    }
   }
 
   /* ---------- the studio motion, copied from proto/style.html --------------

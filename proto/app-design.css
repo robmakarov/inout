@@ -176,6 +176,16 @@
    own — the letterboxing of a screen recording runs straight into the page and
    the card loses its head. One hairline gives it one, and box-sizing is
    border-box everywhere in this app so the 176 does not move. */
+/* A TAKE FROM A PHONE IS SHAPED LIKE A PHONE. A cloud library is not one
+   machine's: a take can arrive in it from a phone, and pretending its preview is
+   16:9 is the one thing the picture is there to stop you believing. It keeps the
+   SAME HEIGHT and the same 176 of horizontal room — 56 wide, centred in it — so
+   a mixed list has one straight edge down the text rather than a ragged one. */
+.app-proto .takecard[data-device='phone'] .takecard__thumb {
+  width: 56px;
+  aspect-ratio: 9 / 16;
+  margin: 0 60px;
+}
 .app-proto .takecard__thumb {
   position: relative;
   overflow: hidden;
@@ -229,7 +239,11 @@
 /* the attribute stops the drag; this stops the blue selection flash that a
    press-and-sweep across the row leaves on the picture on the way past */
 .app-proto .takecard__thumb img { -webkit-user-drag: none; user-select: none; }
-.app-proto .takecard[data-cloud='1'] .cloudmark { display: block; }
+/* THE MARK IS GONE NOW THAT THE TAB IS THE ANSWER. It existed because one list
+   mixed both and the two extra buttons on some cards needed a reason on screen;
+   with a tab per place, every card under Cloud is a cloud take and the mark says
+   nothing the header did not. One line brings it back if the lists ever merge. */
+.app-proto .takecard[data-cloud='1'] .cloudmark { display: none; }
 
 /* THE NAME IS THE FIRST LINE AND IT IS AN INPUT ALL THE TIME — no fill, no
    stroke, no padding, so at rest it reads as the card's title and not as a form
@@ -259,10 +273,11 @@
   transition: border-color var(--dz-fast) var(--dz-ease), color var(--dz-fast) var(--dz-ease);
 }
 /* A NAME THE APP CHOSE IS NOT A NAME YOU GAVE IT, and the colour is the whole
-   difference: tertiary while it is the app's, full text the moment it is
-   yours. Hover lifts it one step, so the row still answers the pointer. */
+   difference: tertiary while it is the app's, full text the moment it is yours.
+   It does NOT lift on hover (Robert, 2026-09-06) — a name that brightens when
+   the pointer passes reads as a name that changed, and the one thing this field
+   must never be ambiguous about is which of the two it is showing. */
 .app-proto .takename::placeholder { color: var(--dz-tertiary); font-weight: 500; opacity: 1; }
-.app-proto .takecard:hover .takename::placeholder { color: var(--text-dim); }
 .app-proto .takename:focus { border-bottom-color: var(--accent); }
 /* while a selection is being made the row is not a text field */
 .app-proto .takes.is-picking .takename { pointer-events: none; }
