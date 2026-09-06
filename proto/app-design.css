@@ -929,21 +929,13 @@
    only thing that travels is the picture, and it flies over a list that stays
    exactly where it was.
 
-   THE ONE WIDTH THAT STILL FOLLOWS IS THE BARS' — his own earlier line, "top
-   bar and tool bar follows its width". They share --take-w with the FEED, so
-   widening it would have dragged the cards sideways under the player; the list
-   is pinned to the width it had while a take is playing, and only the head and
-   the control bar open out. */
-/* WIDTH, NOT MAX-WIDTH. The list is a flex item, and an auto margin on a flex
-   item makes it size to its content — pinned with max-width it collapsed to
-   441 and the cards moved anyway, which is the thing this rule exists to
-   prevent. An explicit width leaves them exactly where they were. */
-.app-proto .takes.is-watch .takes__list {
-  width: var(--list-w, 600px);
-  max-width: none;
-  margin-left: auto;
-  margin-right: auto;
-}
+   THE WIDTH IS THE ONE THING THAT DOES TRAVEL, AND THE CARDS TRAVEL WITH IT
+   (Robert, 2026-09-06: "when play window coming and top bar moves wider cards
+   behind coming window froze, make them follow width top bar"). The feed was
+   pinned to its old width for a while, so the head opened out and the cards
+   sat still under it — one bar growing and a list holding its breath. They
+   share --take-w for exactly this reason: setting it to the player's width
+   opens the head, the feed and the control bar together, on one curve. */
 /* and the picture has left its slot, so the slot is empty rather than showing a
    second copy of it under the one that flew */
 .app-proto .takecard.is-watching .takecard__thumb { visibility: hidden; }

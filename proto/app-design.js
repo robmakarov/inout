@@ -294,9 +294,6 @@
     clearTimeout(WATCH.timer)
     WATCH.root = root
     WATCH.card = card
-    /* the list keeps the width it has now, so widening the head and the control
-       bar to the player does not drag the cards sideways under it */
-    takes.style.setProperty('--list-w', Math.round(takes.getBoundingClientRect().width) + 'px')
     takes.classList.add('is-watch')
     card.classList.add('is-watching')
 
@@ -360,7 +357,6 @@
     WATCH.timer = setTimeout(() => {
       box.remove()
       card.classList.remove('is-watching')
-      if (takes) takes.style.removeProperty('--list-w')
       WATCH.box = null
       WATCH.from = null
     }, 440)
