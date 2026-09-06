@@ -51,6 +51,11 @@
   will-change: transform;
 }
 .app-proto > .app { position: relative; z-index: 1; }
+/* the app paints its own near-black over the frame; with the grid on that is a
+   ground under a ground, so it steps aside and the grid IS the ground */
+.app-proto[data-grid='on'],
+.app-proto[data-grid='on'] > .app,
+.app-proto[data-grid='on'] .capture { background: #000; }
 
 /* ---------- 1. input chips: neon's type and glyphs, the app's colour -------- */
 .app-proto .chip {

@@ -531,51 +531,16 @@ function readTemplate(design) {
         <a class="tab" role="tab" href="ships.html" aria-selected="false">As it ships &#8599;</a>`
     : `        <a class="tab" role="tab" href="app.html" aria-selected="false">App new UI &#8599;</a>
         <button class="tab" role="tab" aria-selected="true">As it ships</button>`
-  const what = design
-    ? `The shipping app with the PROPOSED design over it. Every surface below the layer
-is the real one &#8212; the app&#8217;s own markup, inline styles and stylesheet, captured
-from the deployed build. The layer changes type, geometry and the takes bar; it
-changes no colour.
-
-Captured /*STAMP*/.
-
-The control is the &#8220;As it ships&#8221; tab: the same capture, no layer.`
-    : `The shipping app, frozen, with NOTHING added. Its markup, its inline styles and
-its own stylesheet, captured from the deployed build &#8212; not a drawing of it, and
-not the proposal. This is the control the other tabs are judged against.
-
-Captured /*STAMP*/.`
-  /* THE SAME SWITCHES proto/style.html HAS, WITH ITS NUMBERS. Same ranges, same
-     defaults, same names — a judgement made about the bounce on one proto has to
-     mean the same thing on the other, and it cannot if the sliders disagree. */
   const designPanel = design
     ? `      <div class="panel__group">
-        <div class="panel__label">The layer</div>
-        <div class="note">Chips in the neon type and glyphs, the length on the picture, a
-card stripped to date &#183; size &#183; inputs, a rebuilt takes bar and a segmented
-quality rail. Colours are the app&#8217;s own, untouched.</div>
-      </div>
-      <div class="panel__group">
-        <div class="panel__label">Grid</div>
+        <div class="panel__label">Ground</div>
         <button class="btn-h" id="g-on" aria-pressed="true">Cell grid</button>
-        <div class="slider"><label for="s-g">strength</label><input type="range" id="s-g" min="0" max="2" step="0.05" value="0.7"><output id="o-g">0.70</output></div>
-        <div class="slider"><label for="s-cell">cell</label><input type="range" id="s-cell" min="12" max="64" step="1" value="24"><output id="o-cell">24</output></div>
-      </div>
-      <div class="panel__group">
-        <div class="panel__label">Scroll bounce</div>
-        <div class="slider"><label for="p-k">stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="344"><output id="o-pk">344</output></div>
-        <div class="slider"><label for="p-c">damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="25.5"><output id="o-pc">25.5</output></div>
-        <div class="slider"><label for="p-i">impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="4.4"><output id="o-pi">4.4</output></div>
-        <div class="slider"><label for="p-f">bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.31"><output id="o-pf">0.31</output></div>
-        <div class="slider"><label for="p-w">wall</label><input type="range" id="p-w" min="0" max="0.8" step="0.02" value="0.14"><output id="o-pw">0.14</output></div>
-        <div class="note" style="margin-top:8px">Throw the record screen with the wheel.
-The feed keeps the wheel for itself when it has somewhere to scroll.</div>
+        <button class="btn-h" id="b-on" aria-pressed="true" style="margin-top:6px">Scroll bounce</button>
       </div>`
     : ''
   const simJs = readFileSync(SIM_JS, 'utf8')
   return TEMPLATE.replace('/*SIM_JS*/', () => esc(simJs))
     .replace('/*PROTO_TABS*/', () => protoTabs)
-    .replace('/*WHAT*/', () => what)
     .replace('/*DESIGN_PANEL*/', () => designPanel)
     .replace('/*NEON_FACES*/', () => neon.faces)
     .replace('/*NEON_SPRITE*/', () => neon.sprite)
@@ -895,8 +860,8 @@ F    frame
     <aside class="panel detail">
       <div class="panel__title">The app</div>
       <div class="panel__group">
-        <div class="panel__label">What this tab is</div>
-        <div class="note">/*WHAT*/</div>
+        <div class="panel__label">Captured</div>
+        <div class="readout">/*STAMP*/</div>
       </div>
 /*DESIGN_PANEL*/
       <div class="panel__group">
@@ -951,37 +916,6 @@ window.protoRefresh = () => { show(S.id) }
    in app-sim.js drives the proto through the same path the app takes */
 window.protoGo = (id) => { if (SNAP[id]) show(id) }
 
-/* the sliders land on protoMotion, which is style.html's PHYS and grid under
-   another name; changing one mid-flight is the point — you feel it on the next
-   throw. Absent in the shipping tab, which carries no layer to drive. */
-const MOTION = [
-  { el: 's-g', out: 'o-g', key: 'gridk', dp: 2 },
-  { el: 's-cell', out: 'o-cell', key: 'gridcell', dp: 0 },
-  { el: 'p-k', out: 'o-pk', key: 'k', dp: 0 },
-  { el: 'p-c', out: 'o-pc', key: 'c', dp: 1 },
-  { el: 'p-i', out: 'o-pi', key: 'imp', dp: 1 },
-  { el: 'p-f', out: 'o-pf', key: 'follow', dp: 2 },
-  { el: 'p-w', out: 'o-pw', key: 'wall', dp: 2 },
-]
-function buildMotion() {
-  if (!window.protoMotion || !$('#s-g')) return
-  for (const m of MOTION) {
-    const input = $('#' + m.el)
-    const put = () => {
-      window.protoMotion.set(m.key, input.value)
-      $('#' + m.out).textContent = (+input.value).toFixed(m.dp)
-    }
-    input.addEventListener('input', () => { put(); save() })
-    put()
-  }
-  $('#g-on').addEventListener('click', () => {
-    const on = $('#g-on').getAttribute('aria-pressed') !== 'true'
-    $('#g-on').setAttribute('aria-pressed', String(on))
-    window.protoMotion.set('gridon', on)
-    save()
-  })
-}
-
 const KINDS = ['screen', 'camera', 'mic', 'tab audio']
 function buildSim() {
   $('#sim-inputs').innerHTML = KINDS.map(
@@ -1007,6 +941,30 @@ function buildSim() {
   $('#simLost').value = window.PROTO_SIM.lost
   $('#simLost').addEventListener('change', (e) => { window.PROTO_SIM.lost = e.target.value; show(S.id); save() })
 }
+
+/* two switches, wired the way every other switch in this panel is: a .btn-h
+   with aria-pressed. There were sliders here and they were wrong twice over —
+   he asked for switches, and .slider had no CSS in this file at all, so they
+   rendered as the browser's own control in the middle of the tool's. */
+function toggle(id, key) {
+  const b = $('#' + id)
+  if (!b || !window.protoMotion) return
+  const put = () => {
+    const on = b.getAttribute('aria-pressed') === 'true'
+    window.protoMotion.set(key, on)
+  }
+  b.addEventListener('click', () => {
+    b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'))
+    put()
+    save()
+  })
+  put()
+}
+function buildMotion() {
+  toggle('g-on', 'gridon')
+  toggle('b-on', 'bounceon')
+}
+
 function show(id) {
   if (!SNAP[id]) return
   // a screen change settles the spring rather than leaving the last throw on it
@@ -1144,7 +1102,7 @@ function save() {
   const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
     '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
     '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost) +
-    (window.protoMotion && $('#s-g') ? '&m=' + MOTION.map((x) => $('#' + x.el).value).join(',') + ($('#g-on').getAttribute('aria-pressed') === 'true' ? '' : '&g0=1') : '')
+    ($('#g-on') ? '&g=' + ($('#g-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) + ($('#b-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) : '')
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -1173,10 +1131,10 @@ function restore() {
   if (st.n === '-') window.PROTO_SIM.takes = null
   else if (st.n !== undefined && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
   if (st.acc === 'in' || st.acc === 'out') window.PROTO_SIM.account = st.acc
-  if (st.m && $('#s-g')) {
-    st.m.split(',').forEach((v, i) => { if (MOTION[i] && !isNaN(+v)) $('#' + MOTION[i].el).value = v })
+  if (st.g && st.g.length === 2 && $('#g-on')) {
+    $('#g-on').setAttribute('aria-pressed', String(st.g[0] === '1'))
+    $('#b-on').setAttribute('aria-pressed', String(st.g[1] === '1'))
   }
-  if (st.g0 === '1' && $('#g-on')) $('#g-on').setAttribute('aria-pressed', 'false')
   if (st.l) window.PROTO_SIM.lost = decodeURIComponent(st.l)
 }
 

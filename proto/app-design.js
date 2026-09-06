@@ -456,6 +456,7 @@
      style.html's values are the defaults, so the two protos feel the same. */
   const PHYS = { k: 344, c: 25.5, imp: 4.4, follow: 0.31, wall: 0.14 }
   const GRID = { k: 0.7, cell: 24, on: true }
+  const BOUNCE = { on: true }
 
   function gridImage() {
     // one path, stroked once per tile — see the note in the stylesheet
@@ -471,6 +472,10 @@
     app.style.setProperty('--grid-img', GRID.on ? 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '")' : 'none')
     app.style.setProperty('--grid-k', String(GRID.k))
     app.style.setProperty('--grid-cell', GRID.cell + 'px')
+    /* WITH THE GRID ON, THE APP'S OWN BACKGROUND GETS OUT OF THE WAY. The app
+       paints a near-black over the whole frame; the grid is the ground when it
+       is on, and a ground under a ground is just a flatter ground. */
+    app.dataset.grid = GRID.on ? 'on' : 'off'
   }
 
   function motion(root) {
@@ -510,7 +515,7 @@
     const cluster = () => root.querySelector('.capture')
     // the spring belongs to the waiting screen, not to a running take: once the
     // stage is up the controls are a bar and must not drift off it
-    const live = () => !!cluster() && !root.querySelector('.stage')
+    const live = () => BOUNCE.on && !!cluster() && !root.querySelector('.stage')
     /* THE ONE ADAPTATION FROM style.html, AND IT HAD TO BE MADE. There the
        cluster is a small centred group, so the room around it IS the travel and
        the maths is scale-proof. Here the cluster is the whole record screen and
@@ -604,11 +609,13 @@
   window.protoMotion = {
     phys: PHYS,
     grid: GRID,
+    bounce: BOUNCE,
     set(key, value) {
       if (key in PHYS) PHYS[key] = +value
       else if (key === 'gridk') GRID.k = +value
       else if (key === 'gridcell') GRID.cell = +value
       else if (key === 'gridon') GRID.on = !!value
+      else if (key === 'bounceon') BOUNCE.on = !!value
       gridImage()
     },
   }
