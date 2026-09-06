@@ -472,7 +472,23 @@ if (!opts.rebuild) try {
     const recs = all.sort((a, b) => b.createdAt - a.createdAt)
     const cards = [...document.querySelectorAll('.takecard .takecard__when')]
     const fmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    cards.forEach((el, i) => { if (recs[i]) el.dataset.whenFull = fmt.format(new Date(recs[i].createdAt)) })
+    /* AND THE NAME THE FILE WOULD REALLY BE GIVEN. src/core/compose/fileName.ts
+       owns this rule — inout-DD-MM-YYYY-HHMMSS, day first, the take's own local
+       clock — and it is repeated here rather than imported because this runs in
+       the page. It has to come off the real createdAt: the card's own label is
+       a clock to the minute, and a placeholder built from that would be short a
+       field and would not be the name the app actually writes. */
+    const p = (n) => String(n).padStart(2, '0')
+    const stem = (t) => {
+      const d = new Date(t)
+      return p(d.getDate()) + '-' + p(d.getMonth() + 1) + '-' + d.getFullYear() +
+        '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds())
+    }
+    cards.forEach((el, i) => {
+      if (!recs[i]) return
+      el.dataset.whenFull = fmt.format(new Date(recs[i].createdAt))
+      el.dataset.autoName = 'inout-' + stem(recs[i].createdAt) + '.mp4'
+    })
     return cards.length
   })()`)
   log(`stamped the full date onto ${stamped} card(s)`)

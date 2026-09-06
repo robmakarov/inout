@@ -122,6 +122,27 @@
       const when = card.querySelector('.takecard__when')
       if (when && when.dataset.whenFull) when.textContent = when.dataset.whenFull
 
+      /* THE FILE HAS A NAME AND THE CARD SAYS IT. The take was a thing with a
+         date on it and no identity; the name is what you will look for in a
+         Downloads folder, so it goes first and everything else steps under it.
+         Empty means the app names it, and the placeholder is that name — the
+         real one, stamped off the take's own createdAt at capture time by the
+         rule in src/core/compose/fileName.ts, not a guess made from the clock
+         on the card. Type and it is yours; click away and it is kept. */
+      const body = card.querySelector('.takecard__body')
+      if (body && !body.querySelector('.takename')) {
+        const auto = (when && when.dataset.autoName) || ''
+        const inp = document.createElement('input')
+        inp.type = 'text'
+        inp.className = 'takename'
+        inp.spellcheck = false
+        inp.placeholder = auto
+        inp.setAttribute('aria-label', 'Name this file')
+        inp.title = auto ? `Named ${auto} unless you say otherwise` : 'Name this file'
+        card.dataset.autoName = auto
+        body.insertBefore(inp, body.firstChild)
+      }
+
       /* The inputs it used, as the chips in miniature — and on the SAME line as
          the date and the size, which is the order he named them in. */
       const kinds = card.querySelector('.takecard__kinds')
@@ -328,7 +349,10 @@
       const q = (input.value || '').trim().toLowerCase()
       const cards = [...takes.querySelectorAll('.takecard')]
       for (const c of cards) {
-        const hay = (c.textContent || '').toLowerCase()
+        /* a name you typed lives in a value, not in the text, so the search has
+           to be told about it — and the one the app would give it too */
+        const nm = c.querySelector('.takename')
+        const hay = ((c.textContent || '') + ' ' + (nm ? nm.value + ' ' + nm.placeholder : '')).toLowerCase()
         const kinds = [...c.querySelectorAll('.kind')].map((k) => k.textContent.trim().toLowerCase())
         const okQ = !q || hay.includes(q)
         const okF = state.filter === 'all' || kinds.some((k) => k === state.filter)
@@ -493,6 +517,54 @@
     if (canScroll(list)) return list
     for (let n = el; n && n !== document.body; n = n.parentElement) if (canScroll(n)) return n
     return list || el
+  }
+
+  /* ---------- naming a file -----------------------------------------------
+     Click away to save, which is the only rule the field has. Enter is the same
+     thing with the keyboard, Escape puts back what was there, and emptying it
+     hands the name back to the app — the placeholder returns and the download
+     goes out under it again. Delegated on the list, so a take added later gets
+     the behaviour without being wired for it. */
+  function naming(root) {
+    const takes = root.querySelector('.takes')
+    if (!takes || takes.dataset.dzName) return
+    takes.dataset.dzName = '1'
+
+    const commit = (inp) => {
+      const card = inp.closest('.takecard')
+      if (!card) return
+      const given = inp.value.trim()
+      inp.value = given
+      if (given) card.dataset.rename = given
+      else delete card.dataset.rename
+      /* the promise the field makes has to be visible somewhere, and the place
+         it is kept is the button that would honour it */
+      const name = given || card.dataset.autoName || ''
+      const dl = card.querySelector('.cardtools [title^="Download"], .cardtools [data-dl]')
+      if (dl) {
+        /* keep what the button said before this field ever touched it, so
+           emptying the name puts the button back rather than leaving it
+           promising a name that is no longer anywhere on the card */
+        if (!dl.dataset.dlBase) dl.dataset.dlBase = dl.title || 'Download'
+        dl.dataset.dl = '1'
+        dl.title = name ? `Download — saves as ${name}` : dl.dataset.dlBase
+        dl.setAttribute('aria-label', name ? `Download ${name}` : dl.dataset.dlBase)
+      }
+    }
+    takes.addEventListener('focusin', (e) => {
+      const inp = e.target.closest('.takename')
+      if (inp) inp.dataset.was = inp.value
+    })
+    takes.addEventListener('focusout', (e) => {
+      const inp = e.target.closest('.takename')
+      if (inp) commit(inp)
+    })
+    takes.addEventListener('keydown', (e) => {
+      const inp = e.target.closest('.takename')
+      if (!inp) return
+      if (e.key === 'Enter') { e.preventDefault(); inp.blur() }
+      else if (e.key === 'Escape') { inp.value = inp.dataset.was || ''; inp.blur() }
+    })
   }
 
   function picking(root) {
@@ -833,6 +905,7 @@
     motion(root)
     head(root)
     account(root)
+    naming(root)
     picking(root)
     rail(root)
   }
