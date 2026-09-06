@@ -43,19 +43,24 @@ const OUT = join(HERE, '..', 'proto', 'app.html')
 const FRAME = { w: 1040, h: 660 }
 
 /**
- * THE TAKE IS 14 SECONDS AND THAT IS NOT A ROUND NUMBER. A 4 s synthetic take
- * on this rig comes back RED — "screen was requested and never delivered a
- * byte · camera ... never delivered a byte" — and the editor then opens on
- * "Missing from this take: Screen, Camera", which is an error surface, not the
- * app. The same drive at 14 s reports GREEN, 13 of 13 dimensions inside band,
- * with every input connected. So the length is load-bearing, and the check
- * below refuses to freeze a take that came up missing a channel either way.
+ * THE MAIN TAKE IS 14 SECONDS SO ITS TIMELINE HAS SOMETHING TO SHOW — not
+ * because short takes are unsafe. Takes made by this rig did come back RED
+ * ("screen was requested and never delivered a byte") three times, and that was
+ * first written up here as a length threshold; `scripts/shorttake.mjs` then put
+ * 17 takes against it — real capture and synthetic, 4 s and 14 s, screen-only
+ * and all four inputs — and lost nothing. It is contention, not length. The
+ * check below stands either way: a take short of a channel is discarded and
+ * recorded again, so an error banner can never be frozen into the proto.
  */
-const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000 }
+const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000, takes: 3 }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6).replace(/\/$/, '')
   else if (a === '--headed') opts.headed = true
   else if (a.startsWith('--take=')) opts.take = Number(a.slice(7))
+  // HOW MANY TAKES END UP IN THE LIST. The main screen is the takes list, and a
+  // list with one card is not what the screen looks like in use. The extra ones
+  // are shorter so the cards differ in length the way real ones do.
+  else if (a.startsWith('--takes=')) opts.takes = Number(a.slice(8))
   else {
     console.error(`proto-app: unknown flag ${a}`)
     process.exit(1)
@@ -92,6 +97,15 @@ window.__proto = {
     }
     const cans = [...root.querySelectorAll('canvas')].map((c) => paint(c, c.width, c.height, (g) => g.drawImage(c, 0, 0)))
     const vids = [...root.querySelectorAll('video')].map((v) => paint(v, v.videoWidth, v.videoHeight, (g) => g.drawImage(v, 0, 0)))
+    /* AND THE IMAGES, because a take card's thumbnail is an <img> on a blob: URL
+       (TakesList.tsx) and a blob dies with the page that made it — the first
+       main-screen shot had three broken-image boxes where the previews go. Only
+       ones that are NOT already data: URLs, and only when they have decoded. */
+    const imgs = [...root.querySelectorAll('img')].map((im) =>
+      (im.getAttribute('src') || '').startsWith('data:') || !im.naturalWidth
+        ? null
+        : paint(im, im.naturalWidth, im.naturalHeight, (g) => g.drawImage(im, 0, 0)),
+    )
     const clone = root.cloneNode(true)
     const swap = (el, src) => {
       const img = document.createElement('img')
@@ -104,6 +118,7 @@ window.__proto = {
     }
     ;[...clone.querySelectorAll('canvas')].forEach((c, i) => swap(c, cans[i]))
     ;[...clone.querySelectorAll('video')].forEach((v, i) => swap(v, vids[i]))
+    ;[...clone.querySelectorAll('img')].forEach((im, i) => { if (imgs[i]) im.setAttribute('src', imgs[i]) })
     // the export dock is a fixed overlay that may live outside the app root
     const dock = document.querySelector('.xdock')
     const extra = dock && !root.contains(dock) ? dock.outerHTML : ''
@@ -130,13 +145,19 @@ window.__proto = {
 }
 `
 
-/* ---------- the states the app really has ---------- */
+/* ---------- the states the app really has ----------
+   MAIN IS FIRST AND IT HAS TAKES ON IT. The record screen renders the takes
+   list whenever nothing is recording (CaptureScreen.tsx: `{!session && !arming
+   && <TakesList />}`), so the empty screen is only ever the first run — landing
+   the proto on it showed the app as nobody sees it after their first minute.
+   The empty one is kept, as its own state, because a first run is real too. */
 const STATES = [
-  { id: 'idle', label: 'Idle', note: 'every input on, nothing recorded yet' },
+  { id: 'main', label: 'Main', note: 'the record screen as it is after a few takes — the kept takes are on it' },
   { id: 'recording', label: 'Recording', note: 'mid-take, the timer running' },
   { id: 'editor', label: 'Editor', note: 'the take, its timeline and its tools' },
   { id: 'exporting', label: 'Exporting', note: 'the export dock, mid-render' },
   { id: 'saved', label: 'Saved', note: 'the finished file and where it can go' },
+  { id: 'firstrun', label: 'First run', note: 'the record screen before anything has been recorded' },
 ]
 
 const bin = resolveChrome()
@@ -169,62 +190,128 @@ try {
     await sleep(400)
   }
 
-  await load()
-  css = await evaluate('window.__proto.css()')
-  log(`stylesheet: ${(css.length / 1024).toFixed(0)} KB`)
-  shots.idle = await evaluate('window.__proto.snap()')
-  log('idle captured')
+  /* BACK TO THE RECORD SCREEN THE WAY A PERSON GOES BACK, and the middle step is
+     the reason a straight click on the chevron never returned: the back button
+     opens "Leave this recording?" (EditorScreen.tsx), whose KEEP button is what
+     resets to capture with the take kept on disk. Discard would delete it, and
+     the takes list is the whole point of the main screen. */
+  const backToCapture = async () => {
+    await evaluate(`document.querySelector('.transport__back').click()`)
+    if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.dialog'), 10000)`, 15_000))) {
+      throw new Error('the back button did not raise the leave-this-recording dialog')
+    }
+    await evaluate(`(() => {
+      const keep = [...document.querySelectorAll('.dialog__actions button')].find((b) => /keep/i.test(b.textContent || ''))
+      if (!keep) throw new Error('no Keep button in the dialog')
+      keep.click()
+    })()`)
+    if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.recbtn'), 20000)`, 25_000))) {
+      throw new Error('Keep did not return to the record screen')
+    }
+    await sleep(1200)
+  }
 
-  /* ONE TAKE, AND IT HAS TO BE A WHOLE ONE. A synthetic take on this rig comes
-     back missing its two video channels perhaps one run in three ("screen was
-     requested and never delivered a byte") — a real intermittency of the rig,
-     not a state of the app. The editor then opens on an error banner, and a
-     proto that freezes that is a proto that says the app is broken. So the
-     take is checked and, when it is short of a channel, thrown away and
-     recorded again from a fresh load. Nothing incomplete is ever written. */
+  /* ONE TAKE, AND IT HAS TO BE A WHOLE ONE. A take on this rig comes back
+     missing its two video channels perhaps one run in four ("screen was
+     requested and never delivered a byte"). It did not reproduce in 17 takes
+     under a quiet machine (scripts/shorttake.mjs, BACKLOG), so it is contention
+     rather than length — but it happens while THIS rig runs, the editor then
+     opens on an error banner, and a proto that freezes that is a proto that
+     says the app is broken. So every take is checked and, when it is short of a
+     channel, thrown away and recorded again. Nothing incomplete is written. */
   const ATTEMPTS = 4
-  let took = false
-  for (let attempt = 1; attempt <= ATTEMPTS && !took; attempt++) {
-    if (attempt > 1) {
-      log(`take ${attempt - 1} came back short of a channel — recording another`)
-      await load()
-    }
-    await evaluate(`document.querySelector('.recbtn').click()`)
-    if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.recbtn__inner--stop'), 30000)`, 40_000))) {
-      throw new Error('the record press never reached a running take')
-    }
-    await sleep(opts.take)
-    const rolling = await evaluate('window.__proto.snap()')
-
-    await evaluate(`document.querySelector('.recbtn').click()`)
-    if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.editor'), 60000)`, 70_000))) {
-      throw new Error('stop never reached the editor')
-    }
-    await sleep(2500)
-    const missing = await evaluate(`[...document.querySelectorAll('.editor__missing')].map((e) => e.textContent)`)
-    if (missing.length) {
+  const recordTake = async (ms) => {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      await evaluate(`document.querySelector('.recbtn').click()`)
+      if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.recbtn__inner--stop'), 30000)`, 40_000))) {
+        throw new Error('the record press never reached a running take')
+      }
+      await sleep(ms)
+      const rolling = await evaluate('window.__proto.snap()')
+      await evaluate(`document.querySelector('.recbtn').click()`)
+      if (!(await evaluate(`window.__proto.wait(() => !!document.querySelector('.editor'), 60000)`, 70_000))) {
+        throw new Error('stop never reached the editor')
+      }
+      await sleep(2500)
+      const missing = await evaluate(`[...document.querySelectorAll('.editor__missing')].map((e) => e.textContent)`)
+      if (!missing.length) return { rolling }
       if (attempt === ATTEMPTS) {
         throw new Error(`${ATTEMPTS} takes in a row came back incomplete, so nothing was written:\n  ${missing.join('\n  ')}`)
       }
-      continue
+      log(`  a take came back short of a channel (${missing.join(' ')}) — discarding it and recording another`)
+      // Discard, so a broken take never reaches the list the main screen shows.
+      await evaluate(`document.querySelector('.transport__back').click()`)
+      await evaluate(`window.__proto.wait(() => !!document.querySelector('.dialog'), 10000)`, 15_000)
+      await evaluate(`(() => {
+        const d = [...document.querySelectorAll('.dialog__actions button')].find((b) => /discard/i.test(b.textContent || ''))
+        if (d) d.click()
+      })()`)
+      await evaluate(`window.__proto.wait(() => !!document.querySelector('.recbtn'), 30000)`, 35_000)
+      await sleep(1500)
     }
-    /* THE PLAYHEAD IS MOVED OFF ZERO BEFORE THE SHOT, and that is not cosmetic
-       licence. The editor parks at 0, which is inside the arming hole — the
-       video surfaces carry `.is-hidden` there and the stage is black
-       (Player.tsx, HEAD_GRACE_MS). A still of that says the app shows nothing.
-       Play, pause a couple of seconds in, and the shot is the editor as it is
-       actually used. */
-    await evaluate(`document.querySelector('.transport__play').click()`)
-    await sleep(2200)
-    await evaluate(`(() => { const b = document.querySelector('.transport__play'); if (b && b.getAttribute('aria-label') === 'Pause') b.click() })()`)
-    await sleep(900)
-    if (await evaluate(`!!document.querySelector('.stage__screen.is-hidden')`)) {
-      log('WARNING: the stage is still hidden — the editor shot will be black')
-    }
-    shots.recording = rolling
-    shots.editor = await evaluate('window.__proto.snap()')
-    took = true
-    log('recording and editor captured — every channel delivered, playhead off zero')
+    throw new Error('unreachable')
+  }
+
+  await load()
+  css = await evaluate('window.__proto.css()')
+  log(`stylesheet: ${(css.length / 1024).toFixed(0)} KB`)
+  shots.firstrun = await evaluate('window.__proto.snap()')
+  log('first run captured — the record screen with no takes yet')
+
+  /* The filler takes come FIRST and are shorter, so by the time the main take
+     is made the list already has cards of different lengths on it — which is
+     what the record screen looks like to anyone who has used the app twice. */
+  const fillers = Math.max(0, opts.takes - 1)
+  for (let i = 0; i < fillers; i++) {
+    const ms = 6000 + i * 3000
+    await recordTake(ms)
+    await backToCapture()
+    log(`take ${i + 1} of ${opts.takes} kept (${(ms / 1000).toFixed(0)} s)`)
+  }
+
+  /* THE MAIN TAKE — the one the editor, the export and the saved strip are all
+     shots of. It is the longest, so its timeline has something to show. */
+  const { rolling } = await recordTake(opts.take)
+  /* THE PLAYHEAD IS MOVED OFF ZERO BEFORE THE SHOT, and that is not cosmetic
+     licence. The editor parks at 0, which is inside the arming hole — the video
+     surfaces carry `.is-hidden` there and the stage is black (Player.tsx,
+     HEAD_GRACE_MS). A still of that says the app shows nothing. Play, pause a
+     couple of seconds in, and the shot is the editor as it is actually used. */
+  await evaluate(`document.querySelector('.transport__play').click()`)
+  await sleep(2200)
+  await evaluate(`(() => { const b = document.querySelector('.transport__play'); if (b && b.getAttribute('aria-label') === 'Pause') b.click() })()`)
+  await sleep(900)
+  if (await evaluate(`!!document.querySelector('.stage__screen.is-hidden')`)) {
+    log('WARNING: the stage is still hidden — the editor shot will be black')
+  }
+  shots.recording = rolling
+  shots.editor = await evaluate('window.__proto.snap()')
+  log('recording and editor captured — every channel delivered, playhead off zero')
+
+  /* AN EXPORT THAT ACTUALLY RENDERS, so the Exporting state is not a coin toss.
+     At the take's own step the press is served by the at-stop pre-render and is
+     over in a frame or two — real, and the reason two runs of this script came
+     back with no progress strip at all. A step ABOVE the take is not offered
+     (a 1080p take cannot be upscaled, and the higher labels are locked), so the
+     lever is a step BELOW: asking for a smaller file is the ordinary reason a
+     person changes it, the copy path cannot serve a different geometry, and the
+     render that follows is a real render of the real take. The picture does not
+     change, so the Exporting and Saved shots stay the same take the Editor shot
+     is of. If no other step is offered the press goes in at the default and the
+     state is simply absent, as it was. */
+  const restep = await evaluate(`(() => {
+    const labels = [...document.querySelectorAll('.editor .qs__label')]
+    if (!labels.length) return null
+    const on = labels.findIndex((l) => l.className.includes('qs__label--on'))
+    if (on <= 0) return null
+    const pick = labels[on - 1]
+    if (!pick || pick.disabled || pick.className.includes('qs__label--locked')) return null
+    pick.click()
+    return (pick.textContent || '').trim().split('~')[0]
+  })()`)
+  if (restep) {
+    await sleep(1200)
+    log(`export asked for ${restep}, a step below the take — so the press renders instead of being served by the pre-render`)
   }
 
   // the export control, found by its own text rather than a class that moves
@@ -262,6 +349,31 @@ try {
       log('saved captured')
     } else log('WARNING: the export never finished')
   }
+
+  /* AND FINALLY THE MAIN SCREEN, which is only itself once there are takes on
+     it. Every take made above is kept, so this is the record screen carrying
+     the real cards — the state the app is in every time it is opened after the
+     first. It is captured LAST because it needs the takes to exist. */
+  await backToCapture()
+  const cards = await evaluate(`document.querySelectorAll('.takecard').length`)
+  if (!cards) throw new Error('the record screen came back with no take cards on it, so the main shot would be the empty one')
+  // The thumbnails are decoded per card after the list mounts; snapping before
+  // they land freezes three empty boxes.
+  const thumbs = await evaluate(
+    `window.__proto.wait(() => {
+      const t = [...document.querySelectorAll('.takecard__thumb img')]
+      return t.length >= ${cards} && t.every((i) => i.complete && i.naturalWidth > 0)
+    }, 20000)`,
+    25_000,
+  )
+  if (!thumbs) log('WARNING: not every take card decoded a thumbnail — some previews will be empty')
+  // The export strip is a real surface but it belongs to the SAVED shot; left
+  // up, the main screen reads as the moment after an export rather than as the
+  // screen the app opens on. Dismiss it the way its own × does.
+  await evaluate(`document.querySelectorAll('.xstrip__x').forEach((b) => b.click())`)
+  await sleep(700)
+  shots.main = await evaluate('window.__proto.snap()')
+  log(`main captured — the record screen with ${cards} take card(s) on it${thumbs ? ', thumbnails decoded' : ''}`)
 } finally {
   if (session) {
     try { await quitChrome(session) } catch { /* already gone */ }
