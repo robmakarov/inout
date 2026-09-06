@@ -159,7 +159,17 @@
 
     headEl.innerHTML = `
       <div class="bar2">
-        <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
+        <!-- FILTER AND SORT NARROW THE LIST, WHICH IS WHAT THE SEARCH DOES,
+             so they sit with it rather than in the row below. That leaves the
+             row below to say one thing only: what is selected, or how much
+             there is. -->
+        <div class="findrow">
+          <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
+          <span class="normx">
+            <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
+            <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
+          </span>
+        </div>
         <div class="rightgrp">
           <div class="where" role="tablist">
             <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
@@ -177,13 +187,10 @@
           <button class="tool2 tool2--pick" data-t="pick" aria-pressed="false" title="Select takes">
             <span class="pick">${ic('check')}</span>
           </button>
+          <span class="totalx"><b class="total__n">0</b><span class="total__w">takes</span></span>
           <span class="selx">
             <button class="tool2 tool2--txt" data-p="all">All</button>
             <button class="tool2 tool2--txt" data-p="clear">Clear</button>
-          </span>
-          <span class="normx">
-            <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
-            <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
           </span>
         </div>
         ${
@@ -203,11 +210,15 @@
     if (!takes.querySelector('.picked')) {
       const p = document.createElement('div')
       p.className = 'picked'
+      /* icon-only, because by then the row already carries three words and a
+         number, and these two are the same KIND of press as the icon group in
+         each card's corner — they keep their name in the tooltip and the label */
       p.innerHTML = `<span class="picked__n">0</span> selected
-        <button data-p="save">${ic('download')}Download</button>
-        <button data-p="del" class="is-danger">${ic('trash')}Delete</button>`
+        <button data-p="save" title="Download" aria-label="Download">${ic('download')}</button>
+        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${ic('trash')}</button>`
       headEl.querySelector('.tools2').appendChild(p)
     }
+    total(takes)
     wireHead(root, takes, headEl)
   }
 
@@ -253,6 +264,7 @@
         big: (c) => -parseSize(c),
       }[state.sort]
       ;[...cards].sort((a, b) => key(a) - key(b)).forEach((c) => list.appendChild(c))
+      total(takes)
     }
     const parseSize = (c) => {
       const t = (c.querySelector('.takecard__size')?.textContent || '').trim()
@@ -360,6 +372,20 @@
     const n = takes.querySelectorAll('.takecard.is-picked').length
     const el = takes.querySelector('.picked__n')
     if (el) el.textContent = String(n)
+  }
+  /* WITH NOTHING SELECTED THE ROW SAYS HOW MUCH THERE IS. It was empty next to
+     the checkbox, and the number belongs there: it is the same row that counts
+     the selection, counting the whole list instead. When a search or a filter
+     is narrowing the list it says both, because "3 takes" while eleven are put
+     away is a lie the storage bar underneath would contradict. */
+  function total(takes) {
+    const n = takes.querySelector('.total__n')
+    const w = takes.querySelector('.total__w')
+    if (!n || !w) return
+    const all = takes.querySelectorAll('.takecard').length
+    const shown = [...takes.querySelectorAll('.takecard')].filter((c) => !c.hidden).length
+    n.textContent = shown === all ? String(all) : `${shown} of ${all}`
+    w.textContent = all === 1 && shown === all ? 'take' : 'takes'
   }
   /* THE LIST IS INSIDE .takes, NOT ABOVE IT. This walked only upward, found
      nothing that scrolls, and fell back to `el.closest('.takes__list')` — which

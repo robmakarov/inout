@@ -324,7 +324,8 @@
   align-items: center;
   gap: 8px 14px;
 }
-.app-proto .find { grid-area: find; }
+/* the search field and the two tools that do the same job to the list */
+.app-proto .findrow { grid-area: find; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .app-proto .rightgrp { grid-area: right; display: flex; align-items: center; gap: 8px; }
 .app-proto .tools2 { grid-area: tools; }
 .app-proto .room { grid-area: room; }
@@ -389,18 +390,32 @@
     transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .app-proto .takes.is-picking .selx { max-width: 140px; opacity: 1; transform: translateX(0); }
-/* and filter and sort go out the same way as they come in: you are not
-   narrowing the list while you are picking off it, and the row is 404 wide */
-.app-proto .normx {
+/* filter and sort live beside the search now and stay put in select mode: they
+   are how you decide WHICH takes are in front of you, and narrowing the list
+   and then pressing All is the reason All takes only what is showing. */
+.app-proto .normx { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+
+/* WITH NOTHING SELECTED, THE SAME PLACE COUNTS THE WHOLE LIST. It rides the
+   drawer inverted — out when All and Clear come in — so the row always says
+   one thing and the two never sit there together. */
+.app-proto .totalx {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
+  margin-left: 8px;
   overflow: hidden;
-  max-width: 140px;
+  max-width: 200px;
   opacity: 1;
+  white-space: nowrap;
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
   transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.app-proto .takes.is-picking .normx { max-width: 0; opacity: 0; }
+.app-proto .totalx .total__n { color: var(--text-dim); font-weight: 600; }
+.app-proto .takes.is-picking .totalx { max-width: 0; opacity: 0; margin-left: 0; }
 .app-proto .tool2--txt {
   width: auto;
   padding: 0 9px;
@@ -414,7 +429,7 @@
    IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
    control nobody presses first the biggest thing above the takes; capped, it is
    a field the size of what you type into it and the bar reads as a bar. */
-.app-proto .find { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--surface-2); border-radius: 8px; max-width: 220px; }
+.app-proto .find { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--surface-2); border-radius: 8px; flex: 0 1 220px; max-width: 220px; }
 .app-proto .find svg { width: 14px; height: 14px; color: var(--text-faint); flex: none; }
 .app-proto .find input {
   flex: 1;
@@ -536,17 +551,17 @@
 }
 .app-proto .takes.is-picking .picked { max-width: 300px; opacity: 1; }
 .app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
+/* icon-only, and the same 28 square as every other tool in this row */
 .app-proto .picked button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  display: grid;
+  place-items: center;
+  width: 28px;
   height: 28px;
   margin-left: 2px;
-  padding: 0 9px;
+  padding: 0;
   border-radius: 7px;
   background: none;
   color: var(--text-faint);
-  font-size: 12px;
   transition: color 120ms, background 120ms;
 }
 .app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
