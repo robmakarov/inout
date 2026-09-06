@@ -431,8 +431,16 @@
     takes.addEventListener('pointerdown', (e) => {
       const card = e.target.closest('.takecard')
       if (!card) return
+      /* HOLD ANYWHERE ON THE ROW TO ENTER SELECT MODE. The source hangs this on
+         the checkbox rail (app.js:8547, checkboxZone mousedown) and can, because
+         its rail is on every row all the time. Ours is not — the boxes slide in
+         when the mode turns on, which is the point of them — so there is no rail
+         to hold and the row itself is the grab. Every control on the card is
+         still excluded, so the only thing a hold can land on is the card's own
+         text and the empty space beside it; a press on the picture opens the
+         take exactly as before. This guard used to demand the lane and the lane
+         was display:none, so the gesture could never fire at all. */
       const inLane = !!e.target.closest('.takecard__pick')
-      if (!inLane && !takes.classList.contains('is-picking')) return
       if (e.target.closest('button, a, input') && !inLane) return
 
       const startY = e.clientY
@@ -481,6 +489,10 @@
       }
       const timer = setTimeout(() => {
         st.armed = true
+        /* is-picking brings user-select:none with it, but only from here on —
+           the 200 ms before it belongs to the browser, and a hold that begins on
+           the date leaves that text highlighted behind the sweep. Drop it. */
+        try { window.getSelection()?.removeAllRanges() } catch (err) { /* not worth a throw */ }
         if (!takes.classList.contains('is-picking')) setPick(takes, true)
         st.mode = card.classList.contains('is-picked') ? 'deselect' : 'select'
         st.from = new Map()
