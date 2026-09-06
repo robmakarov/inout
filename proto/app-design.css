@@ -183,11 +183,18 @@
   transition: none;
   transform: translateX(var(--slide-from, 0px));
 }
+/* AND ITS MARGIN IS SPENT ALREADY. The ghost is pinned at the list's own
+   offsetTop — the top of its BORDER box, below the gap the feed keeps under the
+   head — but the clone inside it is still a .takes__list carrying that same
+   18px margin-top, so it drew itself 18px further down again and every card
+   dropped a row-gap the instant the swap began (measured: 339 → 357). The
+   travel is sideways and nothing else moves. */
 .app-proto .listghost .takes__list,
 .app-proto .listghost .cloud-empty {
   transition: none;
   transform: none;
   height: auto;
+  margin: 0;
 }
 /* and nothing leans out of the column while it travels */
 .app-proto .takes.is-clip { overflow: hidden; }
