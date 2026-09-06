@@ -617,7 +617,12 @@
 .app-proto .tool2--pick[aria-pressed='true'] { background: none; }
 .app-proto .tool2--pick:hover { background: var(--surface-2); }
 .app-proto .tool2--pick:hover .pick { border-color: var(--text-faint); }
-.app-proto .tool2--pick[aria-pressed='true'] .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* AND IT IS NOT BLUE (Robert, 2026-09-06: "select mode button make no blue fill
+   for checkbox"). Blue in this app means a take is picked — the cards say it.
+   The mode toggle is not a picked take, it is a switch that is on, so it says
+   so in the app's own white: the tick appears and the box comes up out of the
+   grey, and nothing on this row competes with the selection colour. */
+.app-proto .tool2--pick[aria-pressed='true'] .pick { background: transparent; border-color: var(--text); color: var(--text); }
 
 /* ALL AND CLEAR SLIDE OUT FROM BEHIND IT — over a max-width the code MEASURES,
    which is the only version of this that moves evenly.
@@ -675,14 +680,7 @@
 .app-proto .totalx .picked__sl { font-style: normal; margin: 0 1px; }
 .app-proto .totalx .picked__w { margin-left: 4px; }
 
-.app-proto .tool2--txt {
-  width: auto;
-  padding: 0 9px;
-  font-family: var(--font);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-}
+/* All and Clear are dressed with the other head buttons, at the end of this file */
 
 /* the search field is always there now: it is the first row of the left group.
    IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
@@ -1002,14 +1000,21 @@
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
   transform: translateY(100%);
   opacity: 0;
   pointer-events: none;
   transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
 }
 .app-proto .takes.is-watch .watchbar { transform: none; opacity: 1; pointer-events: auto; }
+.app-proto .wrow { display: flex; align-items: center; gap: 10px; }
+/* the take's own facts, in the card's order and the card's clothes, under the
+   name they belong to */
+.app-proto .wmeta { display: flex; align-items: center; gap: 6px; }
+.app-proto .wmeta .takecard__step { margin-left: 0; text-transform: none; }
 /* the name keeps the card's own field — same hug, same rule under it when it
    has focus — and takes the room the buttons leave */
 /* the name takes what the buttons leave and no less than a grip of it: the row
@@ -1033,7 +1038,8 @@
    fucking consistent", then "replace selected files button group with same
    style buttons"). */
 .app-proto .wbtn,
-.app-proto .picked button {
+.app-proto .picked button,
+.app-proto .tool2--txt {
   display: inline-flex;
   align-items: center;
   height: var(--dz-h);
@@ -1053,10 +1059,15 @@
 }
 .app-proto .wbtn svg,
 .app-proto .picked button svg { width: 14px; height: 14px; flex: none; }
+/* All and Clear are the same control on a different noun, so they are the same
+   button too (Robert, 2026-09-06: "yes make all clear same style too") — no
+   icon, because what they do to a selection has no picture. */
+.app-proto .tool2--txt { width: auto; }
 .app-proto .wbtn:disabled,
 .app-proto .picked button:disabled { color: var(--dz-tertiary); border-color: var(--surface-2); }
 .app-proto .wbtn:hover:not(:disabled),
-.app-proto .picked button:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); }
+.app-proto .picked button:hover:not(:disabled),
+.app-proto .tool2--txt:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); background: transparent; }
 /* the bin is the one that answers in red, in both rows */
 .app-proto .wbtn--del:hover:not(:disabled),
 .app-proto .picked button.is-danger:hover:not(:disabled) {
@@ -1081,3 +1092,22 @@
 }
 .app-proto .watchx:hover { border-color: var(--text-faint); color: var(--text); }
 .app-proto .watchx svg { width: 15px; height: 15px; }
+
+
+/* ---------- 10. the input chips answer the pointer -------------------------
+   Robert, 2026-09-06: "make corners for input chips same radius as buttons
+   corners" and "add hover states for input chips". The chips were the app's
+   full pill in a frame where every other control now turns a 7px corner, and
+   the only thing they did under the pointer was the app's own grey wash, which
+   an ON chip (accent on accent-soft) never shows at all. So: the same corner as
+   the buttons, and a hover for each state — an off chip comes up out of the
+   grey, an on chip deepens its own blue rather than changing colour, because
+   hovering a thing that is on must not look like turning it off. */
+.app-proto .chip { border-radius: 7px; }
+/* the unavailable chip keeps the app's own red answer — that hover is a warning
+   and not a hover state, so it is left alone */
+.app-proto .chip:hover:not(:disabled):not(.chip--unavailable) { background: var(--surface-3); color: var(--text); }
+.app-proto .chip[aria-pressed='true']:hover:not(:disabled):not(.chip--unavailable) {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+}

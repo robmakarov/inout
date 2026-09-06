@@ -308,12 +308,18 @@
     const headR = headEl.getBoundingClientRect()
     const bar = root.querySelector('.controlbar')
     const barTop = bar ? bar.getBoundingClientRect().top : capR.bottom
-    const pad = 14
-    const top = headR.bottom + pad
-    const room = Math.max(140, barTop - pad - top)
+    /* CLOSE UNDER THE BAR IT BELONGS TO, CLEAR OF THE ONE IT DOES NOT (Robert,
+       2026-09-06). The player and the head are one object — the bar names the
+       take the picture is showing — so they sit together; the control bar is
+       the app's own furniture and wants the room. */
+    const padTop = 8
+    const padBottom = 30
+    const padSide = 14
+    const top = headR.bottom + padTop
+    const room = Math.max(140, barTop - padBottom - top)
     let h = room
     let w = h * ratio
-    const maxW = capR.width - 2 * pad
+    const maxW = capR.width - 2 * padSide
     if (w > maxW) {
       w = maxW
       h = w / ratio
@@ -373,6 +379,8 @@
 
     const bar = document.createElement('div')
     bar.className = 'watchbar'
+    const row = document.createElement('div')
+    row.className = 'wrow'
 
     /* the name is a copy of the card's field, and what you type in it is typed
        into the card's: one name, two places to reach it */
@@ -385,7 +393,7 @@
         src.value = inp.value
         src.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
       })
-      bar.appendChild(inp)
+      row.appendChild(inp)
     }
 
     const group = document.createElement('div')
@@ -411,7 +419,7 @@
     for (const b of card.querySelectorAll('.takecard__actions .takecard__btn')) group.appendChild(mk(b))
     const del = card.querySelector('.cardtools .takecard__del')
     if (del) group.appendChild(mk(del))
-    bar.appendChild(group)
+    row.appendChild(group)
 
     const x = document.createElement('button')
     x.type = 'button'
@@ -419,7 +427,22 @@
     x.title = 'Back to the list'
     x.setAttribute('aria-label', 'Back to the list')
     x.innerHTML = dic('close')
-    bar.appendChild(x)
+    row.appendChild(x)
+    bar.appendChild(row)
+
+    /* AND THE TAKE'S OWN FACTS UNDER ITS NAME (Robert, 2026-09-06). The card is
+       behind the player and cannot be read, so the three things its last line
+       says — how good, how big, when — come up here in the same order and the
+       same clothes. Cloned, not moved: the card still needs them when the
+       picture goes home. A row of its own, because the controls take the width
+       of the first one and a fact squeezed to eighty pixels is not a fact. */
+    const meta = document.createElement('div')
+    meta.className = 'wmeta'
+    for (const sel of ['.takecard__step', '.takecard__size', '.takecard__when']) {
+      const el = card.querySelector('.takecard__top ' + sel)
+      if (el) meta.appendChild(el.cloneNode(true))
+    }
+    if (meta.children.length) bar.appendChild(meta)
 
     headEl.appendChild(bar)
   }
