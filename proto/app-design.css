@@ -170,11 +170,24 @@
 }
 /* the frame it starts from: set by swapList, a full width right for Cloud and
    left for Device. No transition on this class — it is the jump to the starting
-   line, and the movement is what happens when it comes back off. */
-.app-proto .takes.is-from .takes__list,
-.app-proto .takes.is-from .cloud-empty {
+   line, and the movement is what happens when it comes back off.
+
+   DIRECT CHILDREN ONLY, and the ghost's copy is nailed down besides. The ghost
+   holds a CLONE of the list, which is also a .takes__list inside .app-proto —
+   so it matched this rule too and slid in on top of the ghost's own slide out.
+   The two transforms composed, the departing cards ended up 148 px inside the
+   arriving feed instead of ahead of it, and the whole thing read as one feed
+   landing on the other rather than pushing it. */
+.app-proto .takes.is-from > .takes__list,
+.app-proto .takes.is-from > .cloud-empty {
   transition: none;
   transform: translateX(var(--slide-from, 0px));
+}
+.app-proto .listghost .takes__list,
+.app-proto .listghost .cloud-empty {
+  transition: none;
+  transform: none;
+  height: auto;
 }
 /* and nothing leans out of the column while it travels */
 .app-proto .takes.is-clip { overflow: hidden; }
