@@ -131,28 +131,33 @@
          on the card. Type and it is yours; click away and it is kept. */
       const body = card.querySelector('.takecard__body')
       if (body && !body.querySelector('.takename')) {
-        const auto = (when && when.dataset.autoName) || ''
+        /* NO EXTENSION IN THE FIELD. What you name is the file, not the
+           container it is written in — .mp4 is the app's business, the way it
+           is Finder's when you rename something there. The stem is what shows;
+           the extension is put back wherever a real filename is meant. */
+        const auto = ((when && when.dataset.autoName) || '').replace(/\.[a-z0-9]+$/i, '')
+        const ext = (((when && when.dataset.autoName) || '').match(/\.[a-z0-9]+$/i) || ['.mp4'])[0]
         const inp = document.createElement('input')
         inp.type = 'text'
         inp.className = 'takename'
         inp.spellcheck = false
         inp.placeholder = auto
         inp.setAttribute('aria-label', 'Name this file')
-        inp.title = auto ? `Named ${auto} unless you say otherwise` : 'Name this file'
+        inp.title = auto ? `Named ${auto}${ext} unless you say otherwise` : 'Name this file'
         card.dataset.autoName = auto
+        card.dataset.ext = ext
         body.insertBefore(inp, body.firstChild)
       }
 
-      /* The inputs it used, as the chips in miniature — and on the SAME line as
-         the date and the size, which is the order he named them in. */
+      /* The inputs it used, as the chips in miniature — and ABOVE the date row
+         (Robert, 2026-09-06). What the take is MADE OF sits under its name; when
+         it was made and how big it came out are the footnote, so they read last. */
       const kinds = card.querySelector('.takecard__kinds')
       const top = card.querySelector('.takecard__top')
       if (kinds && !kinds.querySelector('.kind')) {
         const names = kinds.textContent.split('·').map((s) => s.trim()).filter(Boolean)
         kinds.innerHTML = names.map((n) => `<span class="kind">${ic(glyphFor(n))}${n}</span>`).join('')
-        const del = top?.querySelector('.takecard__del')
-        if (del) top.insertBefore(kinds, del)
-        else top?.appendChild(kinds)
+        if (top && top.parentElement) top.parentElement.insertBefore(kinds, top)
       }
 
       /* ONE ICON SET IN THE FRAME. The chips and the kind badges already wear
@@ -539,7 +544,8 @@
       else delete card.dataset.rename
       /* the promise the field makes has to be visible somewhere, and the place
          it is kept is the button that would honour it */
-      const name = given || card.dataset.autoName || ''
+      const stem = given || card.dataset.autoName || ''
+      const name = stem ? stem + (card.dataset.ext || '.mp4') : ''
       const dl = card.querySelector('.cardtools [title^="Download"], .cardtools [data-dl]')
       if (dl) {
         /* keep what the button said before this field ever touched it, so

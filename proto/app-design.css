@@ -258,15 +258,18 @@
   text-overflow: ellipsis;
   transition: border-color var(--dz-fast) var(--dz-ease), color var(--dz-fast) var(--dz-ease);
 }
-.app-proto .takename::placeholder { color: var(--text-dim); font-weight: 500; opacity: 1; }
-.app-proto .takecard:hover .takename::placeholder { color: var(--text); }
+/* A NAME THE APP CHOSE IS NOT A NAME YOU GAVE IT, and the colour is the whole
+   difference: tertiary while it is the app's, full text the moment it is
+   yours. Hover lifts it one step, so the row still answers the pointer. */
+.app-proto .takename::placeholder { color: var(--dz-tertiary); font-weight: 500; opacity: 1; }
+.app-proto .takecard:hover .takename::placeholder { color: var(--text-dim); }
 .app-proto .takename:focus { border-bottom-color: var(--accent); }
 /* while a selection is being made the row is not a text field */
 .app-proto .takes.is-picking .takename { pointer-events: none; }
 
 /* the top line reads: when it was taken, then how big it is — and with a name
    above it, it is the SECOND line now, so it steps down out of the way */
-.app-proto .takecard__top { gap: 8px; align-items: center; flex-wrap: wrap; }
+.app-proto .takecard__top { gap: 8px; align-items: baseline; flex-wrap: wrap; }
 /* the date is read, not scanned, so it takes the app's own text face rather than
    the condensed display one — Barlow is for labels */
 .app-proto .takecard__when {
@@ -285,7 +288,8 @@
 
 /* the inputs the take used, as the chips in miniature — same shape, same type,
    no colour of their own */
-.app-proto .takecard__kinds { display: flex; gap: 5px; flex-wrap: wrap; margin: 0 0 0 2px; }
+/* their own row, between the name and the date */
+.app-proto .takecard__kinds { display: flex; gap: 5px; flex-wrap: wrap; margin: 1px 0 0; }
 .app-proto .kind {
   display: inline-flex;
   align-items: center;
