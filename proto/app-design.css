@@ -122,17 +122,26 @@
    The shipping bar is a centred column — quality rail, then chips, then the
    record button under both. This puts the inputs and their quality on the left
    and the record button on the right, which is the order the hand works in:
-   choose what you are recording, then press. */
+   choose what you are recording, then press.
+
+   THE PAIR IS CENTRED IN THE BAR AND THE RAIL IS THE CHIPS' WIDTH. The left
+   column used to be 1fr, so it ate every pixel the record button did not: the
+   rail stretched to 476 over chips that measure 381, and the whole thing sat
+   hard against both edges of a 600 bar. Both columns are `auto` now and the
+   grid centres them; the rail is `width: 0; min-width: 100%` so it contributes
+   NOTHING to the column's intrinsic size — the chips alone decide how wide that
+   column is, and the rail then fills exactly it. */
 .app-proto .controlbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto auto;
   grid-template-areas: 'chips rec' 'qual rec';
   align-items: center;
+  justify-content: center;
   column-gap: 20px;
   row-gap: 10px;
 }
 .app-proto .controlbar .chips { grid-area: chips; justify-content: flex-start; }
-.app-proto .controlbar .qs { grid-area: qual; width: 100%; }
+.app-proto .controlbar .qs { grid-area: qual; width: 0; min-width: 100%; }
 .app-proto .controlbar .recbtn { grid-area: rec; margin: 0; }
 .app-proto .controlbar__hint { grid-area: qual; }
 /* the rail fills the left column rather than sitting centred in the screen */
@@ -629,8 +638,15 @@
    pinned to the right edge rather than drifting left inside a wider column */
 .app-proto .rightgrp { justify-content: flex-end; }
 .app-proto .room .swapv__a { align-self: center; width: 100%; }
-/* the group has to stay on one line when select mode doubles its contents */
-.app-proto .tools2 { min-width: 0; flex-wrap: nowrap; }
+/* THE COUNT BELONGS TO THE CHECKBOX, so it sits next to it. The row's own gap,
+   the collapsed drawer's gap and the count's margin were stacking to 16 px on
+   top of the button's own 6 of padding — the two read as unrelated things at
+   opposite ends of nothing. The row carries no gap of its own now; the spacing
+   lives on the items, so the drawer's share of it collapses when the drawer
+   does. Stays on one line when select mode doubles its contents. */
+.app-proto .tools2 { min-width: 0; flex-wrap: nowrap; gap: 0; }
+.app-proto .selx__in { margin-right: 4px; }
+.app-proto .totalx { margin-left: 2px; }
 
 /* ---------- 5. the quality rail ------------------------------------------- */
 /* the rail carries its own names now, so it is the thing that gets the width */
