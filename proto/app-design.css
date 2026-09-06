@@ -410,14 +410,18 @@
    and then pressing All is the reason All takes only what is showing. */
 .app-proto .normx { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 
-/* HOW MANY TAKES THERE ARE IS ALWAYS TRUE, so it is always on screen and it
-   never moves. All and Clear open BETWEEN it and the checkbox and push it
-   along; what you do with a selection opens on its other side. The number is
-   the fixed point of the row and the two drawers work either side of it. */
+/* ONE SLOT, TWO ANSWERS, ONE MOVEMENT. How many files there are is what this
+   says until something is picked; then how many of them is, and it arrives from
+   underneath while the first leaves through the top. Both children sit in the
+   same grid cell, so the slot is as wide as the wider of them and NOTHING in
+   the row shifts when they trade places — the swap is the only thing moving. */
+.app-proto .swapv { display: grid; align-items: center; overflow: hidden; }
+.app-proto .swapv > * { grid-area: 1 / 1; transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease); }
+.app-proto .swapv__b { transform: translateY(100%); opacity: 0; pointer-events: none; }
+.app-proto .takes.has-picked .swapv__a { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+.app-proto .takes.has-picked .swapv__b { transform: translateY(0); opacity: 1; pointer-events: auto; }
+
 .app-proto .totalx {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
   margin-left: 8px;
   white-space: nowrap;
   font-family: var(--font);
@@ -425,8 +429,13 @@
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-faint);
+  justify-items: start;
 }
-.app-proto .totalx .total__n { color: var(--text-dim); font-weight: 600; }
+.app-proto .totalx > * { display: inline-flex; align-items: baseline; gap: 4px; }
+.app-proto .totalx .total__n,
+.app-proto .totalx .picked__n { color: var(--text-dim); font-weight: 600; }
+.app-proto .totalx .swapv__b { gap: 0; color: var(--text-faint); }
+.app-proto .totalx .picked__sl { font-style: normal; margin: 0 1px; }
 
 .app-proto .tool2--txt {
   width: auto;
@@ -497,24 +506,31 @@
 .app-proto .cloud-empty { padding: 18px 0; text-align: center; }
 
 /* ---------- 4. select mode ------------------------------------------------ */
-/* THE ROW'S CHECKBOX OPENS, it does not blink into being. `display: none` is
-   not animatable, so the lane is always there and collapsed to nothing wide:
-   the same drawer the toolbar's All and Clear ride, same 200 ms and same curve,
-   so the two halves of turning select mode on move as one gesture. At zero
-   width it is also unhittable, which the drag-select lane test relies on. */
+/* THE ROW'S CHECKBOX MOVES IN. It used to be clipped into existence by a lane
+   going 0 → 28 with overflow hidden, which meant the BOX changed shape all the
+   way — a sliver widening into a square. The lane still opens, because the row
+   has to make the room, but nothing clips: the box keeps its 18 the whole time
+   and travels in from off the left edge of the list. `display: none` is not
+   animatable at all, which is why the lane is always present and merely narrow;
+   at zero width it is also unhittable, which the drag-select test relies on. */
 .app-proto .takecard__pick {
   display: flex;
   align-items: center;
   flex: none;
-  overflow: hidden;
+  overflow: visible;
   width: 0;
   padding-left: 0;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: width var(--dz-slide) var(--dz-ease), padding-left var(--dz-slide) var(--dz-ease),
-    opacity var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease);
+  transition: width var(--dz-slide) var(--dz-ease), padding-left var(--dz-slide) var(--dz-ease);
 }
-.app-proto .takes.is-picking .takecard__pick { width: 28px; padding-left: 10px; opacity: 1; transform: translateX(0); }
+.app-proto .takecard__pick .pick {
+  flex: none;
+  opacity: 0;
+  transform: translateX(-26px);
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease),
+    background var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease), color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .takes.is-picking .takecard__pick { width: 28px; padding-left: 10px; }
+.app-proto .takes.is-picking .takecard__pick .pick { opacity: 1; transform: translateX(0); }
 .app-proto .takes.is-picking .takecard__actions { display: none; }
 .app-proto .takes.is-picking .takecard { cursor: default; user-select: none; }
 .app-proto .pick {
@@ -534,50 +550,24 @@
 .app-proto .takecard.is-picked .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
 .app-proto .takecard.is-picked { background: var(--accent-soft); }
 
-/* NOT A FLOATING PANEL. It lives in the tool row, immediately right of the
-   select button, and wears that group's clothes: same 28 height, same 7 corner,
-   same faint-until-hovered ghost. A slab under the list was a second place to
-   look for the result of a press made two rows above it. */
+/* NOT A FLOATING PANEL, AND NOT A DRAWER EITHER. What you can do with a
+   selection is the answer to the same question the storage bar answers when
+   there is none — "and now?" — so it takes that corner over rather than opening
+   a place of its own, and it arrives the way the count does: up from under,
+   while the bar leaves through the top. Two slots, one movement, one row. */
 .app-proto .picked {
-  /* the SAME drawer as .selx, keyed on the SELECTION rather than the mode:
-     entering select mode opens All and Clear, picking something opens this */
-  display: grid;
-  grid-template-columns: 0fr;
-  align-items: center;
-  padding: 0;
-  margin: 0;
-  background: none;
-  border-radius: 0;
-  font-size: 12px;
-  white-space: nowrap;
-  color: var(--text-faint);
-  opacity: 0;
-  transition: grid-template-columns var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
-  /* the head is a row of uppercase condensed labels and everything in it
-     inherits that; this is a sentence, so it opts out the way room__note does */
-  font-family: var(--font);
-  text-transform: none;
-  letter-spacing: 0;
-}
-/* the 12 that separates it from the take count belongs to the CONTENT, so it
-   closes up with it instead of leaving a hole in the row */
-.app-proto .picked__in {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: 12px;
-  min-width: 0;
-  overflow: hidden;
+  justify-content: flex-end;
+  gap: 2px;
+  color: var(--text-faint);
 }
-.app-proto .takes.has-picked .picked { grid-template-columns: 1fr; opacity: 1; }
-.app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
 /* icon-only, and the same 28 square as every other tool in this row */
 .app-proto .picked button {
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
-  margin-left: 2px;
   padding: 0;
   border-radius: 7px;
   background: none;
@@ -587,6 +577,9 @@
 .app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }
 .app-proto .picked svg { width: 15px; height: 15px; }
+/* the corner is 28 tall either way, so the row never changes height mid-swap */
+.app-proto .room.swapv { min-height: 28px; }
+.app-proto .room .swapv__a { align-self: center; width: 100%; }
 /* the group has to stay on one line when select mode doubles its contents */
 .app-proto .tools2 { min-width: 0; flex-wrap: nowrap; }
 

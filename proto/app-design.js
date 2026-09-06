@@ -41,13 +41,17 @@
   const ACTION = {
     download: 'download',
     'show in folder': 'folder',
-    'delete this take': 'trash',
     send: 'send',
     'copy link': 'link',
     'make a link': 'link',
     watch: 'play',
     edit: 'scissors',
   }
+  /* THE BIN IS NOT IN THAT MAP AND THAT IS DELIBERATE (Robert, 2026-09-06:
+     "bring back previous trash icon"). The app draws its own and it is the
+     better bin; the sprite's is not. So the delete button keeps what it came
+     with, and the toolbar's delete is cloned off it, which is how the two stay
+     the same drawing without either of them being redrawn here. */
   const nameOf = (b) => (b.getAttribute('title') || b.textContent || '').trim().toLowerCase()
 
   /* the glyph the app already uses for this action, taken off the element that
@@ -195,7 +199,7 @@
              row below to say one thing only: what is selected, or how much
              there is. -->
         <div class="findrow">
-          <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
+          <label class="find">${dic('search')}<input type="search" placeholder="Search" /></label>
           <span class="normx">
             <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
             <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
@@ -222,39 +226,37 @@
             <button class="tool2 tool2--txt" data-p="all">All</button>
             <button class="tool2 tool2--txt" data-p="clear">Clear</button>
           </span></span>
-          <span class="totalx"><b class="total__n">0</b><span class="total__w">takes</span></span>
+          <!-- ONE SLOT, TWO ANSWERS. How many files there are, and — the moment
+               anything is picked — how many of them. The second comes up from
+               under the first and the first leaves through the top, so it reads
+               as the same fact being restated rather than a new control. -->
+          <span class="swapv totalx">
+            <span class="swapv__a"><b class="total__n">0</b><span class="total__w">files</span></span>
+            <span class="swapv__b"><b class="picked__n">0</b><i class="picked__sl">/</i><span class="picked__tot">0</span></span>
+          </span>
         </div>
-        ${
-          pct === null
-            ? '<div class="room"></div>'
-            : `<div class="room">
-                 <div class="room__bar"><div class="room__fill${pct > 85 ? ' is-tight' : ''}" style="width:${pct.toFixed(1)}%"></div></div>
-                 <div class="room__note"><b>${bytes(room.quota - room.usage)}</b> free of ${bytes(room.quota)}</div>
-               </div>`
-        }
+        <!-- AND THE OTHER END OF THE ROW SWAPS THE SAME WAY. How much room is
+             left is what that corner says when nothing is picked; what you can
+             do with a selection is what it says when something is. Both are the
+             answer to "and now?", so they are one slot, not two — and the
+             storage bar leaves through the top exactly as the file count does,
+             so the row moves as one thing. The buttons are the card's own
+             glyphs, cloned (cards() runs before head()), so there is one place
+             the drawing is chosen. -->
+        <div class="room swapv">
+          <span class="swapv__a">${
+            pct === null
+              ? ''
+              : `<div class="room__bar"><div class="room__fill${pct > 85 ? ' is-tight' : ''}" style="width:${pct.toFixed(1)}%"></div></div>
+                 <div class="room__note"><b>${bytes(room.quota - room.usage)}</b> free of ${bytes(room.quota)}</div>`
+          }</span>
+          <span class="swapv__b picked">
+            <button data-p="save" title="Download" aria-label="Download">${glyphOf(root, '.cardtools [title="Download"]', 'download')}</button>
+            <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button>
+          </span>
+        </div>
       </div>`
 
-    /* WHAT YOU DO WITH A SELECTION GOES BESIDE THE BUTTON THAT STARTED IT.
-       It was a panel that slid in under the list — a second place to look for
-       the answer to a press you just made two rows up. In the tool group it is
-       one row: the checkbox, what it selects, then what you do with them. */
-    if (!takes.querySelector('.picked')) {
-      const p = document.createElement('div')
-      p.className = 'picked'
-      /* Icon-only, because by then the row already carries three words and a
-         number, and these two are the same KIND of press as the icon group in
-         each card's corner — they keep their name in the tooltip and the label.
-         AND THEY ARE THE CARD'S OWN GLYPHS, CLONED. Download and Delete are
-         already drawn two inches below this row by the app's icon set; reaching
-         into the neon sprite for them here put a second download arrow and a
-         second bin on the same screen doing the same job. cards() runs before
-         head(), so the corner group is there to copy from and the two can never
-         drift apart. */
-      p.innerHTML = `<span class="picked__in"><span class="picked__n">0</span> selected
-        <button data-p="save" title="Download" aria-label="Download">${glyphOf(root, '.cardtools [title="Download"]', 'download')}</button>
-        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button></span>`
-      headEl.querySelector('.tools2').appendChild(p)
-    }
     total(takes)
     wireHead(root, takes, headEl)
   }
@@ -408,7 +410,11 @@
   function count(takes) {
     const n = takes.querySelectorAll('.takecard.is-picked').length
     const el = takes.querySelector('.picked__n')
+    /* "2/14" — a selection is only ever a fraction of what is there, and the
+       slot it replaces was already showing the denominator */
     if (el) el.textContent = String(n)
+    const tot = takes.querySelector('.picked__tot')
+    if (tot) tot.textContent = String(takes.querySelectorAll('.takecard').length)
     /* WHAT YOU DO WITH A SELECTION ARRIVES WITH THE SELECTION, not with the
        mode. Entering select mode opens All and Clear; picking something opens
        the count and its two buttons, to the right of the library count, which
@@ -428,7 +434,9 @@
     const all = takes.querySelectorAll('.takecard').length
     const shown = [...takes.querySelectorAll('.takecard')].filter((c) => !c.hidden).length
     n.textContent = shown === all ? String(all) : `${shown} of ${all}`
-    w.textContent = all === 1 && shown === all ? 'take' : 'takes'
+    w.textContent = all === 1 && shown === all ? 'file' : 'files'
+    const tot = takes.querySelector('.picked__tot')
+    if (tot) tot.textContent = String(all)
   }
   /* THE LIST IS INSIDE .takes, NOT ABOVE IT. This walked only upward, found
      nothing that scrolls, and fell back to `el.closest('.takes__list')` — which
