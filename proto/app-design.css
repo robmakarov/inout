@@ -27,8 +27,34 @@
 }
 .app-proto .chip svg { width: 15px; height: 15px; flex: none; }
 
-/* ---------- 2. the take card ---------------------------------------------- */
-.app-proto .takes { max-width: var(--take-w); margin: 0 auto; width: 100%; }
+/* ---------- 2. ONE WIDTH for the bar, the cards and the control bar --------
+   Robert: "tool bar, cards, top panel - make all same width". They are three
+   different components of the app, so the width is a token rather than three
+   numbers that drift apart. */
+.app-proto .takes,
+.app-proto .controlbar { max-width: var(--take-w); margin-left: auto; margin-right: auto; width: 100%; }
+
+/* ---------- 3. the control bar: inputs left, record right ------------------
+   The shipping bar is a centred column — quality rail, then chips, then the
+   record button under both. This puts the inputs and their quality on the left
+   and the record button on the right, which is the order the hand works in:
+   choose what you are recording, then press. */
+.app-proto .controlbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'chips rec' 'qual rec';
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 10px;
+}
+.app-proto .controlbar .chips { grid-area: chips; justify-content: flex-start; }
+.app-proto .controlbar .qs { grid-area: qual; width: 100%; }
+.app-proto .controlbar .recbtn { grid-area: rec; margin: 0; }
+.app-proto .controlbar__hint { grid-area: qual; }
+/* the rail fills the left column rather than sitting centred in the screen */
+.app-proto .controlbar .qs__track-col,
+.app-proto .controlbar .qs__railbox { max-width: none; margin: 0; }
+
 .app-proto .takes__list { gap: 8px; }
 
 .app-proto .takecard { align-items: stretch; }
@@ -98,8 +124,9 @@
 /* ---------- 3. the bar above the list ------------------------------------- */
 .app-proto .takes__head { display: block; padding: 0 0 10px; }
 
-.app-proto .acct { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
-.app-proto .acct__who { font-size: 12px; color: var(--text-faint); text-transform: none; letter-spacing: 0; }
+/* the account button lives at the right end of the bar now, not on a row of
+   its own above it */
+.app-proto .acct__who { display: none; }
 .app-proto .acct__av {
   width: 26px;
   height: 26px;
@@ -135,7 +162,10 @@
 .app-proto .where button:hover { color: var(--text); }
 .app-proto .where button[aria-selected='true'] { background: var(--surface-3); color: var(--text); }
 
-.app-proto .tools2 { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+/* Robert: the button group and the device/cloud tabs swap ends, and the account
+   button goes to the right of the tabs. */
+.app-proto .tools2 { display: flex; align-items: center; gap: 4px; }
+.app-proto .where { margin-left: auto; }
 .app-proto .tool2 {
   width: 28px;
   height: 28px;

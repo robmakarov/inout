@@ -520,9 +520,9 @@ function readTemplate(design) {
   const designCss = design ? readFileSync(DESIGN_CSS, 'utf8') : ''
   const designJs = design ? readFileSync(DESIGN_JS, 'utf8') : ''
   const protoTabs = design
-    ? `        <button class="tab" role="tab" aria-selected="true">App</button>
+    ? `        <button class="tab" role="tab" aria-selected="true">App new UI</button>
         <a class="tab" role="tab" href="ships.html" aria-selected="false">As it ships &#8599;</a>`
-    : `        <a class="tab" role="tab" href="app.html" aria-selected="false">App &#8599;</a>
+    : `        <a class="tab" role="tab" href="app.html" aria-selected="false">App new UI &#8599;</a>
         <button class="tab" role="tab" aria-selected="true">As it ships</button>`
   const what = design
     ? `The shipping app with the PROPOSED design over it. Every surface below the layer
@@ -729,6 +729,13 @@ body.f .filters, body.d .detail { opacity: 1; }
   --app-h: /*FRAME_H*/px;
 }
 .app-proto img { display: block; }
+/* THE "1 changed" PILL IS THE HARNESS'S OWN FOOTPRINT, NOT THE APP'S. The app
+   draws it because the capture ran with ?synthetic=1, which is one switch off
+   its default — true of this capture and of no user's session. Hidden in both
+   tabs, like the install prompt the capture dismisses, so a screenshot of the
+   proto is a screenshot of the product. */
+.app-proto .swline { display: none !important; }
+
 /* THE TAKE LIST SCROLLS INSIDE THE FRAME. The proto's frame is a fixed size, so
    a list long enough to be worth testing would otherwise run off the bottom of
    it with no way to reach the end. This is the proto's own affordance, in both

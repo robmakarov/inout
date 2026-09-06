@@ -34,12 +34,23 @@
      by the little kind badges on a card, so the two can never drift apart. */
   const GLYPH = { screen: 'display', camera: 'camera', mic: 'mic', 'tab audio': 'waves', 'system audio': 'waves', sound: 'waves' }
   const glyphFor = (label) => GLYPH[String(label || '').trim().toLowerCase()] || 'display'
+  const nameOf = (b) => (b.getAttribute('title') || b.textContent || '').trim().toLowerCase()
 
   const bytes = (n) =>
     n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.round(n / 1e3) + ' KB'
 
   /* ---------- 1. the input chips: neon's glyph, the app's colour ---------- */
+  /* The two things that come off ONE surface stand together: a screen share and
+     the sound of that tab are the same decision, so tab audio moves up beside
+     the screen chip and the two devices follow. */
+  const CHIP_ORDER = ['screen', 'tab audio', 'camera', 'mic']
   function chips(root) {
+    const row = root.querySelector('.chips')
+    if (row && !row.dataset.dzOrder) {
+      row.dataset.dzOrder = '1'
+      const by = new Map([...row.querySelectorAll('.chip')].map((c) => [nameOf(c), c]))
+      for (const k of CHIP_ORDER) if (by.has(k)) row.appendChild(by.get(k))
+    }
     for (const b of root.querySelectorAll('.chip')) {
       if (b.dataset.dz) continue
       b.dataset.dz = '1'
@@ -115,22 +126,19 @@
     const pct = room && room.quota ? Math.min(100, (room.usage / room.quota) * 100) : null
 
     headEl.innerHTML = `
-      <div class="acct">
-        <span class="acct__who">Not signed in</span>
-        <span class="acct__av">${ic('user')}</span>
-      </div>
       <div class="bar2">
-        <div class="where" role="tablist">
-          <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
-          <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
-        </div>
-        <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
         <div class="tools2">
           <button class="tool2" data-t="find" aria-pressed="false" title="Search">${dic('search')}</button>
           <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
           <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
           <button class="tool2" data-t="pick" aria-pressed="false" title="Select">${ic('check')}</button>
         </div>
+        <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
+        <div class="where" role="tablist">
+          <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
+          <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
+        </div>
+        <button class="acct__av" title="Not signed in">${ic('user')}</button>
       </div>
       ${
         pct === null

@@ -77,8 +77,10 @@ current path as fallback); the engine never refuses a record press.
   **`proto/app.html` IS GENERATED AND MUST NEVER BE HAND-EDITED** — `node scripts/proto-app.mjs`
   drives the deployed build through its real states and freezes its real DOM and real stylesheet, so
   the third tab is the control the other two are judged against. Edit the script, not the file.
-  ONE CAPTURE WRITES BOTH `app.html` (the proposal) and `ships.html` (the same capture with no
-  layer at all — the control, its own tab since 2026-09-06).
+  ONE CAPTURE WRITES BOTH `app.html` ("App new UI" — the proposal) and `ships.html` ("As it ships"
+  — the same capture with no layer at all, the control, its own tab since 2026-09-06). The capture
+  hides the `.swline` "1 changed" pill in both: the app draws it because the capture ran with
+  `?synthetic=1`, so it is the harness's own footprint and no user ever sees it.
   **`--rebuild` IS THE ONE YOU WANT** while iterating: the capture (three real takes, an export,
   minutes of Chrome on screen) is cached in `proto/.app-capture.json`, and a rebuild rewrites both
   pages from it in ~0.1 s. Re-recording to try a font size is waste the person watching pays for.
