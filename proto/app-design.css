@@ -29,7 +29,10 @@
      10% of the distance in the first quarter, half at half — so the movement
      is the thing you watch rather than the thing you catch the end of. */
   --dz-fast: 140ms;
-  --dz-slide: 520ms;
+  /* 320 was a snap, 520 dragged — 400, and the curve is the reason that number
+     can be small: with the travel spread evenly across it there is no dead
+     settle at either end to sit through. */
+  --dz-slide: 400ms;
   --dz-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
