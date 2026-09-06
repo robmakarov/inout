@@ -76,6 +76,18 @@
         thumb.appendChild(d)
       }
 
+      /* and the opposite corner says whether there is a copy of it in the
+         cloud — the one fact that decides whether this card can be sent or
+         linked at all. The mark is on every card and CSS shows it on the ones
+         app-sim.js has stamped, so the state can change without touching DOM. */
+      if (thumb && !thumb.querySelector('.cloudmark')) {
+        const c = document.createElement('span')
+        c.className = 'cloudmark'
+        c.title = 'Kept in the cloud as well as on this computer'
+        c.innerHTML = dic('cloud')
+        thumb.appendChild(c)
+      }
+
       // the full date and time, stamped onto the frozen card from the take's
       // own record at capture time — the app's own label is only a clock
       const when = card.querySelector('.takecard__when')
@@ -237,21 +249,29 @@
       const w = e.target.closest('[data-where]')
       if (w) {
         for (const b of bar.querySelectorAll('[data-where]')) b.setAttribute('aria-selected', String(b === w))
-        // Cloud is signed out in this take, so it has nothing in it — say so
-        // rather than showing the device's takes under a cloud tab.
-        takes.classList.toggle('is-cloud', w.dataset.where === 'cloud')
-        for (const c of takes.querySelectorAll('.takecard')) c.hidden = w.dataset.where === 'cloud'
+        /* THE CLOUD TAB IS THE SAME LIST, FILTERED. Device shows everything
+           kept on this computer; Cloud shows the takes that also have a copy up
+           there — the ones that carry Send and Copy link. It says the empty
+           thing only when there is genuinely nothing to show. */
+        const onCloud = w.dataset.where === 'cloud'
+        takes.classList.toggle('is-cloud', onCloud)
+        let n = 0
+        for (const c of takes.querySelectorAll('.takecard')) {
+          const keep = !onCloud || c.dataset.cloud === '1'
+          c.hidden = !keep
+          if (onCloud && keep) n++
+        }
         let empty = takes.querySelector('.cloud-empty')
-        if (w.dataset.where === 'cloud') {
+        if (onCloud) {
           if (!empty) {
             empty = document.createElement('div')
             empty.className = 'cloud-empty room__note'
             empty.style.padding = '18px 0'
             empty.style.textAlign = 'center'
-            empty.textContent = 'Sign in to keep takes in the cloud.'
             takes.querySelector('.takes__list').after(empty)
           }
-          empty.hidden = false
+          empty.textContent = cloudNote()
+          empty.hidden = n > 0
         } else if (empty) {
           empty.hidden = true
           apply()
@@ -429,6 +449,12 @@
     }
   }
 
+  /* one sentence for an empty cloud, and it names the reason it is empty */
+  const cloudNote = () =>
+    (window.PROTO_SIM || {}).account === 'in'
+      ? 'Nothing kept in the cloud yet — Send a take to put it there.'
+      : 'Sign in to keep takes in the cloud.'
+
   /* the account button and the cloud tab both read the same switch */
   function account(root) {
     const sim = window.PROTO_SIM || {}
@@ -441,11 +467,7 @@
       else av.innerHTML = ic('user')
     }
     const empty = root.querySelector('.cloud-empty')
-    if (empty) {
-      empty.textContent = inAcct
-        ? 'Nothing kept in the cloud yet — Send a take to put it there.'
-        : 'Sign in to keep takes in the cloud.'
-    }
+    if (empty) empty.textContent = cloudNote()
   }
 
   /* ---------- the studio motion, copied from proto/style.html --------------

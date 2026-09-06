@@ -120,9 +120,23 @@
 .app-proto .takecard { align-items: center; background: none; border: none; padding: 6px 0; }
 .app-proto .takecard.is-picked { background: var(--accent-soft); border-radius: 10px; }
 
+/* THE ROW ANSWERS THE POINTER. With no fill and no stroke, nothing told you
+   which take you were about to press. The hover fill is the one a picked take
+   gets, two steps quieter, on the same 10px corner — so hovering reads as the
+   first half of picking rather than as a different idea. The picture's stroke
+   and the corner tools come up with it: one gesture, three things wake. */
+.app-proto .takecard { border-radius: 10px; transition: background 130ms var(--ease); }
+.app-proto .takecard:not(.is-picked):hover { background: var(--surface); }
+.app-proto .takecard:not(.is-picked):hover .takecard__thumb { border-color: var(--text-faint); }
+.app-proto .takecard:hover .cardtools button { color: var(--text-dim); }
+
 /* A REAL PREVIEW, not a stamp. The app gives the thumb 100px and stretches it to
    whatever height the text happens to make; this gives it a width worth looking
    at and the shape of the thing it is a picture of. */
+/* AND IT IS A FRAMED PICTURE. A dark still on a dark page has no edge of its
+   own — the letterboxing of a screen recording runs straight into the page and
+   the card loses its head. One hairline gives it one, and box-sizing is
+   border-box everywhere in this app so the 176 does not move. */
 .app-proto .takecard__thumb {
   position: relative;
   overflow: hidden;
@@ -131,7 +145,9 @@
   aspect-ratio: 16 / 9;
   height: auto;
   margin: 0;
+  border: 1px solid var(--surface-3);
   border-radius: 8px;
+  transition: border-color 130ms var(--ease);
 }
 
 /* the length rides the picture, bottom right, the way every video thumbnail
@@ -139,7 +155,8 @@
    100% x 100% (it owns the empty-state box that way), which stretched the badge
    over the whole picture and left the text in the top-left — so the badge says
    its own size out loud. */
-.app-proto .dur {
+.app-proto .dur,
+.app-proto .cloudmark {
   position: absolute;
   width: auto;
   height: auto;
@@ -157,6 +174,20 @@
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+/* a take that is kept in the cloud as well says so on its own picture, in the
+   badge the length already established, opposite corner. Without it the two
+   extra buttons on some cards and not others would have no reason on screen. */
+.app-proto .cloudmark {
+  display: none;
+  right: auto;
+  bottom: auto;
+  left: 5px;
+  top: 5px;
+  padding: 2px 3px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.app-proto .cloudmark svg { display: block; width: 12px; height: 12px; }
+.app-proto .takecard[data-cloud='1'] .cloudmark { display: block; }
 
 /* the top line reads: when it was taken, then how big it is */
 .app-proto .takecard__top { gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -204,7 +235,8 @@
 .app-proto .takecard { position: relative; }
 .app-proto .cardtools {
   position: absolute;
-  top: 6px;
+  top: 0;
+  bottom: 0;
   right: 6px;
   display: flex;
   align-items: center;
@@ -229,7 +261,30 @@
 .app-proto .cardtools button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .app-proto .cardtools .takecard__del:hover:not(:disabled) { color: var(--record); }
 .app-proto .cardtools svg { width: 15px; height: 15px; }
-.app-proto .takecard__body { padding-right: 92px; }
+/* the text sits on the picture's middle line, not on its top edge: the card is
+   as tall as the preview and the words are two or three lines, so anchoring
+   them to the top left the card bottom-heavy on every single row */
+.app-proto .takecard__body { padding-right: 92px; justify-content: center; }
+
+/* SEND AND COPY LINK ARE CLOUD ACTIONS, so they are on cloud takes and nowhere
+   else. A file that exists only on this machine has nothing to send and no link
+   to copy — offering both greyed out on every card taught the list to look
+   broken. What you can do with the local file is the icon group in the corner,
+   and that is on every card. app-sim.js stamps data-cloud, because whether a
+   take is kept in the cloud is a state the app can really be in. */
+.app-proto .takecard:not([data-cloud='1']) .takecard__actions { display: none; }
+/* The dashed border is the app saying "not wired up yet" and it stays, but at
+   the app's 0.42 the pair was too faint to judge — and where these two buttons
+   belong is the whole question here. Legible, still visibly unbuilt. */
+.app-proto .takecard__actions { margin-top: 1px; }
+.app-proto .takecard__btn--soon { opacity: 0.72; }
+
+/* AND A HIDDEN CARD HAS TO ACTUALLY GO. The app styles .takecard with
+   `display: flex`, and an AUTHOR declaration beats the user agent's
+   `[hidden] { display: none }` whatever the specificity — so every card the
+   search, the filter or the Cloud tab had hidden went on being drawn. Same
+   trap as the `svg[hidden]` sprite the other two protos carry a rule for. */
+.app-proto .takecard[hidden] { display: none; }
 
 /* ---------- 3. the bar above the list ------------------------------------- */
 /* The gap above the feed is set on the LIST, not as padding under the head:

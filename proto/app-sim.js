@@ -246,15 +246,34 @@
     } else if (band) band.remove()
   }
 
+  /* ---------- which takes have a copy in the cloud ------------------------
+     A take is made on this machine. An ACCOUNT is what lets a copy of it live
+     in the cloud as well, and only that copy can be sent or linked — so this is
+     a per-take state, it is impossible without an account, and it belongs here
+     rather than in the proposal because the app can really be in it. The
+     proposal reads data-cloud to decide what a card offers; the shipping tab
+     ignores it and keeps drawing every button, which is the A/B. */
+  function cloud(root, sim) {
+    const how = sim.account === 'in' ? sim.cloud || 'none' : 'none'
+    $$('.takecard', root).forEach((c, i) => {
+      const up = how === 'all' || (how === 'some' && i % 2 === 0)
+      if (up) c.dataset.cloud = '1'
+      else delete c.dataset.cloud
+    })
+  }
+
   /* ---------- signed in, signed out -------------------------------------- */
   /* The cloud buttons are the part of this that exists in the SHIPPING markup,
      so it lives here rather than in the proposal: both tabs answer the account
-     switch. Send and Copy link are the two things an account actually buys. */
+     switch. Send and Copy link are the two things an account actually buys —
+     and what they act on is the cloud copy, so a take without one cannot use
+     them even when you are signed in. */
   function account(root, sim) {
-    const inAcct = sim.account === 'in'
     for (const b of $$('.takecard__btn, .xstrip__btn', root)) {
       const t = (b.textContent || '').trim().toLowerCase()
-      if (t === 'send' || t === 'copy link' || t === 'make a link') b.disabled = !inAcct
+      if (t !== 'send' && t !== 'copy link' && t !== 'make a link') continue
+      const card = b.closest('.takecard')
+      b.disabled = card ? card.dataset.cloud !== '1' : sim.account !== 'in'
     }
   }
 
@@ -263,8 +282,12 @@
     mirror(root)
     flow(root)
     inputs(root, sim)
-    account(root, sim)
+    /* takes() first: it clones and removes cards, and the two after it stamp
+       every card that is then in the list. They used to run before it, so a
+       cloned take answered no switch at all. */
     takes(root, sim)
+    cloud(root, sim)
+    account(root, sim)
     editor(root, sim)
     rail(root)
     controls(root)

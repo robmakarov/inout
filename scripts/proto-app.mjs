@@ -645,6 +645,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   border-radius: 6px; padding: 6px 8px; font: inherit; text-align: left;
 }
 :is(.col-filters, .col-detail) .panel .btn-h { text-align: center; cursor: pointer; }
+/* a row that cannot do anything yet says so by looking spent, not by going
+   quiet — the readout under it names the switch that would free it */
+:is(.col-filters, .col-detail) .panel select:disabled { opacity: 0.4; cursor: not-allowed; }
 :is(.col-filters, .col-detail) .panel .btn-h:hover { background: #212126; color: #fff; }
 :is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='true'] { background: #2b2b31; color: #fff; border-color: #3a3a42; }
 :is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='false'] { color: #6a6a74; }
@@ -842,6 +845,15 @@ body.f .filters, body.d .detail { opacity: 1; }
         </select>
       </div>
       <div class="panel__group">
+        <div class="panel__label">In the cloud</div>
+        <select id="simCloud">
+          <option value="none">no take is</option>
+          <option value="some">every other take is</option>
+          <option value="all">every take is</option>
+        </select>
+        <div class="readout" id="cloudNote" style="margin-top:6px"></div>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">On the editor</div>
         <select id="simLost">
           <option value="none">nothing went wrong</option>
@@ -911,7 +923,7 @@ window.PROTO_ROOM = /*ROOM*/
 window.PROTO_MIRROR = /*MIRROR*/
 /* What the panel is simulating right now. Read by app-sim.js, which is in BOTH
    tabs, so the shipping tab is drivable too. */
-window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', lost: 'none' }
+window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', cloud: 'some', lost: 'none' }
 /*SIM_JS*/
 /*DESIGN_JS*/
 </script>
@@ -946,6 +958,14 @@ window.protoRefresh = () => { show(S.id) }
    in app-sim.js drives the proto through the same path the app takes */
 window.protoGo = (id) => { if (SNAP[id]) show(id) }
 
+/* the cloud row in plain words: what it does, and why it can do nothing yet */
+function cloudNote() {
+  const inAcct = window.PROTO_SIM.account === 'in'
+  $('#simCloud').disabled = !inAcct
+  $('#cloudNote').textContent = inAcct
+    ? 'those takes carry Send and Copy link — the rest carry neither'
+    : 'sign in above first: nothing is in the cloud without an account'
+}
 const KINDS = ['screen', 'camera', 'mic', 'tab audio']
 function buildSim() {
   $('#sim-inputs').innerHTML = KINDS.map(
@@ -967,7 +987,14 @@ function buildSim() {
   $('#takeDel').addEventListener('click', () => { window.PROTO_SIM.takes = Math.max(0, nowTakes() - 1); show(S.id); save() })
   $('#takeNone').addEventListener('click', () => { window.PROTO_SIM.takes = 0; show(S.id); save() })
   $('#simAcct').value = window.PROTO_SIM.account
-  $('#simAcct').addEventListener('change', (e) => { window.PROTO_SIM.account = e.target.value; show(S.id); save() })
+  $('#simAcct').addEventListener('change', (e) => { window.PROTO_SIM.account = e.target.value; show(S.id); save(); cloudNote() })
+  /* Send and Copy link are on a take that has a copy in the cloud and on no
+     other, so this row is how you see both kinds of card at once. It cannot do
+     anything while there is no account behind it, and it says so rather than
+     going quiet. */
+  $('#simCloud').value = window.PROTO_SIM.cloud
+  $('#simCloud').addEventListener('change', (e) => { window.PROTO_SIM.cloud = e.target.value; show(S.id); save(); cloudNote() })
+  cloudNote()
   $('#simLost').value = window.PROTO_SIM.lost
   $('#simLost').addEventListener('change', (e) => { window.PROTO_SIM.lost = e.target.value; show(S.id); save() })
 }
@@ -1153,7 +1180,7 @@ function save() {
   const sim = window.PROTO_SIM
   const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
     '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
-    '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost) +
+    '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&cl=' + sim.cloud + '&l=' + encodeURIComponent(sim.lost) +
     ($('#g-on') ? '&g=' + ($('#g-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) + ($('#b-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) : '') +
     ($('#s-g') ? '&m=' + MOTION.map((x) => $('#' + x.el).value).join(',') : '')
   let wrote = false
@@ -1184,6 +1211,7 @@ function restore() {
   if (st.n === '-') window.PROTO_SIM.takes = null
   else if (st.n !== undefined && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
   if (st.acc === 'in' || st.acc === 'out') window.PROTO_SIM.account = st.acc
+  if (['none', 'some', 'all'].includes(st.cl)) window.PROTO_SIM.cloud = st.cl
   if (st.g && st.g.length === 2 && $('#g-on')) {
     $('#g-on').setAttribute('aria-pressed', String(st.g[0] === '1'))
     $('#b-on').setAttribute('aria-pressed', String(st.g[1] === '1'))
