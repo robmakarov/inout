@@ -152,7 +152,23 @@
    fewer takes — or typing into the search — used to collapse the list in one
    frame and throw the control bar and the record button up the screen with it.
    head() measures before and after and drives this; see animateHeight(). */
-.app-proto .takes__list { gap: 8px; transition: height var(--dz-slide) var(--dz-ease); }
+.app-proto .takes__list { gap: 8px; }
+.app-proto .takes__list,
+.app-proto .cloud-empty {
+  transition: height var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease),
+    opacity var(--dz-slide) var(--dz-ease);
+}
+/* the frame it starts from: set by swapList, +28 for Cloud, -28 for Device.
+   No transition on this class — it is the jump to the starting line, and the
+   movement is what happens when it comes back off. */
+.app-proto .takes.is-from .takes__list,
+.app-proto .takes.is-from .cloud-empty {
+  transition: none;
+  transform: translateX(var(--slide-from, 0px));
+  opacity: 0;
+}
+/* and nothing leans out of the column while it travels */
+.app-proto .takes.is-clip { overflow: hidden; }
 
 /* NO FILL, NO STROKE — the cards are a list, not a stack of boxes. What
    separates them is the space between them and the picture at the head of each. */

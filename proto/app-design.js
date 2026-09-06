@@ -310,19 +310,36 @@
      Measure, apply, measure, then let CSS carry it between the two — and put
      the height back to auto at the end so a later change starts from the truth
      rather than from a number this function pinned on it. */
-  function animateHeight(list, mutate) {
+  /* AND WHEN IT IS THE TAB THAT CHANGED, THE NEW FEED COMES IN FROM ITS OWN
+     SIDE: Cloud from the right, Device from the left, which is where each tab
+     sits in the pair. `dir` is 0 for a search or a filter — the same rows are
+     still there, so nothing should travel. Order matters and it is fiddly: swap
+     the content, put it at the offset with NO transition, pin the old height,
+     one reflow, then release both at once so the height and the slide are one
+     movement rather than two of the same length that start apart. */
+  const HTIMER = new WeakMap()
+  function swapList(takes, dir, mutate) {
+    const list = takes && takes.querySelector('.takes__list')
     if (!list) return mutate()
     const from = list.getBoundingClientRect().height
     mutate()
     list.style.height = ''
     const to = list.getBoundingClientRect().height
-    if (Math.abs(to - from) < 1) return
-    list.style.height = from + 'px'
-    void list.offsetHeight // the reflow that makes the next line a transition
-    list.style.height = to + 'px'
-    clearTimeout(list.dataset.hTimer)
-    list.dataset.hTimer = setTimeout(() => { list.style.height = '' }, 460)
+    const moves = Math.abs(to - from) >= 1
+    if (!dir && !moves) return
+    if (dir) {
+      takes.style.setProperty('--slide-from', dir * 28 + 'px')
+      takes.classList.add('is-from', 'is-clip')
+      void list.offsetHeight
+    }
+    if (moves) list.style.height = from + 'px'
+    void list.offsetHeight // the reflow that makes the next lines a transition
+    takes.classList.remove('is-from')
+    if (moves) list.style.height = to + 'px'
+    clearTimeout(HTIMER.get(list))
+    HTIMER.set(list, setTimeout(() => { list.style.height = ''; takes.classList.remove('is-clip') }, 460))
   }
+  const animateHeight = (list, mutate) => swapList(list && list.closest('.takes'), 0, mutate)
 
   function wireHead(root, takes, headEl) {
     const bar = headEl.querySelector('.bar2')
@@ -400,8 +417,10 @@
            has no business under Device, which is what a tab called Device is
            for. The device count and the cloud count are separate libraries now,
            and both tabs can be empty on their own terms. */
-        takes.classList.toggle('is-cloud', w.dataset.where === 'cloud')
-        animateHeight(takes.querySelector('.takes__list'), () => applyNow(takes.querySelector('.takes__list')))
+        const onCloud = w.dataset.where === 'cloud'
+        takes.classList.toggle('is-cloud', onCloud)
+        // Cloud is the right-hand tab, so its feed arrives from the right
+        swapList(takes, onCloud ? 1 : -1, () => applyNow(takes.querySelector('.takes__list')))
         return
       }
       /* All and Clear, as ~/Documents/inout copy has them (app.js:12518 and
