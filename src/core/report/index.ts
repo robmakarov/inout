@@ -21,5 +21,10 @@ export type {
   ReviveBurst,
   Verdict,
 } from './reportCard'
-export { appendTakeReport, readTakeReports, TAKE_REPORT_KEY } from './takeJournal'
+export {
+  appendTakeReport,
+  appendUngradedTake,
+  readTakeReports,
+  TAKE_REPORT_KEY,
+} from './takeJournal'
 export type { TakeReportEntry } from './takeJournal'

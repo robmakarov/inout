@@ -75,6 +75,45 @@ export function appendTakeReport(card: ReportCard): void {
   }
 }
 
+/**
+ * A TAKE THAT COULD NOT BE GRADED IS STILL A TAKE, AND THE RING MUST SAY SO.
+ *
+ * The card is built behind two dynamic imports at stop (S1 keeps the report
+ * modules off first paint), and the whole block ended in `.catch(() =>
+ * undefined)`. A tab that has been open for hours — which is every tab that
+ * records anything long — has watched deploys go by, and this PWA keeps the
+ * last three builds; a chunk older than that is simply gone, the import
+ * rejects, and the take is never graded by anyone. That is not theoretical:
+ * rec_cff9nmm7trmh, the 46-minute take that opened at 553.6 minutes, is
+ * absent from this ring entirely. Nothing said the take was ungraded, so
+ * nothing said the take was anything.
+ *
+ * An `incomplete` line costs one entry and is never a pass.
+ */
+export function appendUngradedTake(id: string, createdAt: number, durationMs: number, why: string): void {
+  try {
+    const entry: TakeReportEntry = {
+      t: createdAt,
+      id,
+      durationMs: Math.round(durationMs),
+      verdict: 'incomplete',
+      line: `${id} · ${(durationMs / 60000).toFixed(1)} min · NOT GRADED — ${why}`,
+    }
+    const all = load()
+    const at = all.findIndex((e) => e.id === entry.id)
+    if (at >= 0) all[at] = entry
+    else all.push(entry)
+    if (all.length > MAX_ENTRIES) all.splice(0, all.length - MAX_ENTRIES)
+    try {
+      localStorage.setItem(TAKE_REPORT_KEY, JSON.stringify(all))
+    } catch {
+      /* memory-only tab — still readable in this session */
+    }
+  } catch {
+    /* the same rule as above: a witness may not endanger the take */
+  }
+}
+
 /** The fleet, oldest first. For an agent reading the machine, and tests. */
 export function readTakeReports(): readonly TakeReportEntry[] {
   return load()

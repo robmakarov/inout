@@ -13,11 +13,18 @@
  *   +14 ms (anchor 88.3 -> 102.1 ms) on the first build, which is large beside
  *   the 10.8-17.7 ms X14a already owes on this seam.
  *
- * `AudioTapBatch.stampMs` exists to remove it: the worker stamps the flush on
- * `performance.timeOrigin + performance.now()` and the main thread converts
- * with its own origin, so the arrival is the moment the batch was COMPLETE
- * rather than the moment the main thread got round to it. This rig is the
- * measurement that says whether that worked.
+ * `AudioTapBatch.workerNowMs` exists to remove it: the worker stamps the flush
+ * on its OWN `performance.now()` and the main thread converts with the offset
+ * it measures between the two realms (core/realmClock.ts), so the arrival is
+ * the moment the batch was COMPLETE rather than the moment the main thread got
+ * round to it. This rig is the measurement that says whether that worked, and
+ * `handoff` on every worker line is the conversion's own error bar.
+ *
+ * IT USED TO BE `performance.timeOrigin + performance.now()`, converted with
+ * the page's own origin. That is not a shared clock: `performance.now()` stops
+ * while a Mac sleeps and `timeOrigin` does not, so a page open across a night
+ * of sleep read its tap worker 8 h 27 min into the future and placed the whole
+ * audio channel there — Robert's 46-minute take opened as 553 minutes.
  *
  * WHY IT IS ITS OWN SCRIPT AND NOT A FLAG ON b12-audiostarve.mjs: that rig's
  * question is loss under a dose, and its cells are 45 s with a blocker in them.

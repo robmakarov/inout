@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+/**
+ * S1/O7: the report MODULES stay lazy — this is the ring alone (one type
+ * import, no dependencies), because the thing that records "this take was
+ * never graded" cannot itself be a chunk that failed to load.
+ */
+import { appendUngradedTake } from '@core/report/takeJournal'
 import {
   loadCaptureEngine,
   loadCapturePrefs,
@@ -398,7 +404,18 @@ export function CaptureScreen() {
           const card = report.buildReportCard(rec, { wedgeJournal: wedge.readWedgeJournal() })
           report.appendTakeReport(card)
           console.info(`[capture] take report — ${card.line}`)
-        })().catch(() => undefined)
+        })().catch((err: unknown) => {
+          /**
+           * AND IF IT CANNOT BE GRADED, THE RING SAYS THAT — see
+           * report/takeJournal.ts appendUngradedTake. This used to swallow
+           * everything, so a take whose report chunk no longer exists (an
+           * hours-old tab, three deploys ago) produced no verdict and no
+           * complaint. Still never rethrown: the take is already handed over.
+           */
+          const why = err instanceof Error ? err.message : String(err)
+          console.error(`[capture] take report could not be built — ${why}`)
+          appendUngradedTake(rec.id, rec.createdAt, rec.durationMs, why)
+        })
       }
     } catch (err) {
       console.error('stop failed', err)
