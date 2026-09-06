@@ -364,6 +364,52 @@
 .app-proto .tool2:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .tool2[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
 
+/* THE SELECT TOGGLE IS THE CHECKBOX ITSELF, and it leads the row. It carries
+   the same .pick box the cards wear, so the button and the tick it turns on are
+   plainly one object — the button stays a plain 28 hit area and the BOX holds
+   the state, rather than the whole button lighting up like filter and sort. */
+.app-proto .tool2--pick[aria-pressed='true'] { background: none; }
+.app-proto .tool2--pick:hover { background: var(--surface-2); }
+.app-proto .tool2--pick:hover .pick { border-color: var(--text-faint); }
+.app-proto .tool2--pick[aria-pressed='true'] .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ALL AND CLEAR SLIDE OUT FROM BEHIND IT. Lifted from ~/Documents/inout copy
+   (styles.css:1122 .select-extra) — the numbers are its numbers, because what
+   makes it feel like a drawer and not a popup is the max-width carrying the
+   width open while the opacity and the 4px lean do the arriving. */
+.app-proto .selx {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app-proto .takes.is-picking .selx { max-width: 140px; opacity: 1; transform: translateX(0); }
+/* and filter and sort go out the same way as they come in: you are not
+   narrowing the list while you are picking off it, and the row is 404 wide */
+.app-proto .normx {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  max-width: 140px;
+  opacity: 1;
+  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app-proto .takes.is-picking .normx { max-width: 0; opacity: 0; }
+.app-proto .tool2--txt {
+  width: auto;
+  padding: 0 9px;
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* the search field is always there now: it is the first row of the left group.
    IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
    control nobody presses first the biggest thing above the takes; capped, it is
@@ -424,13 +470,24 @@
 .app-proto .cloud-empty { padding: 18px 0; text-align: center; }
 
 /* ---------- 4. select mode ------------------------------------------------ */
+/* THE ROW'S CHECKBOX OPENS, it does not blink into being. `display: none` is
+   not animatable, so the lane is always there and collapsed to nothing wide:
+   the same drawer the toolbar's All and Clear ride, same 200 ms and same curve,
+   so the two halves of turning select mode on move as one gesture. At zero
+   width it is also unhittable, which the drag-select lane test relies on. */
 .app-proto .takecard__pick {
-  display: none;
+  display: flex;
   align-items: center;
-  padding-left: 10px;
   flex: none;
+  overflow: hidden;
+  width: 0;
+  padding-left: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), padding-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.app-proto .takes.is-picking .takecard__pick { display: flex; }
+.app-proto .takes.is-picking .takecard__pick { width: 28px; padding-left: 10px; opacity: 1; transform: translateX(0); }
 .app-proto .takes.is-picking .takecard__actions { display: none; }
 .app-proto .takes.is-picking .takecard { cursor: default; user-select: none; }
 .app-proto .pick {
@@ -455,23 +512,29 @@
    same faint-until-hovered ghost. A slab under the list was a second place to
    look for the result of a press made two rows above it. */
 .app-proto .picked {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 4px;
-  margin: 0 0 0 8px;
+  margin: 0 0 0 12px;
   padding: 0;
   background: none;
   border-radius: 0;
   font-size: 12px;
   white-space: nowrap;
   color: var(--text-faint);
+  /* the same drawer as .selx and the row checkboxes, so turning select mode on
+     is ONE movement across the whole bar instead of a slide and two snaps */
+  overflow: hidden;
+  max-width: 0;
+  opacity: 0;
+  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   /* the head is a row of uppercase condensed labels and everything in it
      inherits that; this is a sentence, so it opts out the way room__note does */
   font-family: var(--font);
   text-transform: none;
   letter-spacing: 0;
 }
-.app-proto .takes.is-picking .picked { display: flex; }
+.app-proto .takes.is-picking .picked { max-width: 300px; opacity: 1; }
 .app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
 .app-proto .picked button {
   display: inline-flex;

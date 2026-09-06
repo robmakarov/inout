@@ -167,10 +167,24 @@
           </div>
           <button class="acct__av" data-acct title="Not signed in">${ic('user')}</button>
         </div>
+        <!-- THE SELECT TOGGLE IS A CHECKBOX AND IT LEADS THE ROW. It is the
+             same box the cards wear, so pressing it and ticking a take are
+             plainly the same object; and All / Clear slide out from behind it
+             the way ~/Documents/inout copy does it (index.html:681 Select,
+             select-extra All + None; styles.css:1122 the slide). Its word for
+             the second one is None, his is Clear, and his wins. -->
         <div class="tools2">
-          <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
-          <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
-          <button class="tool2" data-t="pick" aria-pressed="false" title="Select">${ic('check')}</button>
+          <button class="tool2 tool2--pick" data-t="pick" aria-pressed="false" title="Select takes">
+            <span class="pick">${ic('check')}</span>
+          </button>
+          <span class="selx">
+            <button class="tool2 tool2--txt" data-p="all">All</button>
+            <button class="tool2 tool2--txt" data-p="clear">Clear</button>
+          </span>
+          <span class="normx">
+            <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
+            <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
+          </span>
         </div>
         ${
           pct === null
@@ -185,7 +199,7 @@
     /* WHAT YOU DO WITH A SELECTION GOES BESIDE THE BUTTON THAT STARTED IT.
        It was a panel that slid in under the list — a second place to look for
        the answer to a press you just made two rows up. In the tool group it is
-       one row: filter, sort, select, then what select is for. */
+       one row: the checkbox, what it selects, then what you do with them. */
     if (!takes.querySelector('.picked')) {
       const p = document.createElement('div')
       p.className = 'picked'
@@ -279,6 +293,20 @@
           empty.hidden = true
           apply()
         }
+        return
+      }
+      /* All and Clear, as ~/Documents/inout copy has them (app.js:12518 and
+         :12534): All ticks everything the list is currently showing — a search
+         or a filter is the set you meant — and Clear empties the selection but
+         STAYS in select mode. Only the checkbox itself leaves the mode. */
+      const p = e.target.closest('[data-p]')
+      if (p && (p.dataset.p === 'all' || p.dataset.p === 'clear')) {
+        const want = p.dataset.p === 'all'
+        for (const c of takes.querySelectorAll('.takecard')) {
+          if (want && c.hidden) continue
+          c.classList.toggle('is-picked', want)
+        }
+        count(takes)
         return
       }
       if (!t) return
