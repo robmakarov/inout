@@ -811,27 +811,11 @@
 }
 /* NAMED, not icon-only. They are the two things that happen to everything you
    just picked — a bin with no word next to a download with no word is a guess
-   at the worst moment. Same height as every other control in the head. */
-.app-proto .picked button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: var(--dz-h);
-  padding: 0 10px;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-faint);
-  font-family: var(--font);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  white-space: nowrap;
-  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
-}
-.app-proto .picked svg { flex: none; }
-.app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
-.app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }
-.app-proto .picked svg { width: 15px; height: 15px; }
+   at the worst moment. What they LOOK like is defined once with the player
+   bar's buttons, at the end of this file (Robert, 2026-09-06: "i like this new
+   buttons, but now you need to replace selected files button group with same
+   style buttons") — one row of controls in this head, one button. */
+.app-proto .picked { gap: 5px; }
 /* the corner is 28 tall either way, so the row never changes height mid-swap */
 .app-proto .room.swapv { min-height: var(--dz-h); }
 /* the corner grows a little when the names are in it; the group above it stays
@@ -1041,11 +1025,17 @@
   max-width: none;
 }
 .app-proto .wbtns { display: flex; align-items: center; gap: 5px; margin-left: auto; flex: none; }
-/* THE HEAD'S OWN BUTTON, NOT THE CARD'S. These sit in the row the Device and
-   Cloud tabs sit in, so they are that type at that size — Barlow, 12, uppercase,
-   the same 0.08em — and not the app's sentence-case pill. One row, one voice
-   (Robert: "keep buttons fucking consistent"). */
-.app-proto .wbtn {
+/* THE HEAD'S OWN BUTTON, NOT THE CARD'S, AND BOTH ROWS WEAR IT. These sit in
+   the row the Device and Cloud tabs sit in, so they are that type at that size
+   — Barlow, 12, uppercase, the same 0.08em — and not the app's sentence-case
+   pill. The selection row is the same row doing the same job on a different
+   noun, so it is the same button: one head, one control (Robert: "keep buttons
+   fucking consistent", then "replace selected files button group with same
+   style buttons"). */
+.app-proto .wbtn,
+.app-proto .picked button {
+  display: inline-flex;
+  align-items: center;
   height: var(--dz-h);
   padding: 0 9px;
   gap: 5px;
@@ -1061,10 +1051,19 @@
   white-space: nowrap;
   transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
 }
-.app-proto .wbtn svg { width: 14px; height: 14px; flex: none; }
-.app-proto .wbtn:disabled { color: var(--dz-tertiary); border-color: var(--surface-2); }
-.app-proto .wbtn:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); }
-.app-proto .wbtn--del:hover:not(:disabled) { border-color: var(--record); color: var(--record); }
+.app-proto .wbtn svg,
+.app-proto .picked button svg { width: 14px; height: 14px; flex: none; }
+.app-proto .wbtn:disabled,
+.app-proto .picked button:disabled { color: var(--dz-tertiary); border-color: var(--surface-2); }
+.app-proto .wbtn:hover:not(:disabled),
+.app-proto .picked button:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); }
+/* the bin is the one that answers in red, in both rows */
+.app-proto .wbtn--del:hover:not(:disabled),
+.app-proto .picked button.is-danger:hover:not(:disabled) {
+  border-color: var(--record);
+  color: var(--record);
+  background: transparent;
+}
 /* and the way out of the player is the last thing in the row */
 .app-proto .watchx {
   display: grid;
