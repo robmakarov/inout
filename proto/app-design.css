@@ -904,12 +904,13 @@
    head — so the app opens AROUND the video rather than cutting to it.
    ========================================================================== */
 .app-proto .capture { position: relative; }
-/* IT FLOATS. NOTHING UNDER IT MOVES (Robert, 2026-09-06: "preview dont push
-   away shit when enters, just float above cards and shit"). The first pass
-   stretched the column so the head went to the top of the frame and pushed the
-   feed out from under the picture — three things moving to show one. Now the
-   only thing that travels is the picture, and it flies over a list that stays
-   exactly where it was.
+/* IT FLOATS, AND WHAT IS UNDER IT IS OUT (Robert, 2026-09-06: "preview dont
+   push away shit when enters, just float above cards and shit", then "i can see
+   cards feed under play window, must be hidden"). The first pass stretched the
+   column so the head went to the top of the frame and pushed the feed out from
+   under the picture — three things moving to show one. The feed now goes out
+   the only way that moves NOTHING: it fades where it stands, so its rows keep
+   the frame's shape and the picture never lands on a moving thing.
 
    THE WIDTH IS THE ONE THING THAT DOES TRAVEL, AND THE CARDS TRAVEL WITH IT
    (Robert, 2026-09-06: "when play window coming and top bar moves wider cards
@@ -918,6 +919,7 @@
    sat still under it — one bar growing and a list holding its breath. They
    share --take-w for exactly this reason: setting it to the player's width
    opens the head, the feed and the control bar together, on one curve. */
+.app-proto .takes.is-watch .takes__list { opacity: 0; pointer-events: none; }
 /* and the picture has left its slot, so the slot is empty rather than showing a
    second copy of it under the one that flew */
 .app-proto .takecard.is-watching .takecard__thumb { visibility: hidden; }
@@ -1135,6 +1137,7 @@
 .app-proto .watchdock {
   position: absolute;
   inset: 0;
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1144,6 +1147,20 @@
   pointer-events: none;
 }
 .app-proto .controlbar.is-watch .watchdock { transform: none; opacity: 1; pointer-events: auto; }
+/* SO DOES THE EDIT BAR (Robert, 2026-09-06: "make edit bar appear with
+   animation too"). The dock's content is replaced, not the dock, so the swap
+   sets it back above the bar with the clock stopped and then lets it come down
+   — the same arrival, on the same curve, as the bar it replaces. */
+/* IT COMES OUT FROM UNDER THE PLAY WINDOW (Robert, 2026-09-06: "edit bar must
+   come from under play window") — it starts a full bar-height ABOVE its place,
+   behind the picture, and comes down out of it. The selector has to carry the
+   whole .controlbar.is-watch chain or the rule that puts the dock in place wins
+   on specificity and the arrival never leaves the ground. */
+.app-proto .controlbar.is-watch .watchdock.is-in {
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: none;
+}
 /* and when the timeline is in it, the bar is as tall as the timeline needs */
 .app-proto .controlbar { transition: max-width var(--dz-slide) var(--dz-ease), min-height var(--dz-slide) var(--dz-ease); }
 .app-proto .controlbar.is-edit { min-height: var(--dock-h, 200px); }

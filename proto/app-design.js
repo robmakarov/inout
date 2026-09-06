@@ -493,6 +493,40 @@
     return EDDOC
   }
 
+  /* THE TIMELINE FILLS THE WIDTH IT IS GIVEN (Robert, 2026-09-06). The clips
+     and the ruler ticks carry the pixel geometry the app laid out at capture
+     time — so many pixels per second, for the width the editor screen had — and
+     dropped into a wider dock they simply stop early and leave a tail. Nothing
+     is hardcoded to undo that: the clips are asked how far they reach, the
+     track is asked how wide it is, and every inline px inside the timeline is
+     multiplied by the ratio. Ticks, clips, trims and playhead all scale
+     together, so it is the same timeline at a different zoom. */
+  function fitTimeline(dock) {
+    const tl = dock.querySelector('.tl')
+    const track = tl && tl.querySelector('.lane__track')
+    if (!tl || !track) return
+    const width = track.getBoundingClientRect().width
+    /* how far the take reaches is written on the bars themselves, in the pixels
+       the app laid them out with — the clip element around them is a full-width
+       wrapper and says nothing */
+    let reach = 0
+    for (const el of tl.querySelectorAll('.lane__bar')) {
+      reach = Math.max(reach, (parseFloat(el.style.left) || 0) + (parseFloat(el.style.width) || 0))
+    }
+    if (!(reach > 1) || !(width > 1) || Math.abs(reach - width) < 1) return
+    const k = width / reach
+    const px = (v) => (v && v.slice(-2) === 'px' ? (parseFloat(v) * k).toFixed(2) + 'px' : v)
+    for (const el of tl.querySelectorAll('[style]')) {
+      const st = el.style
+      for (const prop of ['left', 'width', 'right']) if (st[prop]) st[prop] = px(st[prop])
+      /* the filmstrip is painted as a background, so its size and offset are
+         part of the same geometry and scale with it */
+      for (const prop of ['backgroundSize', 'backgroundPosition']) {
+        if (st[prop]) st[prop] = st[prop].split(' ').map(px).join(' ')
+      }
+    }
+  }
+
   function watchDock(root, mode) {
     const bar = root.querySelector('.controlbar')
     if (!bar) return null
@@ -502,6 +536,12 @@
       dock.className = 'watchdock'
       bar.appendChild(dock)
       void bar.offsetHeight
+    }
+    /* replacing what is in it is an arrival, so it starts above the bar with
+       the clock stopped and comes down when it is filled */
+    if (dock.dataset.mode && dock.dataset.mode !== mode) {
+      dock.classList.add('is-in')
+      void dock.offsetHeight
     }
     dock.innerHTML = ''
     dock.dataset.mode = mode
@@ -535,6 +575,8 @@
       }
     }
     bar.classList.add('is-watch')
+    /* it is LEFT above the bar when the mode changed; whoever asked for the
+       swap lets it down, after it has measured the frame it is landing in */
     return dock
   }
 
@@ -568,19 +610,33 @@
     bar.style.setProperty('--dock-h', want + 'px')
     void bar.offsetHeight
     const target = playerBox(root, WATCH.ratio)
+    const wasW = root.style.getPropertyValue('--take-w')
+    const willW = target ? Math.max(420, Math.round(target[2])) + 'px' : wasW
+    /* the timeline is stretched IN THE FRAME IT WILL LAND IN — the dock is
+       about to be the picture's width, and fitting it to the width it has now
+       would leave it overhanging by the difference */
+    root.style.setProperty('--take-w', willW)
+    void bar.offsetHeight
+    fitTimeline(dock)
+    root.style.setProperty('--take-w', wasW)
     bar.classList.remove('is-edit')
     bar.style.setProperty('--dock-h', '0px')
     void bar.offsetHeight
     root.classList.remove('dz-nofx')
+    /* THE REHEARSAL LEFT THE CLOCK STOPPED, so the starting frame has to be
+       committed with it running again — without this reflow the dock's whole
+       arrival happens inside one task and is never drawn. */
+    void bar.offsetHeight
 
     bar.classList.add('is-edit')
     bar.style.setProperty('--dock-h', want + 'px')
+    dock.classList.remove('is-in')
     if (WATCH.box && target) {
       WATCH.at = target
       boxAt(WATCH.box, ...target)
       /* and the bars follow the picture's new width, the same rule as on the
          way in — the timeline took height off it, so it is a smaller picture */
-      root.style.setProperty('--take-w', Math.max(420, Math.round(target[2])) + 'px')
+      root.style.setProperty('--take-w', willW)
     }
   }
 
