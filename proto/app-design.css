@@ -963,7 +963,19 @@
 }
 .app-proto .watchbox.is-gone { opacity: 0; }
 .app-proto .watchbox img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.app-proto .watchbox .dur { right: 10px; bottom: 10px; padding: 2px 6px; font-size: 12px; }
+/* THE LENGTH LEAVES THROUGH THE FLOOR (Robert, 2026-09-06: "time caption
+   jumps, make slide down to border and dissapear"). It jumped because the
+   player gave the badge its own bigger offsets and type size, so the moment
+   the picture lifted off the card the caption changed place and changed size
+   in one frame. It keeps the card's badge exactly — same corner, same 5px,
+   same 10px type — and then slides down through the bottom edge and fades as
+   the window opens. On the way back it slides up into place, so the picture
+   lands on the card wearing the badge the card is about to show again. */
+.app-proto .watchbox .dur {
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
+}
+.app-proto .watchbox.is-open .dur { transform: translateY(18px); opacity: 0; }
+.app-proto .watchbox.is-closing .dur { transform: none; opacity: 1; }
 /* the two controls arrive after the picture has landed, not during the flight:
    a button sliding and scaling across the frame is the one thing that would say
    "a dialog opened" instead of "the picture grew". */
