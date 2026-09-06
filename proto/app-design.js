@@ -36,6 +36,10 @@
   const glyphFor = (label) => GLYPH[String(label || '').trim().toLowerCase()] || 'display'
   const nameOf = (b) => (b.getAttribute('title') || b.textContent || '').trim().toLowerCase()
 
+  /* the glyph the app already uses for this action, taken off the element that
+     uses it; the sprite name is only the fallback for a screen with no cards */
+  const glyphOf = (root, sel, fallback) => root.querySelector(sel + ' svg')?.outerHTML || ic(fallback)
+
   const bytes = (n) =>
     n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.round(n / 1e3) + ' KB'
 
@@ -187,11 +191,11 @@
           <button class="tool2 tool2--pick" data-t="pick" aria-pressed="false" title="Select takes">
             <span class="pick">${ic('check')}</span>
           </button>
-          <span class="totalx"><b class="total__n">0</b><span class="total__w">takes</span></span>
           <span class="selx">
             <button class="tool2 tool2--txt" data-p="all">All</button>
             <button class="tool2 tool2--txt" data-p="clear">Clear</button>
           </span>
+          <span class="totalx"><b class="total__n">0</b><span class="total__w">takes</span></span>
         </div>
         ${
           pct === null
@@ -210,12 +214,18 @@
     if (!takes.querySelector('.picked')) {
       const p = document.createElement('div')
       p.className = 'picked'
-      /* icon-only, because by then the row already carries three words and a
+      /* Icon-only, because by then the row already carries three words and a
          number, and these two are the same KIND of press as the icon group in
-         each card's corner — they keep their name in the tooltip and the label */
+         each card's corner — they keep their name in the tooltip and the label.
+         AND THEY ARE THE CARD'S OWN GLYPHS, CLONED. Download and Delete are
+         already drawn two inches below this row by the app's icon set; reaching
+         into the neon sprite for them here put a second download arrow and a
+         second bin on the same screen doing the same job. cards() runs before
+         head(), so the corner group is there to copy from and the two can never
+         drift apart. */
       p.innerHTML = `<span class="picked__n">0</span> selected
-        <button data-p="save" title="Download" aria-label="Download">${ic('download')}</button>
-        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${ic('trash')}</button>`
+        <button data-p="save" title="Download" aria-label="Download">${glyphOf(root, '.cardtools [title="Download"]', 'download')}</button>
+        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button>`
       headEl.querySelector('.tools2').appendChild(p)
     }
     total(takes)
@@ -372,6 +382,12 @@
     const n = takes.querySelectorAll('.takecard.is-picked').length
     const el = takes.querySelector('.picked__n')
     if (el) el.textContent = String(n)
+    /* WHAT YOU DO WITH A SELECTION ARRIVES WITH THE SELECTION, not with the
+       mode. Entering select mode opens All and Clear; picking something opens
+       the count and its two buttons, to the right of the library count, which
+       never moves. Three things in the row, each turning up when it has
+       something to say. */
+    takes.classList.toggle('has-picked', n > 0)
   }
   /* WITH NOTHING SELECTED THE ROW SAYS HOW MUCH THERE IS. It was empty next to
      the checkbox, and the number belongs there: it is the same row that counts

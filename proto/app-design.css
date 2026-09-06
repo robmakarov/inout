@@ -395,27 +395,24 @@
    and then pressing All is the reason All takes only what is showing. */
 .app-proto .normx { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 
-/* WITH NOTHING SELECTED, THE SAME PLACE COUNTS THE WHOLE LIST. It rides the
-   drawer inverted — out when All and Clear come in — so the row always says
-   one thing and the two never sit there together. */
+/* HOW MANY TAKES THERE ARE IS ALWAYS TRUE, so it is always on screen and it
+   never moves. All and Clear open BETWEEN it and the checkbox and push it
+   along; what you do with a selection opens on its other side. The number is
+   the fixed point of the row and the two drawers work either side of it. */
 .app-proto .totalx {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
   margin-left: 8px;
-  overflow: hidden;
-  max-width: 200px;
-  opacity: 1;
   white-space: nowrap;
   font-family: var(--font);
   font-size: 12px;
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-faint);
-  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .app-proto .totalx .total__n { color: var(--text-dim); font-weight: 600; }
-.app-proto .takes.is-picking .totalx { max-width: 0; opacity: 0; margin-left: 0; }
+
 .app-proto .tool2--txt {
   width: auto;
   padding: 0 9px;
@@ -537,8 +534,9 @@
   font-size: 12px;
   white-space: nowrap;
   color: var(--text-faint);
-  /* the same drawer as .selx and the row checkboxes, so turning select mode on
-     is ONE movement across the whole bar instead of a slide and two snaps */
+  /* the same drawer as .selx and the row checkboxes, but keyed on the SELECTION
+     rather than the mode: entering select mode opens All and Clear, and picking
+     something opens this, to the right of the number of takes */
   overflow: hidden;
   max-width: 0;
   opacity: 0;
@@ -549,7 +547,7 @@
   text-transform: none;
   letter-spacing: 0;
 }
-.app-proto .takes.is-picking .picked { max-width: 300px; opacity: 1; }
+.app-proto .takes.has-picked .picked { max-width: 300px; opacity: 1; }
 .app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
 /* icon-only, and the same 28 square as every other tool in this row */
 .app-proto .picked button {
@@ -566,7 +564,7 @@
 }
 .app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }
-.app-proto .picked svg { width: 14px; height: 14px; }
+.app-proto .picked svg { width: 15px; height: 15px; }
 /* the group has to stay on one line when select mode doubles its contents */
 .app-proto .tools2 { min-width: 0; flex-wrap: nowrap; }
 
