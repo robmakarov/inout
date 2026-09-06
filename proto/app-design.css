@@ -364,8 +364,11 @@
 .app-proto .tool2:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .tool2[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
 
-/* the search field is always there now: it is the first row of the left group */
-.app-proto .find { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--surface-2); border-radius: 8px; }
+/* the search field is always there now: it is the first row of the left group.
+   IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
+   control nobody presses first the biggest thing above the takes; capped, it is
+   a field the size of what you type into it and the bar reads as a bar. */
+.app-proto .find { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--surface-2); border-radius: 8px; max-width: 220px; }
 .app-proto .find svg { width: 14px; height: 14px; color: var(--text-faint); flex: none; }
 .app-proto .find input {
   flex: 1;
