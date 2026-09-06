@@ -976,18 +976,15 @@
 }
 .app-proto .watchbox.is-open .dur { transform: translateY(18px); opacity: 0; }
 .app-proto .watchbox.is-closing .dur { transform: none; opacity: 1; }
-/* the two controls arrive after the picture has landed, not during the flight:
-   a button sliding and scaling across the frame is the one thing that would say
+/* the play mark arrives after the picture has landed, not during the flight: a
+   control sliding and scaling across the frame is the one thing that would say
    "a dialog opened" instead of "the picture grew". */
-.app-proto .watchplay,
-.app-proto .watchx {
+.app-proto .watchplay {
   opacity: 0;
   transition: opacity var(--dz-fast) var(--dz-ease);
 }
-.app-proto .watchbox.is-open .watchplay,
-.app-proto .watchbox.is-open .watchx { opacity: 1; transition-delay: 260ms; }
-.app-proto .watchbox.is-closing .watchplay,
-.app-proto .watchbox.is-closing .watchx { opacity: 0; transition-delay: 0s; }
+.app-proto .watchbox.is-open .watchplay { opacity: 1; transition-delay: 260ms; }
+.app-proto .watchbox.is-closing .watchplay { opacity: 0; transition-delay: 0s; }
 .app-proto .watchplay {
   position: absolute;
   inset: 0;
@@ -1003,22 +1000,85 @@
   pointer-events: none;
 }
 .app-proto .watchplay svg { width: 24px; height: 24px; margin-left: 3px; }
-.app-proto .watchx {
+/* THE HEAD BECOMES THE PLAYER'S BAR. The list row leaves through the top and
+   the take's row comes up from under it — the same swap the file count and the
+   storage line already do in this head, so the head has one behaviour and not
+   two. Both live in the head's own box at the head's own height, so nothing
+   below moves while they trade places. */
+.app-proto .takes__head { position: relative; overflow: hidden; }
+.app-proto .takes__head .bar2 {
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
+}
+.app-proto .takes.is-watch .takes__head .bar2 {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+.app-proto .watchbar {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
+}
+.app-proto .takes.is-watch .watchbar { transform: none; opacity: 1; pointer-events: auto; }
+/* the name keeps the card's own field — same hug, same rule under it when it
+   has focus — and takes the room the buttons leave */
+/* the name takes what the buttons leave and no less than a grip of it: the row
+   is a fixed group of controls and one field, so the field is the elastic one */
+.app-proto .watchname {
+  margin: 0;
+  /* flex-basis 0 and a min of 0: the field takes the room the controls leave
+     and gives it back when there is less of it, so the row can never overflow
+     and the buttons never change size to make it fit */
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+.app-proto .wbtns { display: flex; align-items: center; gap: 5px; margin-left: auto; flex: none; }
+/* THE HEAD'S OWN BUTTON, NOT THE CARD'S. These sit in the row the Device and
+   Cloud tabs sit in, so they are that type at that size — Barlow, 12, uppercase,
+   the same 0.08em — and not the app's sentence-case pill. One row, one voice
+   (Robert: "keep buttons fucking consistent"). */
+.app-proto .wbtn {
+  height: var(--dz-h);
+  padding: 0 9px;
+  gap: 5px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .wbtn svg { width: 14px; height: 14px; flex: none; }
+.app-proto .wbtn:disabled { color: var(--dz-tertiary); border-color: var(--surface-2); }
+.app-proto .wbtn:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); }
+.app-proto .wbtn--del:hover:not(:disabled) { border-color: var(--record); color: var(--record); }
+/* and the way out of the player is the last thing in the row */
+.app-proto .watchx {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  flex: none;
+  width: var(--dz-h);
+  height: var(--dz-h);
   padding: 0;
-  border: 0;
+  border: 1px solid var(--surface-3);
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.55);
+  background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease),
-    opacity var(--dz-fast) var(--dz-ease);
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
 }
-.app-proto .watchx:hover { background: rgba(0, 0, 0, 0.8); color: var(--text); }
+.app-proto .watchx:hover { border-color: var(--text-faint); color: var(--text); }
 .app-proto .watchx svg { width: 15px; height: 15px; }

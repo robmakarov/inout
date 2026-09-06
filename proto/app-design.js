@@ -294,6 +294,10 @@
     clearTimeout(WATCH.timer)
     WATCH.root = root
     WATCH.card = card
+    /* built BEFORE the state lands, so it has a frame to start its entrance
+       from — created inside .is-watch it would already be in its final place */
+    watchBar(root, takes, card)
+    void takes.offsetHeight
     takes.classList.add('is-watch')
     card.classList.add('is-watching')
 
@@ -319,8 +323,7 @@
     box.className = 'watchbox'
     box.innerHTML =
       `<img alt="" src="${img.currentSrc || img.src}">` +
-      `<span class="watchplay">${ic('play')}</span>` +
-      `<button type="button" class="watchx" title="Back to the list" aria-label="Back to the list">${dic('close')}</button>`
+      `<span class="watchplay">${ic('play')}</span>`
     const dur = thumb.querySelector('.dur')
     if (dur) box.appendChild(dur.cloneNode(true))
     cap.appendChild(box)
@@ -337,6 +340,88 @@
     box.classList.add('is-open')
     boxAt(box, (capR.width - w) / 2, top - capR.top + (room - h) / 2, w, h)
     root.style.setProperty('--take-w', Math.max(600, Math.round(w)) + 'px')
+  }
+
+  /* THE HEAD IS THE PLAYER'S BAR WHILE IT PLAYS (Robert, 2026-09-06: "top bar
+     replaced with animation with play window top bar, on left name input, on
+     right button group with controls, icons+text, to the right of them cross to
+     close play window").
+
+     Searching, sorting and choosing between Device and Cloud are questions
+     about a LIST, and there is no list in front of you while a take is playing
+     — so that row leaves through the top and the take's own row comes up from
+     under it, in the head's own box, at the head's own height. Nothing about
+     the take is re-drawn for it: the name is the card's field and the buttons
+     are the card's buttons, wearing their names out loud because there is room
+     for words here and there was none in a card corner. */
+  /* the button's OWN word first — Send and Copy link carry theirs in a span and
+     their title is "Not wired up yet", which is a state, not a name. The corner
+     tools have no words at all, so theirs come from the label they are read out
+     by, with the file name the download button promises trimmed back off. */
+  const BTN_LABEL = (b) => {
+    if (b.classList.contains('takecard__del')) return 'Delete'
+    const own = (b.querySelector('span') ? b.querySelector('span').textContent : '').trim()
+    if (own) return own
+    const raw = b.dataset.dlBase || b.getAttribute('aria-label') || b.getAttribute('title') || ''
+    return raw.split(' — ')[0].trim() || 'Open'
+  }
+  function watchBar(root, takes, card) {
+    const headEl = takes.querySelector('.takes__head')
+    if (!headEl) return
+    const old = headEl.querySelector('.watchbar')
+    if (old) old.remove()
+
+    const bar = document.createElement('div')
+    bar.className = 'watchbar'
+
+    /* the name is a copy of the card's field, and what you type in it is typed
+       into the card's: one name, two places to reach it */
+    const src = card.querySelector('.takename')
+    if (src) {
+      const inp = src.cloneNode(true)
+      inp.classList.add('watchname')
+      inp.value = src.value
+      inp.addEventListener('input', () => {
+        src.value = inp.value
+        src.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+      })
+      bar.appendChild(inp)
+    }
+
+    const group = document.createElement('div')
+    group.className = 'wbtns'
+    const mk = (b) => {
+      const out = document.createElement('button')
+      out.type = 'button'
+      out.className = 'takecard__btn wbtn'
+      const label = BTN_LABEL(b)
+      out.title = b.getAttribute('title') || label
+      out.innerHTML = (b.querySelector('svg') ? b.querySelector('svg').outerHTML : '') + `<span>${label}</span>`
+      if (b.disabled) out.disabled = true
+      if (b.classList.contains('takecard__del')) out.classList.add('wbtn--del')
+      return out
+    }
+    /* THE SAME FIVE ON EVERY TAKE (Robert: "keep buttons fucking consistent").
+       A row that is three buttons wide on one take and five on the next is a
+       row you have to read every time. Send and Copy link are on every take and
+       DISABLED when there is no cloud copy to send — which is the app's own
+       rule for them, already stamped on the card's buttons by app-sim.js, so
+       cloning carries the true state rather than a guess made here. */
+    for (const b of card.querySelectorAll('.cardtools .takecard__btn')) group.appendChild(mk(b))
+    for (const b of card.querySelectorAll('.takecard__actions .takecard__btn')) group.appendChild(mk(b))
+    const del = card.querySelector('.cardtools .takecard__del')
+    if (del) group.appendChild(mk(del))
+    bar.appendChild(group)
+
+    const x = document.createElement('button')
+    x.type = 'button'
+    x.className = 'watchx'
+    x.title = 'Back to the list'
+    x.setAttribute('aria-label', 'Back to the list')
+    x.innerHTML = dic('close')
+    bar.appendChild(x)
+
+    headEl.appendChild(bar)
   }
 
   function watchClose() {
@@ -357,6 +442,8 @@
     WATCH.timer = setTimeout(() => {
       box.remove()
       card.classList.remove('is-watching')
+      const bar = root.querySelector('.watchbar')
+      if (bar) bar.remove()
       WATCH.box = null
       WATCH.from = null
     }, 440)
@@ -394,7 +481,7 @@
           watchClose()
           return
         }
-        if (e.target.closest('.watchbox')) return
+        if (e.target.closest('.watchbox, .watchbar')) return
         watchClose()
       },
       true,
