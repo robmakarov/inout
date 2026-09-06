@@ -204,6 +204,18 @@
          behaves at length; inventing plausible file sizes would make the
          storage bar above it a lie. */
       clone.dataset.simClone = '1'
+      /* WHAT THE ADDED TAKE IS MADE OF, as the panel asked for it: which inputs
+         it used, and whether a copy of it is kept in the cloud. sim.added holds
+         one of these per take beyond the base, in the order they were added.
+         The kinds go in as the app's own plain text — applySim runs before
+         applyDesign on a freshly injected screen, so the card is still raw here
+         and the design layer turns this line into the little chips itself. */
+      const spec = (sim.added || [])[$$('.takecard', list).length - base]
+      if (spec) {
+        const kindsEl = clone.querySelector('.takecard__kinds')
+        if (kindsEl && spec.kinds && spec.kinds.length) kindsEl.textContent = spec.kinds.join(' · ')
+        clone.dataset.simCloud = spec.cloud ? '1' : '0'
+      }
       const n = all.length + 1
       const when = clone.querySelector('.takecard__when')
       if (when) {
@@ -254,9 +266,16 @@
      proposal reads data-cloud to decide what a card offers; the shipping tab
      ignores it and keeps drawing every button, which is the A/B. */
   function cloud(root, sim) {
-    const how = sim.account === 'in' ? sim.cloud || 'none' : 'none'
+    const inAcct = sim.account === 'in'
+    const how = inAcct ? sim.cloud || 'none' : 'none'
     $$('.takecard', root).forEach((c, i) => {
-      const up = how === 'all' || (how === 'some' && i % 2 === 0)
+      /* A TAKE ADDED FROM THE PANEL SAYS FOR ITSELF WHERE IT IS KEPT, and that
+         beats the blanket rule — otherwise pressing "+ take" with cloud chosen
+         put it on the device anyway, depending on where it landed in the order,
+         and the Cloud tab never showed it. Still impossible without an account:
+         there is nowhere to keep it. */
+      const own = c.dataset.simCloud
+      const up = inAcct && (own === '1' || (own !== '0' && (how === 'all' || (how === 'some' && i % 2 === 0))))
       if (up) c.dataset.cloud = '1'
       else delete c.dataset.cloud
     })

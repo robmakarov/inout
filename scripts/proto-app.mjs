@@ -663,6 +663,9 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* a row that cannot do anything yet says so by looking spent, not by going
    quiet — the readout under it names the switch that would free it */
 :is(.col-filters, .col-detail) .panel select:disabled { opacity: 0.4; cursor: not-allowed; }
+/* the four inputs an added take used — the panel's own .btn-h, four to a row */
+.kindrow { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.kindrow .btn-h { padding: 5px 4px; font-size: 10px; }
 :is(.col-filters, .col-detail) .panel .btn-h:hover { background: #212126; color: #fff; }
 :is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='true'] { background: #2b2b31; color: #fff; border-color: #3a3a42; }
 :is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='false'] { color: #6a6a74; }
@@ -851,6 +854,17 @@ body.f .filters, body.d .detail { opacity: 1; }
         </div>
         <button class="btn-h" id="takeNone" style="margin-top:6px">Empty &#8212; nothing kept</button>
         <div class="readout" id="takeN" style="margin-top:6px"></div>
+        <!-- WHAT "+ TAKE" MAKES. A clone of the last card answers "how does the
+             list behave at length" and nothing else; these two say what the
+             next one is made of, so the Cloud tab can be given something to
+             hold and a card can be given the inputs you want to look at. -->
+        <div class="panel__label" style="margin-top:12px">The next one</div>
+        <div id="newKinds" class="kindrow"></div>
+        <select id="newWhere" style="margin-top:6px">
+          <option value="device">kept on this device</option>
+          <option value="cloud">and in the cloud</option>
+        </select>
+        <div class="readout" id="newNote" style="margin-top:6px"></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Account</div>
@@ -938,7 +952,7 @@ window.PROTO_ROOM = /*ROOM*/
 window.PROTO_MIRROR = /*MIRROR*/
 /* What the panel is simulating right now. Read by app-sim.js, which is in BOTH
    tabs, so the shipping tab is drivable too. */
-window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', cloud: 'some', lost: 'none' }
+window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', cloud: 'some', lost: 'none', added: [] }
 /*SIM_JS*/
 /*DESIGN_JS*/
 </script>
@@ -998,11 +1012,52 @@ function buildSim() {
     })
   }
   const nowTakes = () => $('#app').querySelectorAll('.takecard').length
-  $('#takeAdd').addEventListener('click', () => { window.PROTO_SIM.takes = nowTakes() + 1; show(S.id); save() })
-  $('#takeDel').addEventListener('click', () => { window.PROTO_SIM.takes = Math.max(0, nowTakes() - 1); show(S.id); save() })
-  $('#takeNone').addEventListener('click', () => { window.PROTO_SIM.takes = 0; show(S.id); save() })
+  /* THE NEXT TAKE IS BUILT TO SPEC, not cloned blind. PROTO_SIM.added holds one
+     entry per take beyond the captured ones, in the order they were added, so a
+     take put in the cloud stays in the cloud through every later refresh and
+     the Cloud tab has something to show. Taking one away pops the last. */
+  const NEWK = ['Screen', 'Camera', 'Mic', 'Tab Audio']
+  const newSpec = { kinds: ['Screen', 'Camera', 'Mic'], cloud: false }
+  function drawNewKinds() {
+    $('#newKinds').innerHTML = NEWK.map(
+      (k) => '<button class="btn-h" data-nk="' + k + '" aria-pressed="' + (newSpec.kinds.includes(k) ? 'true' : 'false') + '">' + k + '</button>',
+    ).join('')
+    for (const b of document.querySelectorAll('[data-nk]')) {
+      b.addEventListener('click', () => {
+        const k = b.dataset.nk
+        const i = newSpec.kinds.indexOf(k)
+        if (i < 0) newSpec.kinds.push(k)
+        else if (newSpec.kinds.length > 1) newSpec.kinds.splice(i, 1)
+        drawNewKinds()
+        newNote()
+      })
+    }
+  }
+  function newNote() {
+    const cloud = newSpec.cloud
+    const noAcct = window.PROTO_SIM.account !== 'in'
+    $('#newWhere').disabled = noAcct
+    $('#newNote').textContent = noAcct
+      ? 'sign in to keep the next one in the cloud'
+      : cloud
+        ? 'press + take and it appears under Cloud too'
+        : 'press + take and it appears under Device only'
+  }
+  $('#newWhere').addEventListener('change', (e) => { newSpec.cloud = e.target.value === 'cloud'; newNote() })
+  drawNewKinds()
+  newNote()
+  $('#takeAdd').addEventListener('click', () => {
+    window.PROTO_SIM.added.push({ kinds: newSpec.kinds.slice(), cloud: newSpec.cloud })
+    window.PROTO_SIM.takes = nowTakes() + 1
+    show(S.id); save()
+  })
+  $('#takeDel').addEventListener('click', () => {
+    window.PROTO_SIM.added.pop()
+    window.PROTO_SIM.takes = Math.max(0, nowTakes() - 1); show(S.id); save()
+  })
+  $('#takeNone').addEventListener('click', () => { window.PROTO_SIM.added = []; window.PROTO_SIM.takes = 0; show(S.id); save() })
   $('#simAcct').value = window.PROTO_SIM.account
-  $('#simAcct').addEventListener('change', (e) => { window.PROTO_SIM.account = e.target.value; show(S.id); save(); cloudNote() })
+  $('#simAcct').addEventListener('change', (e) => { window.PROTO_SIM.account = e.target.value; show(S.id); save(); cloudNote(); newNote() })
   /* Send and Copy link are on a take that has a copy in the cloud and on no
      other, so this row is how you see both kinds of card at once. It cannot do
      anything while there is no account behind it, and it says so rather than

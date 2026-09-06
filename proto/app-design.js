@@ -275,6 +275,26 @@
     wireHead(root, takes, headEl)
   }
 
+  /* ANYTHING THAT CHANGES HOW MANY ROWS ARE SHOWING CHANGES THE HEIGHT OF THE
+     LIST, and the list is what holds the control bar and the record button
+     where they are. Hiding rows in one frame threw all of that up the screen.
+     Measure, apply, measure, then let CSS carry it between the two — and put
+     the height back to auto at the end so a later change starts from the truth
+     rather than from a number this function pinned on it. */
+  function animateHeight(list, mutate) {
+    if (!list) return mutate()
+    const from = list.getBoundingClientRect().height
+    mutate()
+    list.style.height = ''
+    const to = list.getBoundingClientRect().height
+    if (Math.abs(to - from) < 1) return
+    list.style.height = from + 'px'
+    void list.offsetHeight // the reflow that makes the next line a transition
+    list.style.height = to + 'px'
+    clearTimeout(list.dataset.hTimer)
+    list.dataset.hTimer = setTimeout(() => { list.style.height = '' }, 460)
+  }
+
   function wireHead(root, takes, headEl) {
     const bar = headEl.querySelector('.bar2')
     const input = headEl.querySelector('.find input')
@@ -301,8 +321,11 @@
     }
 
     const apply = () => {
-      const q = (input.value || '').trim().toLowerCase()
       const list = takes.querySelector('.takes__list')
+      animateHeight(list, () => applyNow(list))
+    }
+    const applyNow = (list) => {
+      const q = (input.value || '').trim().toLowerCase()
       const cards = [...takes.querySelectorAll('.takecard')]
       for (const c of cards) {
         const hay = (c.textContent || '').toLowerCase()
@@ -338,11 +361,13 @@
         const onCloud = w.dataset.where === 'cloud'
         takes.classList.toggle('is-cloud', onCloud)
         let n = 0
-        for (const c of takes.querySelectorAll('.takecard')) {
-          const keep = !onCloud || c.dataset.cloud === '1'
-          c.hidden = !keep
-          if (onCloud && keep) n++
-        }
+        animateHeight(takes.querySelector('.takes__list'), () => {
+          for (const c of takes.querySelectorAll('.takecard')) {
+            const keep = !onCloud || c.dataset.cloud === '1'
+            c.hidden = !keep
+            if (onCloud && keep) n++
+          }
+        })
         let empty = takes.querySelector('.cloud-empty')
         if (onCloud) {
           if (!empty) {
