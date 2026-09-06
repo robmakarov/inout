@@ -356,7 +356,14 @@
     WATCH.ratio = ratio
     WATCH.at = playerBox(root, ratio)
     boxAt(box, ...WATCH.at)
-    root.style.setProperty('--take-w', Math.max(600, Math.round(WATCH.at[2])) + 'px')
+    /* THE FRAME IS THE PICTURE'S WIDTH, EXACTLY (Robert, 2026-09-06: "make bars
+       and bg cards meny resize with play window when edit bar comes, make edit
+       bar same width as play window"). The head, the feed and the control bar
+       all read --take-w, so one number makes the whole app the width of the
+       take being played — and when the timeline takes height off the picture,
+       everything narrows with it. The floor is only there so the head's own row
+       has somewhere to stand; nothing normal reaches it. */
+    root.style.setProperty('--take-w', Math.max(420, Math.round(WATCH.at[2])) + 'px')
     watchDock(root, 'play')
   }
 
@@ -573,7 +580,7 @@
       boxAt(WATCH.box, ...target)
       /* and the bars follow the picture's new width, the same rule as on the
          way in — the timeline took height off it, so it is a smaller picture */
-      root.style.setProperty('--take-w', Math.max(600, Math.round(target[2])) + 'px')
+      root.style.setProperty('--take-w', Math.max(420, Math.round(target[2])) + 'px')
     }
   }
 
