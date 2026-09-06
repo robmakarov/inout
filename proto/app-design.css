@@ -1172,20 +1172,25 @@
 /* THE PLAY ROW IS ONE ROW AND IT STAYS. The transport keeps the width the
    editor gives it and the Edit button sits beside it. */
 .app-proto .wdock__play { display: flex; align-items: center; justify-content: center; gap: 14px; }
-/* AND THE EDITOR OPENS OUT FROM UNDER IT (Robert, 2026-09-06: "edit bar must
-   come straight from under play window, not diagonaly", "play bar must stay
-   too"). A drawer, not a slide: it grows from no height to its own, clipped, so
-   the only direction anything moves is down. Sliding it would have read as a
-   diagonal — the bar narrows to the picture's new width on the same clock, and
-   a box that travels down while its edges travel in is a corner, not a drawer. */
+/* AND THE EDITOR COMES DOWN FROM UNDER IT (Robert, 2026-09-06: "edit bar must
+   come straight from under play window", "i said coming from above"). Two parts
+   doing one movement: the space opens by height, CLIPPED, and the editor itself
+   travels down through it from a full height above. So it is a thing arriving
+   from behind the play bar rather than a box being inflated — and it is still
+   straight down, which the plain slide was not: the bar narrows to the
+   picture's new width on the same clock, and a box that travels down while its
+   edges travel in reads as a corner. */
 .app-proto .wdock__edit {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   height: 0;
   overflow: hidden;
   transition: height var(--dz-slide) var(--dz-ease);
 }
+.app-proto .wdock__editin {
+  display: block;
+  transform: translateY(-100%);
+  transition: transform var(--dz-slide) var(--dz-ease);
+}
+.app-proto .wdock__edit.is-open .wdock__editin { transform: none; }
 /* and when the timeline is in it, the bar is as tall as the timeline needs */
 .app-proto .controlbar { transition: max-width var(--dz-slide) var(--dz-ease), min-height var(--dz-slide) var(--dz-ease); }
 .app-proto .controlbar.is-edit { min-height: var(--dock-h, 200px); }
@@ -1206,3 +1211,189 @@
    exists so a move can be measured in the layout it will END in */
 .app-proto.dz-nofx,
 .app-proto.dz-nofx * { transition: none !important; }
+
+
+/* ---------- 12. the timeline, in this proposal's own parts -----------------
+   Robert, 2026-09-06: "redo timeline with consistent elements, show frames and
+   beatrate and make it fully interactive." Built from the take rather than
+   cloned off the editor screen, so every part of it is one of ours: the head
+   button for Split and zoom, Barlow for the names and the ruler, the app's own
+   channel colours for the lanes, and the 7px corner everything else turns.
+   Everything inside is a FRACTION of the width — the take's length is 100% —
+   so it fills whatever dock it is given and zooms without measuring a pixel. */
+.app-proto .tlx {
+  --lane-h: 26px;
+  --gut: 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.app-proto .tlx__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.app-proto .tlx__speeds { display: flex; align-items: center; gap: 3px; }
+.app-proto .tlx__sp { padding: 0 7px; font-size: 11px; letter-spacing: 0.04em; }
+/* Tighten shows what it means: the quiet parts of the wave drop out */
+.app-proto .tlx.is-tight .tlx__wave { transform: scaleY(0.55); transform-origin: 50% 50%; }
+.app-proto .tlx__wave { transition: transform var(--dz-slide) var(--dz-ease); }
+.app-proto .tlx__rate {
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.app-proto .tlx__zoom { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.app-proto .tlx__z { padding: 0; width: var(--dz-h); justify-content: center; font-size: 15px; }
+.app-proto .tlx__len {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  min-width: 34px;
+  text-align: center;
+}
+/* the lanes scroll under the zoom, and nothing leans out of the box */
+.app-proto .tlx__view { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.app-proto .tlx__inner {
+  position: relative;
+  width: calc(100% * var(--zoom, 1));
+  min-width: 100%;
+  padding-left: var(--gut);
+  box-sizing: border-box;
+  touch-action: none;
+}
+/* THE RULER IS READ, NOT SCANNED: a tick, and the time on it in the app's own
+   figures. The step is chosen for the zoom, so it never crowds. */
+.app-proto .tlx__ruler { position: relative; height: 18px; margin-bottom: 4px; }
+.app-proto .tlx__ruler i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--surface-3);
+}
+.app-proto .tlx__ruler span {
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.app-proto .tlx__lanes { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.app-proto .tlx__lane { position: relative; height: var(--lane-h); }
+/* the name hangs in the gutter the inner box keeps clear, so it stays put while
+   the lanes scroll under it */
+.app-proto .tlx__name {
+  position: absolute;
+  right: calc(100% + 30px);
+  top: 0;
+  height: var(--lane-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(var(--gut) - 34px);
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.app-proto .tlx__name svg { width: 13px; height: 13px; flex: none; }
+.app-proto .tlx__name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.app-proto .tlx__eye {
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 0;
+  width: 20px;
+  height: var(--lane-h);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dz-tertiary);
+  cursor: pointer;
+  transition: color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__eye svg { width: 14px; height: 14px; }
+.app-proto .tlx__eye:hover { color: var(--text); }
+.app-proto .tlx__eye[aria-pressed='false'] { color: var(--surface-3); }
+.app-proto .tlx__track {
+  height: 100%;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.app-proto .tlx__clip { height: 100%; }
+/* FRAMES: the take's own preview, one frame wide at the lane's height, cut by a
+   hairline every frame. A longer take simply shows more of them. */
+.app-proto .tlx__clip.is-frames {
+  background-size: calc(var(--lane-h) * 16 / 9) 100%, calc(var(--lane-h) * 16 / 9) 100%;
+  background-repeat: repeat-x, repeat-x;
+  background-position: 0 0, 0 0;
+}
+/* and an audio lane says what audio says: a shape over time, in that input's
+   own colour */
+.app-proto .tlx__lane.is-audio .tlx__track { background: color-mix(in srgb, var(--ch-mic) 12%, transparent); }
+.app-proto .tlx__lane[data-kind='tab audio'] .tlx__track { background: color-mix(in srgb, var(--ch-sysaudio) 12%, transparent); }
+.app-proto .tlx__wave { display: block; width: 100%; height: 100%; fill: var(--ch-mic); opacity: 0.75; }
+.app-proto .tlx__lane[data-kind='tab audio'] .tlx__wave { fill: var(--ch-sysaudio); }
+.app-proto .tlx__lane[data-kind='screen'] .tlx__track { background: color-mix(in srgb, var(--ch-screen) 16%, transparent); }
+.app-proto .tlx__lane[data-kind='camera'] .tlx__track { background: color-mix(in srgb, var(--ch-camera) 16%, transparent); }
+.app-proto .tlx__lane.is-off { opacity: 0.3; }
+/* what is trimmed away is still there, just no longer part of the take */
+.app-proto .tlx__dim {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  background: rgba(6, 6, 10, 0.72);
+  pointer-events: none;
+}
+.app-proto .tlx__dim--l { left: var(--gut); width: calc((100% - var(--gut)) * var(--a, 0)); }
+.app-proto .tlx__dim--r { right: 0; width: calc((100% - var(--gut)) * (1 - var(--b, 1))); }
+.app-proto .tlx__trim {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  width: 10px;
+  border-radius: 4px;
+  background: var(--text-faint);
+  cursor: ew-resize;
+}
+.app-proto .tlx__trim:hover { background: var(--text-dim); }
+.app-proto .tlx__trim--l { left: calc(var(--gut) + (100% - var(--gut)) * var(--a, 0)); }
+.app-proto .tlx__trim--r { left: calc(var(--gut) + (100% - var(--gut)) * var(--b, 1) - 10px); }
+/* the playhead is the one line with the accent on it */
+.app-proto .tlx__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  left: calc(var(--gut) + (100% - var(--gut)) * var(--head, 0));
+  pointer-events: none;
+}
+.app-proto .tlx__head::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.app-proto .tlx__cutline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px rgba(245, 245, 247, 0.35);
+}

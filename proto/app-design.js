@@ -497,38 +497,286 @@
     return EDDOC
   }
 
-  /* THE TIMELINE FILLS THE WIDTH IT IS GIVEN (Robert, 2026-09-06). The clips
-     and the ruler ticks carry the pixel geometry the app laid out at capture
-     time — so many pixels per second, for the width the editor screen had — and
-     dropped into a wider dock they simply stop early and leave a tail. Nothing
-     is hardcoded to undo that: the clips are asked how far they reach, the
-     track is asked how wide it is, and every inline px inside the timeline is
-     multiplied by the ratio. Ticks, clips, trims and playhead all scale
-     together, so it is the same timeline at a different zoom. */
-  function fitTimeline(where) {
-    const tl = where.querySelector('.tl')
-    const track = tl && tl.querySelector('.lane__track')
-    if (!tl || !track) return
-    const width = track.getBoundingClientRect().width
-    /* how far the take reaches is written on the bars themselves, in the pixels
-       the app laid them out with — the clip element around them is a full-width
-       wrapper and says nothing */
-    let reach = 0
-    for (const el of tl.querySelectorAll('.lane__bar')) {
-      reach = Math.max(reach, (parseFloat(el.style.left) || 0) + (parseFloat(el.style.width) || 0))
+  /* ---------- the timeline, rebuilt ---------------------------------------
+     Robert, 2026-09-06: "redo timeline with consistent elements, show frames
+     and beatrate and make it fully interactive."
+
+     It is no longer the editor screen's timeline dropped in a smaller box. That
+     one was a photograph: its clips and ticks carried the pixels the app laid
+     out at capture time, its filmstrip was a blob URL that died with the
+     session it came from, and nothing in it answered a press. This one is BUILT
+     FROM THE TAKE IN FRONT OF YOU — its inputs are the lanes, its length is the
+     ruler, its own preview is the frames, and its real size over its real
+     length is the rate under them. Everything is a fraction of the width, so it
+     fits whatever the dock is and zooms without a single pixel being measured.
+
+     THE WAVEFORM IS THE ONE INVENTED THING. A take's audio is not in the proto,
+     so the shape is drawn from a seeded generator — same take, same wave, every
+     time — and it is there to show what the lane is FOR, not what it holds. */
+  const secsOf = (t) => {
+    const m = String(t || '').match(/(\d+):(\d+)/)
+    return m ? +m[1] * 60 + +m[2] : 0
+  }
+  const clock = (s) => Math.floor(s / 60) + ':' + String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')
+  const bytesOf = (t) => {
+    const m = String(t || '').match(/([\d.]+)\s*(KB|MB|GB)/i)
+    if (!m) return 0
+    const u = m[2].toUpperCase()
+    return parseFloat(m[1]) * (u === 'GB' ? 1e9 : u === 'MB' ? 1e6 : 1e3)
+  }
+  const rate = (bytes, secs) => {
+    if (!bytes || !secs) return ''
+    const bps = (bytes * 8) / secs
+    return bps >= 1e6 ? (bps / 1e6).toFixed(1) + ' Mbps' : Math.round(bps / 1e3) + ' kbps'
+  }
+  /* one seed, one shape: the same take draws the same wave in every session */
+  const wave = (seed, n) => {
+    let x = seed || 1
+    const next = () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+    const pts = []
+    let env = 0.5
+    for (let i = 0; i <= n; i++) {
+      env = Math.min(1, Math.max(0.12, env + (next() - 0.5) * 0.5))
+      const a = env * (0.45 + next() * 0.55)
+      pts.push(a)
     }
-    if (!(reach > 1) || !(width > 1) || Math.abs(reach - width) < 1) return
-    const k = width / reach
-    const px = (v) => (v && v.slice(-2) === 'px' ? (parseFloat(v) * k).toFixed(2) + 'px' : v)
-    for (const el of tl.querySelectorAll('[style]')) {
-      const st = el.style
-      for (const prop of ['left', 'width', 'right']) if (st[prop]) st[prop] = px(st[prop])
-      /* the filmstrip is painted as a background, so its size and offset are
-         part of the same geometry and scale with it */
-      for (const prop of ['backgroundSize', 'backgroundPosition']) {
-        if (st[prop]) st[prop] = st[prop].split(' ').map(px).join(' ')
+    return pts
+  }
+  const AUDIO = { mic: 1, 'tab audio': 1, 'system audio': 1, sound: 1 }
+  /* a nice step for the ruler: whole seconds you would actually count by */
+  const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300]
+  const stepFor = (secs, zoom) => {
+    const want = secs / (5 * zoom)
+    return STEPS.find((v) => v >= want) || STEPS[STEPS.length - 1]
+  }
+
+  function buildTimeline(card) {
+    const secs = secsOf(card.querySelector('.dur') && card.querySelector('.dur').textContent) || 10
+    const size = bytesOf(card.querySelector('.takecard__size') && card.querySelector('.takecard__size').textContent)
+    const shot = card.querySelector('.takecard__thumb img')
+    const kinds = [...card.querySelectorAll('.kind')].map((k) => k.textContent.trim())
+    const tl = document.createElement('div')
+    tl.className = 'tlx'
+    tl.style.setProperty('--zoom', 1)
+    tl.style.setProperty('--head', 0)
+    tl.style.setProperty('--a', 0)
+    tl.style.setProperty('--b', 1)
+
+    const lanes = (kinds.length ? kinds : ['Screen']).map((name) => {
+      const key = name.toLowerCase()
+      const audio = !!AUDIO[key]
+      const l = document.createElement('div')
+      l.className = 'tlx__lane' + (audio ? ' is-audio' : '')
+      l.dataset.kind = key
+      l.innerHTML =
+        `<span class="tlx__name">${ic(glyphFor(name))}<b>${name}</b></span>` +
+        `<button type="button" class="tlx__eye" aria-pressed="true" title="Hide ${name}">${ic('eye')}</button>` +
+        `<div class="tlx__track"><div class="tlx__clip"></div></div>`
+      const clip = l.querySelector('.tlx__clip')
+      if (audio) {
+        const pts = wave(key.split('').reduce((n, c) => n + c.charCodeAt(0), secs * 7), 96)
+        const d = pts.map((v, i) => `${((i / (pts.length - 1)) * 100).toFixed(2)},${(50 - v * 46).toFixed(2)}`).join(' ')
+        const d2 = pts.map((v, i) => `${((i / (pts.length - 1)) * 100).toFixed(2)},${(50 + v * 46).toFixed(2)}`).join(' ')
+        clip.innerHTML =
+          `<svg class="tlx__wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
+          `<polygon points="${d} ${d2.split(' ').reverse().join(' ')}"/></svg>`
+      } else if (shot) {
+        /* FRAMES. The take's own preview, tiled at the lane's height and cut by
+           a hairline every frame — one frame wide is one frame's worth of time,
+           so a longer take shows more of them without anything being told how
+           many there are. */
+        clip.classList.add('is-frames')
+        clip.style.backgroundImage = `linear-gradient(to right, rgba(0,0,0,.55) 1px, transparent 1px), url("${shot.currentSrc || shot.src}")`
       }
+      return l
+    })
+
+    /* the editor's own controls, in this proposal's button. Split and Tighten
+       are what the app has; the speeds are its speeds; the rate is the take's
+       real size over its real length, so it is a measurement and not a label. */
+    const SPEEDS = ['1×', '1.25×', '1.5×', '2×', '3×']
+    tl.innerHTML =
+      `<div class="tlx__bar">` +
+      `<button type="button" class="wbtn tlx__cut" title="Split at the playhead">${ic('scissors')}<span>Split</span></button>` +
+      `<button type="button" class="wbtn tlx__tight" title="Take the silences out">${ic('waves')}<span>Tighten</span></button>` +
+      `<span class="tlx__speeds">${SPEEDS.map(
+        (v, i) => `<button type="button" class="wbtn tlx__sp" aria-pressed="${i === 0}">${v}</button>`,
+      ).join('')}</span>` +
+      `<span class="tlx__rate">${rate(size, secs)}</span>` +
+      `<span class="tlx__zoom"><button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
+      `<b class="tlx__len">${clock(secs)}</b>` +
+      `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button></span>` +
+      `</div>` +
+      `<div class="tlx__view"><div class="tlx__inner">` +
+      `<div class="tlx__ruler"></div><div class="tlx__lanes"></div>` +
+      `<div class="tlx__dim tlx__dim--l"></div><div class="tlx__dim tlx__dim--r"></div>` +
+      `<div class="tlx__trim tlx__trim--l" data-t="a"></div><div class="tlx__trim tlx__trim--r" data-t="b"></div>` +
+      `<div class="tlx__head"></div>` +
+      `</div></div>`
+    const lanesEl = tl.querySelector('.tlx__lanes')
+    for (const l of lanes) lanesEl.appendChild(l)
+    tl.dataset.secs = secs
+    ruler(tl)
+    wireTimeline(tl)
+    return tl
+  }
+
+  function ruler(tl) {
+    const secs = +tl.dataset.secs || 10
+    const zoom = +tl.style.getPropertyValue('--zoom') || 1
+    const st = stepFor(secs, zoom)
+    let html = ''
+    for (let t = 0; t <= secs + 0.001; t += st) {
+      html += `<i style="left:${((t / secs) * 100).toFixed(3)}%"><span>${clock(t)}</span></i>`
     }
+    tl.querySelector('.tlx__ruler').innerHTML = html
+  }
+
+  /* EVERY PART OF IT ANSWERS A PRESS. Scrub anywhere on the lanes, drag either
+     end to trim, cut at the playhead, turn a lane off, zoom in and out — and
+     the transport above is the same clock, so its time, its bar and its play
+     button are this timeline's. */
+  function wireTimeline(tl) {
+    const secs = +tl.dataset.secs || 10
+    const num = (k) => +tl.style.getPropertyValue(k) || 0
+    const set = (k, v) => tl.style.setProperty(k, String(v))
+    const view = tl.querySelector('.tlx__view')
+    const inner = tl.querySelector('.tlx__inner')
+    /* THE LANES START AFTER THE GUTTER, so time zero is the track's left edge
+       and not the box's — the playhead and the trims are placed off the same
+       edge in CSS, and a pointer measured from the box put the head 8% ahead of
+       where it was pressed. */
+    const atX = (e) => {
+      const r = inner.getBoundingClientRect()
+      const gut = parseFloat(getComputedStyle(inner).paddingLeft) || 0
+      return Math.min(1, Math.max(0, (e.clientX - r.left - gut) / Math.max(1, r.width - gut)))
+    }
+    const paint = () => {
+      const t = num('--head') * secs
+      const dock = tl.closest('.watchdock')
+      const time = dock && dock.querySelector('.transport__time')
+      if (time) time.innerHTML = `${clock(t)} <span class="transport__time-sep">/</span> ${clock(secs)}`
+      const fill = dock && dock.querySelector('.scrubber__fill')
+      if (fill) fill.style.width = (num('--head') * 100).toFixed(2) + '%'
+    }
+    tl.paint = paint
+
+    let drag = null
+    inner.addEventListener('pointerdown', (e) => {
+      const trim = e.target.closest('.tlx__trim')
+      if (e.target.closest('.tlx__eye')) return
+      drag = trim ? trim.dataset.t : 'head'
+      inner.setPointerCapture(e.pointerId)
+      move(e)
+      e.preventDefault()
+      e.stopPropagation()
+    })
+    const move = (e) => {
+      if (!drag) return
+      const p = atX(e)
+      if (drag === 'a') set('--a', Math.min(p, num('--b') - 0.02))
+      else if (drag === 'b') set('--b', Math.max(p, num('--a') + 0.02))
+      else set('--head', Math.min(Math.max(p, num('--a')), num('--b')))
+      paint()
+    }
+    inner.addEventListener('pointermove', move)
+    inner.addEventListener('pointerup', () => { drag = null })
+    inner.addEventListener('pointercancel', () => { drag = null })
+
+    tl.addEventListener('click', (e) => {
+      const eye = e.target.closest('.tlx__eye')
+      if (eye) {
+        const on = eye.getAttribute('aria-pressed') !== 'true'
+        eye.setAttribute('aria-pressed', String(on))
+        eye.closest('.tlx__lane').classList.toggle('is-off', !on)
+        e.stopPropagation()
+        return
+      }
+      const sp = e.target.closest('.tlx__sp')
+      if (sp) {
+        for (const b of tl.querySelectorAll('.tlx__sp')) b.setAttribute('aria-pressed', String(b === sp))
+        e.stopPropagation()
+        return
+      }
+      const z = e.target.closest('.tlx__z')
+      if (z) {
+        const now = num('--zoom') || 1
+        const next = Math.min(8, Math.max(1, z.dataset.z === '+' ? now * 1.6 : now / 1.6))
+        set('--zoom', next.toFixed(3))
+        ruler(tl)
+        /* zooming in keeps the playhead where you are looking */
+        view.scrollLeft = num('--head') * inner.getBoundingClientRect().width - view.clientWidth / 2
+        e.stopPropagation()
+        return
+      }
+      if (e.target.closest('.tlx__tight')) {
+        /* what Tighten does to a take is take the quiet out of it; here it is
+           the gaps in the drawn wave that go, so the lanes show the idea */
+        tl.classList.toggle('is-tight')
+        e.stopPropagation()
+        return
+      }
+      if (e.target.closest('.tlx__cut')) {
+        const cut = document.createElement('i')
+        cut.className = 'tlx__cutline'
+        cut.style.left = (num('--head') * 100).toFixed(3) + '%'
+        tl.querySelector('.tlx__lanes').appendChild(cut)
+        e.stopPropagation()
+      }
+    })
+    paint()
+  }
+
+  /* the transport drives the same head, so play is play */
+  function wirePlay(dock, tl) {
+    const btn = dock.querySelector('.transport__play')
+    const scrub = dock.querySelector('.scrubber')
+    const secs = +tl.dataset.secs || 10
+    let raf = null
+    let last = 0
+    const num = (k) => +tl.style.getPropertyValue(k) || 0
+    const stop = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = null
+      if (btn) btn.setAttribute('aria-label', 'Play')
+      dock.classList.remove('is-playing')
+    }
+    const step = (t) => {
+      const dt = last ? (t - last) / 1000 : 0
+      last = t
+      let h = num('--head') + dt / secs
+      const b = num('--b') || 1
+      if (h >= b) {
+        h = b
+        tl.style.setProperty('--head', h)
+        if (tl.paint) tl.paint()
+        return stop()
+      }
+      tl.style.setProperty('--head', h)
+      if (tl.paint) tl.paint()
+      raf = requestAnimationFrame(step)
+    }
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        if (raf) return stop()
+        if (num('--head') >= (num('--b') || 1) - 0.001) tl.style.setProperty('--head', num('--a'))
+        last = 0
+        dock.classList.add('is-playing')
+        btn.setAttribute('aria-label', 'Pause')
+        raf = requestAnimationFrame(step)
+      })
+    }
+    if (scrub) {
+      scrub.addEventListener('pointerdown', (e) => {
+        const r = scrub.getBoundingClientRect()
+        const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+        tl.style.setProperty('--head', p)
+        if (tl.paint) tl.paint()
+        e.stopPropagation()
+      })
+    }
+    tl.stopPlay = stop
   }
 
   function watchDock(root) {
@@ -586,7 +834,6 @@
   function watchEdit(root) {
     const bar = root.querySelector('.controlbar')
     const dock = watchDock(root)
-    const ed = editorDoc()
     if (!bar || !dock) return
     /* THE BUTTON IS A SWITCH (Robert, 2026-09-06). Pressed again it shuts the
        drawer the same way closing the player does — fold, and the picture takes
@@ -596,6 +843,8 @@
     const open = dock.querySelector('.wdock__edit')
     if (open) {
       open.style.height = '0px'
+      open.classList.remove('is-open')
+      if (open.__stop) open.__stop()
       bar.classList.remove('is-edit')
       bar.style.setProperty('--dock-h', '0px')
       const btn = dock.querySelector('.wedit')
@@ -611,12 +860,15 @@
 
     const block = document.createElement('div')
     block.className = 'wdock__edit'
-    for (const sel of ['.tools', '.tl']) {
-      const el = ed && ed.querySelector(sel)
-      if (el) block.appendChild(el.cloneNode(true))
-    }
-    if (!block.children.length) return
+    const skin = document.createElement('div')
+    skin.className = 'wdock__editin'
+    const tlEl = buildTimeline(WATCH.card)
+    skin.appendChild(tlEl)
+    block.appendChild(skin)
     dock.appendChild(block)
+    wirePlay(dock, tlEl)
+    /* folding it away stops the clock with it */
+    block.__stop = () => tlEl.stopPlay && tlEl.stopPlay()
 
     const cap = root.querySelector('.capture')
     const capH = cap ? cap.getBoundingClientRect().height : 660
@@ -644,7 +896,6 @@
        width it has now it would overhang by the difference */
     root.style.setProperty('--take-w', willW)
     void bar.offsetHeight
-    fitTimeline(block)
     root.style.setProperty('--take-w', wasW)
     bar.classList.remove('is-edit')
     bar.style.setProperty('--dock-h', '0px')
@@ -659,6 +910,7 @@
     bar.classList.add('is-edit')
     bar.style.setProperty('--dock-h', want + 'px')
     block.style.height = blockH + 'px'
+    block.classList.add('is-open')
     const btn = dock.querySelector('.wedit')
     if (btn) btn.setAttribute('aria-pressed', 'true')
     if (WATCH.box && target) {
@@ -683,6 +935,8 @@
     const block = cbar && cbar.querySelector('.wdock__edit')
     if (block) {
       block.style.height = '0px'
+      block.classList.remove('is-open')
+      if (block.__stop) block.__stop()
       cbar.classList.remove('is-edit')
       cbar.style.setProperty('--dock-h', '0px')
     }
