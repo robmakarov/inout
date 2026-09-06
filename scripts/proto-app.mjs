@@ -533,9 +533,19 @@ function readTemplate(design) {
         <button class="tab" role="tab" aria-selected="true">As it ships</button>`
   const designPanel = design
     ? `      <div class="panel__group">
-        <div class="panel__label">Ground</div>
+        <div class="panel__label">Grid</div>
         <button class="btn-h" id="g-on" aria-pressed="true">Cell grid</button>
-        <button class="btn-h" id="b-on" aria-pressed="true" style="margin-top:6px">Scroll bounce</button>
+        <div class="slider"><label for="s-g">strength</label><input type="range" id="s-g" min="0" max="2" step="0.05" value="0.7"><output id="o-g">0.70</output></div>
+        <div class="slider"><label for="s-cell">cell</label><input type="range" id="s-cell" min="12" max="64" step="1" value="24"><output id="o-cell">24</output></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Scroll bounce</div>
+        <button class="btn-h" id="b-on" aria-pressed="true">Bounce</button>
+        <div class="slider"><label for="p-k">stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="344"><output id="o-pk">344</output></div>
+        <div class="slider"><label for="p-c">damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="25.5"><output id="o-pc">25.5</output></div>
+        <div class="slider"><label for="p-i">impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="4.4"><output id="o-pi">4.4</output></div>
+        <div class="slider"><label for="p-f">bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.31"><output id="o-pf">0.31</output></div>
+        <div class="slider"><label for="p-w">wall</label><input type="range" id="p-w" min="0" max="0.8" step="0.02" value="0.14"><output id="o-pw">0.14</output></div>
       </div>`
     : ''
   const simJs = readFileSync(SIM_JS, 'utf8')
@@ -646,6 +656,24 @@ body.f .filters, body.d .detail { opacity: 1; }
 .tab[aria-selected='true'] { background: #2b2b31; color: #fff; }
 .tab kbd { float: right; font: 10px/1.5 ui-monospace, monospace; color: #55555e; }
 .readout { font: 11px/1.5 ui-monospace, monospace; color: #55555e; white-space: pre-line; }
+/* the slider, copied WHOLE from proto/style.html — the first copy took the grid
+   and left the range styling behind, so seven browser controls rendered in the
+   middle of a tool that styles everything else. Same 52px label column as there,
+   so a label wraps in the same place in both protos. Only the thumb differs:
+   style.html's reads its neon vars, and this proto has the app's accent. */
+.slider {
+  display: grid; grid-template-columns: 52px 1fr 34px; align-items: center; gap: 6px;
+  margin-top: 7px; font: 10px/1 ui-monospace, monospace; color: #6a6a74;
+}
+.slider output { text-align: right; color: #a8a8b2; }
+.slider input[type='range'] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+  border-radius: 2px; background: #2b2b31; outline: none;
+}
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: #0a84ff; cursor: pointer;
+}
 .note { font: 11px/1.5 ui-monospace, monospace; color: #6a6a74; }
 
 /* edge handles — the only chrome left when both panels are shut */
@@ -962,9 +990,31 @@ function toggle(id, key) {
   })
   put()
 }
+/* the numbers land on protoMotion, which is style.html's PHYS and grid under
+   another name; moving one mid-flight is the point — you feel it on the next
+   throw. Same ranges and same defaults as there, so a judgement carries. */
+const MOTION = [
+  { el: 's-g', out: 'o-g', key: 'gridk', dp: 2 },
+  { el: 's-cell', out: 'o-cell', key: 'gridcell', dp: 0 },
+  { el: 'p-k', out: 'o-pk', key: 'k', dp: 0 },
+  { el: 'p-c', out: 'o-pc', key: 'c', dp: 1 },
+  { el: 'p-i', out: 'o-pi', key: 'imp', dp: 1 },
+  { el: 'p-f', out: 'o-pf', key: 'follow', dp: 2 },
+  { el: 'p-w', out: 'o-pw', key: 'wall', dp: 2 },
+]
 function buildMotion() {
   toggle('g-on', 'gridon')
   toggle('b-on', 'bounceon')
+  if (!window.protoMotion || !$('#s-g')) return
+  for (const m of MOTION) {
+    const input = $('#' + m.el)
+    const put = () => {
+      window.protoMotion.set(m.key, input.value)
+      $('#' + m.out).textContent = (+input.value).toFixed(m.dp)
+    }
+    input.addEventListener('input', () => { put(); save() })
+    put()
+  }
 }
 
 function show(id) {
@@ -1104,7 +1154,8 @@ function save() {
   const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
     '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
     '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost) +
-    ($('#g-on') ? '&g=' + ($('#g-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) + ($('#b-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) : '')
+    ($('#g-on') ? '&g=' + ($('#g-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) + ($('#b-on').getAttribute('aria-pressed') === 'true' ? 1 : 0) : '') +
+    ($('#s-g') ? '&m=' + MOTION.map((x) => $('#' + x.el).value).join(',') : '')
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -1137,6 +1188,7 @@ function restore() {
     $('#g-on').setAttribute('aria-pressed', String(st.g[0] === '1'))
     $('#b-on').setAttribute('aria-pressed', String(st.g[1] === '1'))
   }
+  if (st.m && $('#s-g')) st.m.split(',').forEach((v, i) => { if (MOTION[i] && !isNaN(+v)) $('#' + MOTION[i].el).value = v })
   if (st.l) window.PROTO_SIM.lost = decodeURIComponent(st.l)
 }
 
