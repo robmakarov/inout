@@ -303,9 +303,19 @@
    prompt. The one thing added to his description is a rule under it WHILE IT
    HAS FOCUS: a text field with no edge and no caret target is unfindable, and
    the rule is gone the moment you click away. */
+/* IT HUGS ITS TEXT (Robert, 2026-09-06). A full-width field draws a rule across
+   the whole card while you type, which says "form row"; a field the width of the
+   name says "this word is the name". `field-sizing: content` makes the input's
+   intrinsic width its own text — the placeholder's when it is empty, so an
+   app-named take hugs the name the app gave it — and `width: fit-content` lets
+   the block honour that instead of filling the card. The clamp is the card, and
+   a name longer than that ellipsises rather than pushing anything. */
 .app-proto .takename {
   display: block;
-  width: 100%;
+  field-sizing: content;
+  width: fit-content;
+  min-width: 3ch;
+  max-width: 100%;
   margin: 0 0 2px;
   padding: 0;
   border: 0;
