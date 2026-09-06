@@ -34,6 +34,20 @@
      by the little kind badges on a card, so the two can never drift apart. */
   const GLYPH = { screen: 'display', camera: 'camera', mic: 'mic', 'tab audio': 'waves', 'system audio': 'waves', sound: 'waves' }
   const glyphFor = (label) => GLYPH[String(label || '').trim().toLowerCase()] || 'display'
+  /* and the same for what a button DOES, so every action in the frame is drawn
+     by one hand. Keyed on the app's own wording — its text, or its label when
+     it has none — so a button the app renames simply stops matching rather than
+     quietly getting the wrong picture. */
+  const ACTION = {
+    download: 'download',
+    'show in folder': 'folder',
+    'delete this take': 'trash',
+    send: 'send',
+    'copy link': 'link',
+    'make a link': 'link',
+    watch: 'play',
+    edit: 'scissors',
+  }
   const nameOf = (b) => (b.getAttribute('title') || b.textContent || '').trim().toLowerCase()
 
   /* the glyph the app already uses for this action, taken off the element that
@@ -109,8 +123,21 @@
         else top?.appendChild(kinds)
       }
 
-      // Watch and Edit go; the picture itself already opens the take
+      /* ONE ICON SET IN THE FRAME. The chips and the kind badges already wear
+         neon's; the card's own buttons still wore the app's, drawn at a
+         different stroke — so a download arrow in the card corner and a
+         download arrow in the toolbar were two different drawings of the same
+         idea. Same sprite for all of them, and the toolbar's pair is cloned off
+         this one, so there is exactly one place the choice is made. */
       const btns = [...card.querySelectorAll('.takecard__actions .takecard__btn')]
+      for (const b of [...btns, card.querySelector('.takecard__del')]) {
+        if (!b) continue
+        const name = ACTION[(b.textContent || b.getAttribute('aria-label') || '').trim().toLowerCase()]
+        const svg = name && b.querySelector('svg')
+        if (svg) svg.outerHTML = ic(name)
+      }
+
+      // Watch and Edit go; the picture itself already opens the take
       for (const b of btns) {
         const t = (b.textContent || '').trim().toLowerCase()
         if (t === 'watch' || t === 'edit') b.remove()
@@ -191,10 +218,10 @@
           <button class="tool2 tool2--pick" data-t="pick" aria-pressed="false" title="Select takes">
             <span class="pick">${ic('check')}</span>
           </button>
-          <span class="selx">
+          <span class="selx"><span class="selx__in">
             <button class="tool2 tool2--txt" data-p="all">All</button>
             <button class="tool2 tool2--txt" data-p="clear">Clear</button>
-          </span>
+          </span></span>
           <span class="totalx"><b class="total__n">0</b><span class="total__w">takes</span></span>
         </div>
         ${
@@ -223,9 +250,9 @@
          second bin on the same screen doing the same job. cards() runs before
          head(), so the corner group is there to copy from and the two can never
          drift apart. */
-      p.innerHTML = `<span class="picked__n">0</span> selected
+      p.innerHTML = `<span class="picked__in"><span class="picked__n">0</span> selected
         <button data-p="save" title="Download" aria-label="Download">${glyphOf(root, '.cardtools [title="Download"]', 'download')}</button>
-        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button>`
+        <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button></span>`
       headEl.querySelector('.tools2').appendChild(p)
     }
     total(takes)

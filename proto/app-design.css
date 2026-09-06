@@ -17,6 +17,13 @@
   /* the feed breathes the same amount above and below: one number, so the two
      gaps cannot drift apart the way two would */
   --feed-gap: 20px;
+  /* TWO SPEEDS AND ONE CURVE FOR THE WHOLE PROPOSAL. There were five durations
+     in this file — 120, 130, 200 and two eases — for movements that are meant
+     to read as the same hand. Fast is anything answering the pointer; slide is
+     anything opening or closing. The curve is the source's own. */
+  --dz-fast: 140ms;
+  --dz-slide: 320ms;
+  --dz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ---------- 0. the studio ground: grid, tilt and bounce --------------------
@@ -125,7 +132,7 @@
    gets, two steps quieter, on the same 10px corner — so hovering reads as the
    first half of picking rather than as a different idea. The picture's stroke
    and the corner tools come up with it: one gesture, three things wake. */
-.app-proto .takecard { border-radius: 10px; transition: background 130ms var(--ease); }
+.app-proto .takecard { border-radius: 10px; transition: background var(--dz-fast) var(--dz-ease); }
 .app-proto .takecard:not(.is-picked):hover { background: var(--surface); }
 .app-proto .takecard:not(.is-picked):hover .takecard__thumb { border-color: var(--text-faint); }
 .app-proto .takecard:hover .cardtools button { color: var(--text-dim); }
@@ -147,7 +154,7 @@
   margin: 0;
   border: 1px solid var(--surface-3);
   border-radius: 8px;
-  transition: border-color 130ms var(--ease);
+  transition: border-color var(--dz-fast) var(--dz-ease);
 }
 
 /* the length rides the picture, bottom right, the way every video thumbnail
@@ -256,7 +263,7 @@
   background: none;
   border-radius: 7px;
   color: var(--text-faint);
-  transition: color 120ms, background 120ms;
+  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
 }
 .app-proto .cardtools button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .app-proto .cardtools .takecard__del:hover:not(:disabled) { color: var(--record); }
@@ -277,6 +284,10 @@
    the app's 0.42 the pair was too faint to judge — and where these two buttons
    belong is the whole question here. Legible, still visibly unbuilt. */
 .app-proto .takecard__actions { margin-top: 1px; }
+/* the app sized these icons with width/height ATTRIBUTES on its own svgs; a
+   sprite <use> carries none, and an svg with neither collapses to the CSS
+   default 300x150. Every glyph the proposal swaps in needs its size in CSS. */
+.app-proto .takecard__actions .takecard__btn svg { width: 13px; height: 13px; flex: none; }
 .app-proto .takecard__btn--soon { opacity: 0.72; }
 
 /* AND A HIDDEN CARD HAS TO ACTUALLY GO. The app styles .takecard with
@@ -345,7 +356,7 @@
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  transition: color 120ms, background 120ms;
+  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
 }
 .app-proto .where button svg { width: 13px; height: 13px; }
 .app-proto .where button:hover { color: var(--text); }
@@ -359,7 +370,7 @@
   place-items: center;
   border-radius: 7px;
   color: var(--text-faint);
-  transition: color 120ms, background 120ms;
+  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
 }
 .app-proto .tool2 svg { width: 15px; height: 15px; }
 .app-proto .tool2:hover { background: var(--surface-2); color: var(--text); }
@@ -374,22 +385,26 @@
 .app-proto .tool2--pick:hover .pick { border-color: var(--text-faint); }
 .app-proto .tool2--pick[aria-pressed='true'] .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* ALL AND CLEAR SLIDE OUT FROM BEHIND IT. Lifted from ~/Documents/inout copy
-   (styles.css:1122 .select-extra) — the numbers are its numbers, because what
-   makes it feel like a drawer and not a popup is the max-width carrying the
-   width open while the opacity and the 4px lean do the arriving. */
+/* ALL AND CLEAR SLIDE OUT FROM BEHIND IT — and the source's max-width is the
+   one thing of its that could not be kept. A max-width drawer only animates
+   while the cap is still narrower than the content: 0 → 140 over content that
+   measures 86 reaches full width in 61% of the time and then spends the rest
+   animating nothing, and 0 → 300 over 132 (the selected group) got there in
+   under a fifth — which is why it read as no animation at all. A 0fr → 1fr
+   grid column interpolates to EXACTLY the content width, so the whole duration
+   is travel, and it needs no number that has to be kept in sync with the text.
+   Every drawer in this file works this way. */
 .app-proto .selx {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 0fr;
   align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  max-width: 0;
   opacity: 0;
   transform: translateX(-4px);
-  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: grid-template-columns var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease),
+    transform var(--dz-slide) var(--dz-ease);
 }
-.app-proto .takes.is-picking .selx { max-width: 140px; opacity: 1; transform: translateX(0); }
+.app-proto .selx__in { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.app-proto .takes.is-picking .selx { grid-template-columns: 1fr; opacity: 1; transform: translateX(0); }
 /* filter and sort live beside the search now and stay put in select mode: they
    are how you decide WHICH takes are in front of you, and narrowing the list
    and then pressing All is the reason All takes only what is showing. */
@@ -496,8 +511,8 @@
   padding-left: 0;
   opacity: 0;
   transform: translateX(-6px);
-  transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), padding-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width var(--dz-slide) var(--dz-ease), padding-left var(--dz-slide) var(--dz-ease),
+    opacity var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease);
 }
 .app-proto .takes.is-picking .takecard__pick { width: 28px; padding-left: 10px; opacity: 1; transform: translateX(0); }
 .app-proto .takes.is-picking .takecard__actions { display: none; }
@@ -513,7 +528,7 @@
   /* BEHAVIORS.md, KNOWN BROKEN: the source's checkbox has no transition at all
      and snaps. It is listed there as an oversight to fix when lifted, so it is
      fixed here rather than copied. */
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease), color var(--dz-fast) var(--dz-ease);
 }
 .app-proto .pick svg { width: 12px; height: 12px; }
 .app-proto .takecard.is-picked .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -524,30 +539,37 @@
    same faint-until-hovered ghost. A slab under the list was a second place to
    look for the result of a press made two rows above it. */
 .app-proto .picked {
-  display: flex;
+  /* the SAME drawer as .selx, keyed on the SELECTION rather than the mode:
+     entering select mode opens All and Clear, picking something opens this */
+  display: grid;
+  grid-template-columns: 0fr;
   align-items: center;
-  gap: 4px;
-  margin: 0 0 0 12px;
   padding: 0;
+  margin: 0;
   background: none;
   border-radius: 0;
   font-size: 12px;
   white-space: nowrap;
   color: var(--text-faint);
-  /* the same drawer as .selx and the row checkboxes, but keyed on the SELECTION
-     rather than the mode: entering select mode opens All and Clear, and picking
-     something opens this, to the right of the number of takes */
-  overflow: hidden;
-  max-width: 0;
   opacity: 0;
-  transition: max-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: grid-template-columns var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
   /* the head is a row of uppercase condensed labels and everything in it
      inherits that; this is a sentence, so it opts out the way room__note does */
   font-family: var(--font);
   text-transform: none;
   letter-spacing: 0;
 }
-.app-proto .takes.has-picked .picked { max-width: 300px; opacity: 1; }
+/* the 12 that separates it from the take count belongs to the CONTENT, so it
+   closes up with it instead of leaving a hole in the row */
+.app-proto .picked__in {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+.app-proto .takes.has-picked .picked { grid-template-columns: 1fr; opacity: 1; }
 .app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
 /* icon-only, and the same 28 square as every other tool in this row */
 .app-proto .picked button {
@@ -560,7 +582,7 @@
   border-radius: 7px;
   background: none;
   color: var(--text-faint);
-  transition: color 120ms, background 120ms;
+  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
 }
 .app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }

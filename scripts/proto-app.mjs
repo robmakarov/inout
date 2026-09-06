@@ -78,7 +78,22 @@ function borrowFromNeon() {
   const open = neon.indexOf('<svg hidden')
   const close = neon.indexOf('</svg>', open)
   if (open < 0 || close < 0) throw new Error('proto-app: could not find the icon sprite in proto/neon.html')
-  return { faces: faces.join(''), sprite: neon.slice(open, close + 6) }
+  /* ONE STROKE WEIGHT ON THE WAY IN. The sprite is 1.8 for fifteen of its
+     twenty-four glyphs and 2 for four more — which is invisible in neon's own
+     tool rows and is NOT invisible here, where download sits against folder and
+     a bin at the same size and comes out visibly fatter than both. Nothing can
+     fix it in CSS: stroke-width inside a <use> shadow tree is set by a
+     presentation attribute on the symbol's own paths, and an inherited value
+     never beats one. So it is normalised in the copy, on the way in. The tick
+     and the bang keep their weight — a mark drawn at 12 px reads as a mark, not
+     as a line icon, and thinning them makes them disappear. */
+  const KEEP = /^(check|bang)$/
+  const sprite = neon
+    .slice(open, close + 6)
+    .replace(/<symbol id="i-([a-z0-9-]+)"([\s\S]*?)<\/symbol>/g, (all, id, body) =>
+      KEEP.test(id) ? all : `<symbol id="i-${id}"${body.replace(/stroke-width="[\d.]+"/g, 'stroke-width="1.8"')}</symbol>`,
+    )
+  return { faces: faces.join(''), sprite }
 }
 
 /**
