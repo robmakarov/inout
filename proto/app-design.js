@@ -127,27 +127,28 @@
 
     headEl.innerHTML = `
       <div class="bar2">
+        <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
+        <div class="rightgrp">
+          <div class="where" role="tablist">
+            <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
+            <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
+          </div>
+          <button class="acct__av" data-acct title="Not signed in">${ic('user')}</button>
+        </div>
         <div class="tools2">
-          <button class="tool2" data-t="find" aria-pressed="false" title="Search">${dic('search')}</button>
           <button class="tool2" data-t="filter" aria-pressed="false" title="Filter">${dic('filter')}</button>
           <button class="tool2" data-t="sort" aria-pressed="false" title="Sort">${dic('sort')}</button>
           <button class="tool2" data-t="pick" aria-pressed="false" title="Select">${ic('check')}</button>
         </div>
-        <label class="find">${dic('search')}<input type="search" placeholder="Search takes" /></label>
-        <div class="where" role="tablist">
-          <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
-          <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
-        </div>
-        <button class="acct__av" data-acct title="Not signed in">${ic('user')}</button>
-      </div>
-      ${
-        pct === null
-          ? ''
-          : `<div class="room">
-               <div class="room__bar"><div class="room__fill${pct > 85 ? ' is-tight' : ''}" style="width:${pct.toFixed(1)}%"></div></div>
-               <div class="room__note"><b>${bytes(room.quota - room.usage)}</b> free of ${bytes(room.quota)} on this device</div>
-             </div>`
-      }`
+        ${
+          pct === null
+            ? '<div class="room"></div>'
+            : `<div class="room">
+                 <div class="room__bar"><div class="room__fill${pct > 85 ? ' is-tight' : ''}" style="width:${pct.toFixed(1)}%"></div></div>
+                 <div class="room__note"><b>${bytes(room.quota - room.usage)}</b> free of ${bytes(room.quota)}</div>
+               </div>`
+        }
+      </div>`
 
     if (!takes.querySelector('.picked')) {
       const p = document.createElement('div')
@@ -239,13 +240,6 @@
       }
       if (!t) return
       const kind = t.dataset.t
-      if (kind === 'find') {
-        const on = bar.classList.toggle('is-finding')
-        t.setAttribute('aria-pressed', String(on))
-        if (on) input.focus()
-        else { input.value = ''; apply() }
-        return
-      }
       if (kind === 'filter') {
         const kinds = new Set()
         for (const k of takes.querySelectorAll('.kind')) kinds.add(k.textContent.trim().toLowerCase())
