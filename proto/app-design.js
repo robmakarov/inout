@@ -550,50 +550,31 @@
     return STEPS.find((v) => v >= want) || STEPS[STEPS.length - 1]
   }
 
+  /* THE ORDER IS THE CONTROL BAR'S ORDER (Robert, 2026-09-06: "screen/sound/
+     camera/mic is order for timeline"). It is the same order the chips stand in
+     — what comes off the screen, then what comes off the machine, then the two
+     devices — so a take reads the same way in the bar and in the timeline. */
+  const LANE_ORDER = ['screen', 'tab audio', 'system audio', 'sound', 'camera', 'mic']
+  const laneRank = (name) => {
+    const i = LANE_ORDER.indexOf(String(name).toLowerCase())
+    return i < 0 ? LANE_ORDER.length : i
+  }
+
   function buildTimeline(card) {
     const secs = secsOf(card.querySelector('.dur') && card.querySelector('.dur').textContent) || 10
     const size = bytesOf(card.querySelector('.takecard__size') && card.querySelector('.takecard__size').textContent)
     const shot = card.querySelector('.takecard__thumb img')
     const kinds = [...card.querySelectorAll('.kind')].map((k) => k.textContent.trim())
+    const names = (kinds.length ? kinds : ['Screen']).sort((x, y) => laneRank(x) - laneRank(y))
+
     const tl = document.createElement('div')
     tl.className = 'tlx'
     tl.style.setProperty('--zoom', 1)
     tl.style.setProperty('--head', 0)
     tl.style.setProperty('--a', 0)
     tl.style.setProperty('--b', 1)
+    tl.dataset.secs = secs
 
-    const lanes = (kinds.length ? kinds : ['Screen']).map((name) => {
-      const key = name.toLowerCase()
-      const audio = !!AUDIO[key]
-      const l = document.createElement('div')
-      l.className = 'tlx__lane' + (audio ? ' is-audio' : '')
-      l.dataset.kind = key
-      l.innerHTML =
-        `<span class="tlx__name">${ic(glyphFor(name))}<b>${name}</b></span>` +
-        `<button type="button" class="tlx__eye" aria-pressed="true" title="Hide ${name}">${ic('eye')}</button>` +
-        `<div class="tlx__track"><div class="tlx__clip"></div></div>`
-      const clip = l.querySelector('.tlx__clip')
-      if (audio) {
-        const pts = wave(key.split('').reduce((n, c) => n + c.charCodeAt(0), secs * 7), 96)
-        const d = pts.map((v, i) => `${((i / (pts.length - 1)) * 100).toFixed(2)},${(50 - v * 46).toFixed(2)}`).join(' ')
-        const d2 = pts.map((v, i) => `${((i / (pts.length - 1)) * 100).toFixed(2)},${(50 + v * 46).toFixed(2)}`).join(' ')
-        clip.innerHTML =
-          `<svg class="tlx__wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
-          `<polygon points="${d} ${d2.split(' ').reverse().join(' ')}"/></svg>`
-      } else if (shot) {
-        /* FRAMES. The take's own preview, tiled at the lane's height and cut by
-           a hairline every frame — one frame wide is one frame's worth of time,
-           so a longer take shows more of them without anything being told how
-           many there are. */
-        clip.classList.add('is-frames')
-        clip.style.backgroundImage = `linear-gradient(to right, rgba(0,0,0,.55) 1px, transparent 1px), url("${shot.currentSrc || shot.src}")`
-      }
-      return l
-    })
-
-    /* the editor's own controls, in this proposal's button. Split and Tighten
-       are what the app has; the speeds are its speeds; the rate is the take's
-       real size over its real length, so it is a measurement and not a label. */
     const SPEEDS = ['1×', '1.25×', '1.5×', '2×', '3×']
     tl.innerHTML =
       `<div class="tlx__bar">` +
@@ -602,20 +583,62 @@
       `<span class="tlx__speeds">${SPEEDS.map(
         (v, i) => `<button type="button" class="wbtn tlx__sp" aria-pressed="${i === 0}">${v}</button>`,
       ).join('')}</span>` +
-      `<span class="tlx__rate">${rate(size, secs)}</span>` +
+      `<span class="tlx__rate" title="This take's own size over its own length">${rate(size, secs)}</span>` +
       `<span class="tlx__zoom"><button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
       `<b class="tlx__len">${clock(secs)}</b>` +
       `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button></span>` +
       `</div>` +
+      `<div class="tlx__body">` +
+      /* THE NAMES DO NOT SCROLL. They were inside the box that widens with the
+         zoom, so the first thing zooming in did was carry the lane names off
+         the left edge — which is most of why it read as broken. Their own
+         column now, beside the view, fixed. */
+      `<div class="tlx__names"></div>` +
       `<div class="tlx__view"><div class="tlx__inner">` +
       `<div class="tlx__ruler"></div><div class="tlx__lanes"></div>` +
       `<div class="tlx__dim tlx__dim--l"></div><div class="tlx__dim tlx__dim--r"></div>` +
-      `<div class="tlx__trim tlx__trim--l" data-t="a"></div><div class="tlx__trim tlx__trim--r" data-t="b"></div>` +
+      `<div class="tlx__trim tlx__trim--l" data-t="a"><i></i></div>` +
+      `<div class="tlx__trim tlx__trim--r" data-t="b"><i></i></div>` +
       `<div class="tlx__head"></div>` +
-      `</div></div>`
+      `</div></div></div>`
+
+    const namesEl = tl.querySelector('.tlx__names')
     const lanesEl = tl.querySelector('.tlx__lanes')
-    for (const l of lanes) lanesEl.appendChild(l)
-    tl.dataset.secs = secs
+    names.forEach((name, i) => {
+      const key = name.toLowerCase()
+      const audio = !!AUDIO[key]
+      const row = document.createElement('div')
+      row.className = 'tlx__nrow'
+      row.dataset.i = i
+      row.innerHTML =
+        `<span class="tlx__name">${ic(glyphFor(name))}<b>${name}</b></span>` +
+        `<button type="button" class="tlx__eye" aria-pressed="true" title="Hide ${name}">${ic('eye')}</button>`
+      namesEl.appendChild(row)
+
+      const lane = document.createElement('div')
+      lane.className = 'tlx__lane' + (audio ? ' is-audio' : '')
+      lane.dataset.kind = key
+      lane.dataset.i = i
+      lane.innerHTML = `<div class="tlx__clip"></div>`
+      const clip = lane.querySelector('.tlx__clip')
+      if (audio) {
+        const pts = wave(key.split('').reduce((n, c) => n + c.charCodeAt(0), secs * 7), 96)
+        const top = pts.map((v, j) => `${((j / (pts.length - 1)) * 100).toFixed(2)},${(50 - v * 46).toFixed(2)}`)
+        const bot = pts.map((v, j) => `${((j / (pts.length - 1)) * 100).toFixed(2)},${(50 + v * 46).toFixed(2)}`).reverse()
+        clip.innerHTML =
+          `<svg class="tlx__wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
+          `<polygon points="${top.join(' ')} ${bot.join(' ')}"/></svg>`
+      } else if (shot) {
+        /* FRAMES, AND YOU CAN SEE WHERE ONE ENDS (Robert: "frames in timeline
+           not separated somehow"). The take's own preview, one frame wide at the
+           lane's height, and a 2px cut of the page's own black between them —
+           a hairline over a dark screenshot was not a line, it was a rumour. */
+        clip.classList.add('is-frames')
+        clip.style.backgroundImage = `linear-gradient(to right, var(--bg) 0 2px, transparent 2px), url("${shot.currentSrc || shot.src}")`
+      }
+      lanesEl.appendChild(lane)
+    })
+
     ruler(tl)
     wireTimeline(tl)
     return tl
@@ -642,14 +665,9 @@
     const set = (k, v) => tl.style.setProperty(k, String(v))
     const view = tl.querySelector('.tlx__view')
     const inner = tl.querySelector('.tlx__inner')
-    /* THE LANES START AFTER THE GUTTER, so time zero is the track's left edge
-       and not the box's — the playhead and the trims are placed off the same
-       edge in CSS, and a pointer measured from the box put the head 8% ahead of
-       where it was pressed. */
     const atX = (e) => {
       const r = inner.getBoundingClientRect()
-      const gut = parseFloat(getComputedStyle(inner).paddingLeft) || 0
-      return Math.min(1, Math.max(0, (e.clientX - r.left - gut) / Math.max(1, r.width - gut)))
+      return Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width)))
     }
     const paint = () => {
       const t = num('--head') * secs
@@ -664,9 +682,13 @@
     let drag = null
     inner.addEventListener('pointerdown', (e) => {
       const trim = e.target.closest('.tlx__trim')
-      if (e.target.closest('.tlx__eye')) return
       drag = trim ? trim.dataset.t : 'head'
-      inner.setPointerCapture(e.pointerId)
+      if (trim) trim.classList.add('is-held')
+      try {
+        inner.setPointerCapture(e.pointerId)
+      } catch (err) {
+        /* a pointer id the browser does not own — nothing to capture */
+      }
       move(e)
       e.preventDefault()
       e.stopPropagation()
@@ -679,16 +701,38 @@
       else set('--head', Math.min(Math.max(p, num('--a')), num('--b')))
       paint()
     }
+    const drop = () => {
+      drag = null
+      for (const t of tl.querySelectorAll('.tlx__trim')) t.classList.remove('is-held')
+    }
     inner.addEventListener('pointermove', move)
-    inner.addEventListener('pointerup', () => { drag = null })
-    inner.addEventListener('pointercancel', () => { drag = null })
+    inner.addEventListener('pointerup', drop)
+    inner.addEventListener('pointercancel', drop)
+
+    /* the wheel pans the zoomed timeline rather than throwing the whole screen
+       around — the spring outside owns the empty space, not this */
+    view.addEventListener(
+      'wheel',
+      (e) => {
+        if (view.scrollWidth <= view.clientWidth + 1) return
+        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+        if (!d) return
+        view.scrollLeft += d
+        e.preventDefault()
+        e.stopPropagation()
+      },
+      { passive: false },
+    )
 
     tl.addEventListener('click', (e) => {
       const eye = e.target.closest('.tlx__eye')
       if (eye) {
         const on = eye.getAttribute('aria-pressed') !== 'true'
         eye.setAttribute('aria-pressed', String(on))
-        eye.closest('.tlx__lane').classList.toggle('is-off', !on)
+        const row = eye.closest('.tlx__nrow')
+        row.classList.toggle('is-off', !on)
+        const lane = tl.querySelector(`.tlx__lane[data-i="${row.dataset.i}"]`)
+        if (lane) lane.classList.toggle('is-off', !on)
         e.stopPropagation()
         return
       }
@@ -704,8 +748,14 @@
         const next = Math.min(8, Math.max(1, z.dataset.z === '+' ? now * 1.6 : now / 1.6))
         set('--zoom', next.toFixed(3))
         ruler(tl)
-        /* zooming in keeps the playhead where you are looking */
-        view.scrollLeft = num('--head') * inner.getBoundingClientRect().width - view.clientWidth / 2
+        /* THE LAYOUT HAS TO HAPPEN BEFORE THE SCROLL. Setting scrollLeft in the
+           same breath as the width change writes it against the OLD width and
+           the browser clamps it to zero — which is why zooming looked like it
+           did nothing but add frames: it always snapped back to the start. */
+        void inner.offsetWidth
+        const w = inner.getBoundingClientRect().width
+        view.scrollLeft = Math.max(0, num('--head') * w - view.clientWidth / 2)
+        tl.classList.toggle('is-zoomed', next > 1.001)
         e.stopPropagation()
         return
       }

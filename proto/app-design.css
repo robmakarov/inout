@@ -1215,15 +1215,15 @@
 
 /* ---------- 12. the timeline, in this proposal's own parts -----------------
    Robert, 2026-09-06: "redo timeline with consistent elements, show frames and
-   beatrate and make it fully interactive." Built from the take rather than
-   cloned off the editor screen, so every part of it is one of ours: the head
-   button for Split and zoom, Barlow for the names and the ruler, the app's own
-   channel colours for the lanes, and the 7px corner everything else turns.
-   Everything inside is a FRACTION of the width — the take's length is 100% —
-   so it fills whatever dock it is given and zooms without measuring a pixel. */
+   beatrate and make it fully interactive", then six corrections. Built from the
+   take rather than cloned off the editor screen, so every part of it is one of
+   ours: the head button for Split, Tighten, the speeds and the zoom, Barlow for
+   the names, the app's own channel colours for the lanes, the 7px corner
+   everything else turns. Inside the view everything is a FRACTION of the width,
+   so it fills whatever dock it is given and zooms by widening one box. */
 .app-proto .tlx {
   --lane-h: 26px;
-  --gut: 104px;
+  --gut: 116px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1235,13 +1235,17 @@
 /* Tighten shows what it means: the quiet parts of the wave drop out */
 .app-proto .tlx.is-tight .tlx__wave { transform: scaleY(0.55); transform-origin: 50% 50%; }
 .app-proto .tlx__wave { transition: transform var(--dz-slide) var(--dz-ease); }
+/* THE RATE IS A MEASUREMENT, SO IT IS SET AS ONE (Robert: "beatrate ugly", then
+   "i like shape of beatrate, make it just better"). Same shape, better made:
+   the app's own figures, tabular so the digits do not dance while it plays, at
+   the weight of a footnote — not a label shouting in Barlow caps. */
 .app-proto .tlx__rate {
-  font-family: var(--dz);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   color: var(--text-faint);
+  padding: 0 2px;
 }
 .app-proto .tlx__zoom { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .app-proto .tlx__z { padding: 0; width: var(--dz-h); justify-content: center; font-size: 15px; }
@@ -1253,14 +1257,61 @@
   min-width: 34px;
   text-align: center;
 }
-/* the lanes scroll under the zoom, and nothing leans out of the box */
-.app-proto .tlx__view { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+/* the names stand still and the lanes travel under the zoom */
+.app-proto .tlx__body { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.app-proto .tlx__names {
+  flex: none;
+  width: var(--gut);
+  padding-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.app-proto .tlx__nrow {
+  height: var(--lane-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__nrow.is-off { opacity: 0.45; }
+.app-proto .tlx__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.app-proto .tlx__name svg { width: 13px; height: 13px; flex: none; }
+.app-proto .tlx__name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.app-proto .tlx__eye {
+  flex: none;
+  width: 20px;
+  height: var(--lane-h);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dz-tertiary);
+  cursor: pointer;
+  transition: color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__eye svg { width: 14px; height: 14px; }
+.app-proto .tlx__eye:hover { color: var(--text); }
+.app-proto .tlx__eye[aria-pressed='false'] { color: var(--surface-3); }
+.app-proto .tlx__view { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 .app-proto .tlx__inner {
   position: relative;
   width: calc(100% * var(--zoom, 1));
   min-width: 100%;
-  padding-left: var(--gut);
-  box-sizing: border-box;
   touch-action: none;
 }
 /* THE RULER IS READ, NOT SCANNED: a tick, and the time on it in the app's own
@@ -1282,70 +1333,29 @@
   font-variant-numeric: tabular-nums;
 }
 .app-proto .tlx__lanes { position: relative; display: flex; flex-direction: column; gap: 4px; }
-.app-proto .tlx__lane { position: relative; height: var(--lane-h); }
-/* the name hangs in the gutter the inner box keeps clear, so it stays put while
-   the lanes scroll under it */
-.app-proto .tlx__name {
-  position: absolute;
-  right: calc(100% + 30px);
-  top: 0;
+.app-proto .tlx__lane {
   height: var(--lane-h);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: calc(var(--gut) - 34px);
-  font-family: var(--dz);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.app-proto .tlx__name svg { width: 13px; height: 13px; flex: none; }
-.app-proto .tlx__name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.app-proto .tlx__eye {
-  position: absolute;
-  right: calc(100% + 6px);
-  top: 0;
-  width: 20px;
-  height: var(--lane-h);
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dz-tertiary);
-  cursor: pointer;
-  transition: color var(--dz-fast) var(--dz-ease);
-}
-.app-proto .tlx__eye svg { width: 14px; height: 14px; }
-.app-proto .tlx__eye:hover { color: var(--text); }
-.app-proto .tlx__eye[aria-pressed='false'] { color: var(--surface-3); }
-.app-proto .tlx__track {
-  height: 100%;
   border-radius: 7px;
   overflow: hidden;
   background: var(--surface);
+  transition: opacity var(--dz-fast) var(--dz-ease);
 }
 .app-proto .tlx__clip { height: 100%; }
-/* FRAMES: the take's own preview, one frame wide at the lane's height, cut by a
-   hairline every frame. A longer take simply shows more of them. */
+/* FRAMES with a cut of the page's own black between them, 2px, because a
+   hairline over a dark screenshot is not a line */
 .app-proto .tlx__clip.is-frames {
   background-size: calc(var(--lane-h) * 16 / 9) 100%, calc(var(--lane-h) * 16 / 9) 100%;
   background-repeat: repeat-x, repeat-x;
   background-position: 0 0, 0 0;
 }
-/* and an audio lane says what audio says: a shape over time, in that input's
-   own colour */
-.app-proto .tlx__lane.is-audio .tlx__track { background: color-mix(in srgb, var(--ch-mic) 12%, transparent); }
-.app-proto .tlx__lane[data-kind='tab audio'] .tlx__track { background: color-mix(in srgb, var(--ch-sysaudio) 12%, transparent); }
+/* an audio lane says what audio says: a shape over time, in that input's colour */
+.app-proto .tlx__lane.is-audio { background: color-mix(in srgb, var(--ch-mic) 12%, transparent); }
+.app-proto .tlx__lane[data-kind='tab audio'] { background: color-mix(in srgb, var(--ch-sysaudio) 12%, transparent); }
 .app-proto .tlx__wave { display: block; width: 100%; height: 100%; fill: var(--ch-mic); opacity: 0.75; }
 .app-proto .tlx__lane[data-kind='tab audio'] .tlx__wave { fill: var(--ch-sysaudio); }
-.app-proto .tlx__lane[data-kind='screen'] .tlx__track { background: color-mix(in srgb, var(--ch-screen) 16%, transparent); }
-.app-proto .tlx__lane[data-kind='camera'] .tlx__track { background: color-mix(in srgb, var(--ch-camera) 16%, transparent); }
-.app-proto .tlx__lane.is-off { opacity: 0.3; }
+.app-proto .tlx__lane[data-kind='screen'] { background: color-mix(in srgb, var(--ch-screen) 16%, transparent); }
+.app-proto .tlx__lane[data-kind='camera'] { background: color-mix(in srgb, var(--ch-camera) 16%, transparent); }
+.app-proto .tlx__lane.is-off { opacity: 0.28; }
 /* what is trimmed away is still there, just no longer part of the take */
 .app-proto .tlx__dim {
   position: absolute;
@@ -1353,21 +1363,48 @@
   bottom: 0;
   background: rgba(6, 6, 10, 0.72);
   pointer-events: none;
+  border-radius: 7px;
 }
-.app-proto .tlx__dim--l { left: var(--gut); width: calc((100% - var(--gut)) * var(--a, 0)); }
-.app-proto .tlx__dim--r { right: 0; width: calc((100% - var(--gut)) * (1 - var(--b, 1))); }
+.app-proto .tlx__dim--l { left: 0; width: calc(100% * var(--a, 0)); }
+.app-proto .tlx__dim--r { right: 0; width: calc(100% * (1 - var(--b, 1))); }
+/* THE ENDS ARE BRACKETS, NOT PILLS (Robert: "start end grabbers ugly"). Each one
+   holds its own side of the take: a bar down the cut with a grip in the middle
+   and the corners rounded on the OUTSIDE only, so the pair reads as the two
+   walls of what you keep. And each carries a wide invisible edge, so grabbing
+   one is not a game of pixels — which is what made them impossible to catch
+   next to a split. */
 .app-proto .tlx__trim {
   position: absolute;
   top: 22px;
   bottom: 0;
-  width: 10px;
-  border-radius: 4px;
-  background: var(--text-faint);
+  width: 9px;
+  background: var(--surface-3);
   cursor: ew-resize;
+  transition: background var(--dz-fast) var(--dz-ease);
 }
-.app-proto .tlx__trim:hover { background: var(--text-dim); }
-.app-proto .tlx__trim--l { left: calc(var(--gut) + (100% - var(--gut)) * var(--a, 0)); }
-.app-proto .tlx__trim--r { left: calc(var(--gut) + (100% - var(--gut)) * var(--b, 1) - 10px); }
+.app-proto .tlx__trim::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -9px;
+  right: -9px;
+}
+.app-proto .tlx__trim i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 14px;
+  margin: -7px 0 0 -2px;
+  background: var(--text);
+  opacity: 0.55;
+  box-shadow: 3px 0 0 var(--text);
+}
+.app-proto .tlx__trim--l { left: calc(100% * var(--a, 0)); border-radius: 7px 0 0 7px; }
+.app-proto .tlx__trim--r { left: calc(100% * var(--b, 1)); margin-left: -9px; border-radius: 0 7px 7px 0; }
+.app-proto .tlx__trim:hover,
+.app-proto .tlx__trim.is-held { background: var(--text-faint); }
 /* the playhead is the one line with the accent on it */
 .app-proto .tlx__head {
   position: absolute;
@@ -1376,7 +1413,7 @@
   width: 2px;
   margin-left: -1px;
   background: var(--accent);
-  left: calc(var(--gut) + (100% - var(--gut)) * var(--head, 0));
+  left: calc(100% * var(--head, 0));
   pointer-events: none;
 }
 .app-proto .tlx__head::before {
@@ -1389,6 +1426,7 @@
   border-radius: 2px;
   background: var(--accent);
 }
+/* a cut is a mark on the take, not a thing in the way of the pointer */
 .app-proto .tlx__cutline {
   position: absolute;
   top: 0;
@@ -1396,4 +1434,5 @@
   width: 1px;
   background: var(--bg);
   box-shadow: 0 0 0 1px rgba(245, 245, 247, 0.35);
+  pointer-events: none;
 }
