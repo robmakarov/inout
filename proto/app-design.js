@@ -257,6 +257,13 @@
         </div>
       </div>`
 
+    /* the drawer's cap, measured rather than guessed — see the note on .selx in
+       the stylesheet. scrollWidth reports the content width even while the
+       element is clamped to nothing, which is the whole reason this works. */
+    const selx = headEl.querySelector('.selx')
+    const selxIn = selx && selx.querySelector('.selx__in')
+    if (selxIn) selx.style.setProperty('--selx-w', selxIn.scrollWidth + 'px')
+
     total(takes)
     wireHead(root, takes, headEl)
   }

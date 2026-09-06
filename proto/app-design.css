@@ -17,13 +17,20 @@
   /* the feed breathes the same amount above and below: one number, so the two
      gaps cannot drift apart the way two would */
   --feed-gap: 20px;
-  /* TWO SPEEDS AND ONE CURVE FOR THE WHOLE PROPOSAL. There were five durations
-     in this file — 120, 130, 200 and two eases — for movements that are meant
-     to read as the same hand. Fast is anything answering the pointer; slide is
-     anything opening or closing. The curve is the source's own. */
+  /* TWO SPEEDS AND ONE CURVE FOR THE WHOLE PROPOSAL. Fast is anything answering
+     the pointer; slide is anything opening, closing or trading places.
+
+     THE CURVE IS WHY IT KEPT READING AS A SNAP, not the duration. The source's
+     cubic-bezier(.2,.8,.2,1) is nearly all front load: a quarter of the way
+     through the time it is already three quarters of the way through the
+     distance, so at 320 ms the eye saw the whole move in about 80 and the rest
+     was a settle it could not see. Raising the number alone would only have
+     made the settle longer. easeInOutCubic spends the time on the travel —
+     10% of the distance in the first quarter, half at half — so the movement
+     is the thing you watch rather than the thing you catch the end of. */
   --dz-fast: 140ms;
-  --dz-slide: 320ms;
-  --dz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dz-slide: 520ms;
+  --dz-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* ---------- 0. the studio ground: grid, tilt and bounce --------------------
@@ -385,26 +392,29 @@
 .app-proto .tool2--pick:hover .pick { border-color: var(--text-faint); }
 .app-proto .tool2--pick[aria-pressed='true'] .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* ALL AND CLEAR SLIDE OUT FROM BEHIND IT — and the source's max-width is the
-   one thing of its that could not be kept. A max-width drawer only animates
-   while the cap is still narrower than the content: 0 → 140 over content that
-   measures 86 reaches full width in 61% of the time and then spends the rest
-   animating nothing, and 0 → 300 over 132 (the selected group) got there in
-   under a fifth — which is why it read as no animation at all. A 0fr → 1fr
-   grid column interpolates to EXACTLY the content width, so the whole duration
-   is travel, and it needs no number that has to be kept in sync with the text.
-   Every drawer in this file works this way. */
+/* ALL AND CLEAR SLIDE OUT FROM BEHIND IT — over a max-width the code MEASURES,
+   which is the only version of this that moves evenly.
+
+   Two wrong ways, both shipped and both caught: a hand-picked max-width larger
+   than the content (0 → 140 over 86) stops moving at 61% of the time and spends
+   the rest animating nothing, which reads as too fast. A 0fr → 1fr grid column
+   ends at exactly the content width but is not linear in WIDTH — sampled on the
+   built page under a linear ease it went 5% · 23% · 55% · 100%, so most of the
+   travel is crammed into the last third and any curve laid on top compounds it.
+   head() measures .selx__in once and writes --selx-w, so the cap is the content
+   width to the pixel AND the width moves in step with the clock. */
 .app-proto .selx {
-  display: grid;
-  grid-template-columns: 0fr;
+  display: inline-flex;
   align-items: center;
+  overflow: hidden;
+  max-width: 0;
   opacity: 0;
   transform: translateX(-4px);
-  transition: grid-template-columns var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease),
+  transition: max-width var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease),
     transform var(--dz-slide) var(--dz-ease);
 }
-.app-proto .selx__in { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
-.app-proto .takes.is-picking .selx { grid-template-columns: 1fr; opacity: 1; transform: translateX(0); }
+.app-proto .selx__in { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.app-proto .takes.is-picking .selx { max-width: var(--selx-w, 200px); opacity: 1; transform: translateX(0); }
 /* filter and sort live beside the search now and stay put in select mode: they
    are how you decide WHICH takes are in front of you, and narrowing the list
    and then pressing All is the reason All takes only what is showing. */
