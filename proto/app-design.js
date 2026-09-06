@@ -364,7 +364,7 @@
        everything narrows with it. The floor is only there so the head's own row
        has somewhere to stand; nothing normal reaches it. */
     root.style.setProperty('--take-w', Math.max(420, Math.round(WATCH.at[2])) + 'px')
-    watchDock(root, 'play')
+    watchDock(root)
   }
 
   /* THE HEAD IS THE PLAYER'S BAR WHILE IT PLAYS (Robert, 2026-09-06: "top bar
@@ -501,8 +501,8 @@
      track is asked how wide it is, and every inline px inside the timeline is
      multiplied by the ratio. Ticks, clips, trims and playhead all scale
      together, so it is the same timeline at a different zoom. */
-  function fitTimeline(dock) {
-    const tl = dock.querySelector('.tl')
+  function fitTimeline(where) {
+    const tl = where.querySelector('.tl')
     const track = tl && tl.querySelector('.lane__track')
     if (!tl || !track) return
     const width = track.getBoundingClientRect().width
@@ -527,123 +527,143 @@
     }
   }
 
-  function watchDock(root, mode) {
+  function watchDock(root) {
     const bar = root.querySelector('.controlbar')
     if (!bar) return null
     let dock = bar.querySelector('.watchdock')
-    if (!dock) {
-      dock = document.createElement('div')
-      dock.className = 'watchdock'
-      bar.appendChild(dock)
-      void bar.offsetHeight
-    }
-    /* replacing what is in it is an arrival, so it starts above the bar with
-       the clock stopped and comes down when it is filled */
-    if (dock.dataset.mode && dock.dataset.mode !== mode) {
-      dock.classList.add('is-in')
-      void dock.offsetHeight
-    }
-    dock.innerHTML = ''
-    dock.dataset.mode = mode
+    if (dock) return dock
+    dock = document.createElement('div')
+    dock.className = 'watchdock'
+    const play = document.createElement('div')
+    play.className = 'wdock__play'
     const ed = editorDoc()
-    if (mode === 'play') {
-      const t = ed && ed.querySelector('.transport')
-      if (t) {
-        const c = t.cloneNode(true)
-        /* the editor's back arrow goes to the takes list, and we are ON the
-           takes list with a picture over it — the cross in the head is the way
-           out, so the arrow would be a second one that means something else */
-        const back = c.querySelector('.transport__back')
-        if (back) back.remove()
-        dock.appendChild(c)
-      }
-      const edit = document.createElement('button')
-      edit.type = 'button'
-      edit.className = 'wbtn wedit'
-      edit.title = 'Edit this take'
-      edit.innerHTML = ic('scissors') + '<span>Edit</span>'
-      edit.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        watchEdit(root)
-      })
-      dock.appendChild(edit)
-    } else {
-      for (const sel of ['.tools', '.tl']) {
-        const el = ed && ed.querySelector(sel)
-        if (el) dock.appendChild(el.cloneNode(true))
-      }
+    const t = ed && ed.querySelector('.transport')
+    if (t) {
+      const c = t.cloneNode(true)
+      /* the editor's back arrow goes to the takes list, and we are ON the takes
+         list with a picture over it — the cross in the head is the way out, so
+         the arrow would be a second one that means something else */
+      const back = c.querySelector('.transport__back')
+      if (back) back.remove()
+      play.appendChild(c)
     }
+    const edit = document.createElement('button')
+    edit.type = 'button'
+    edit.className = 'wbtn wedit'
+    edit.title = 'Edit this take'
+    edit.innerHTML = ic('scissors') + '<span>Edit</span>'
+    edit.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      watchEdit(root)
+    })
+    play.appendChild(edit)
+    dock.appendChild(play)
+    bar.appendChild(dock)
     bar.classList.add('is-watch')
-    /* it is LEFT above the bar when the mode changed; whoever asked for the
-       swap lets it down, after it has measured the frame it is landing in */
     return dock
   }
 
-  /* THE PICTURE AND THE TIMELINE MOVE ON ONE CLOCK. The bar grows, the frame
-     re-centres and the room over it changes — and asking for that room while
-     the bar is mid-transition reads a number the layout is only passing
-     through, which is exactly the bug that made the return flight land wrong.
-     So the whole move is rehearsed first with the transitions switched off:
-     put the frame in its finished state, ask playerBox where the picture goes,
-     put the frame back, and only then start both for real. No paint happens in
-     between — it is all one task — so nothing of the rehearsal is seen. */
+  /* THE PLAY BAR STAYS AND THE EDITOR UNFOLDS UNDER IT (Robert, 2026-09-06:
+     "play bar must stay too when edit bar comes", "edit bar must come straight
+     from under play window, not diagonaly"). The transport is not rebuilt and
+     not moved — the same row, untouched — and the tools and the timeline open
+     downward out from under it, by their own height, so the only direction
+     anything travels is down. A slide would have been diagonal: the bar narrows
+     to the picture's new width at the same time, and a box that moves down
+     while its edges move in reads as a corner, not a drawer.
+
+     AND THE MOVE IS REHEARSED FIRST. The bar grows, the frame re-centres and
+     the room over it changes; asking for that room mid-transition reads a
+     number the layout is only passing through. So the finished state is set up
+     with the clock stopped, measured, put back, and only then started for real
+     — the picture, the bar, the width and the drawer all on one curve. */
   function watchEdit(root) {
     const bar = root.querySelector('.controlbar')
-    const dock = watchDock(root, 'edit')
-    if (!bar || !dock) return
+    const dock = watchDock(root)
+    const ed = editorDoc()
+    if (!bar || !dock || dock.querySelector('.wdock__edit')) return
+
+    const block = document.createElement('div')
+    block.className = 'wdock__edit'
+    for (const sel of ['.tools', '.tl']) {
+      const el = ed && ed.querySelector(sel)
+      if (el) block.appendChild(el.cloneNode(true))
+    }
+    if (!block.children.length) return
+    dock.appendChild(block)
+
     const cap = root.querySelector('.capture')
     const capH = cap ? cap.getBoundingClientRect().height : 660
-    bar.style.setProperty('--dock-h', '0px')
+    const wasW = root.style.getPropertyValue('--take-w')
+
     root.classList.add('dz-nofx')
     bar.classList.add('is-edit')
+    bar.style.setProperty('--dock-h', '0px')
+    block.style.height = 'auto'
     void bar.offsetHeight
-    /* SUMMED, NOT scrollHeight. The dock centres what it holds, and a centred
-       flex box overflows in BOTH directions while scrollHeight only counts the
-       half that hangs below — so it read 152 for content that stands 223 tall
-       and the timeline was cut off by exactly the difference. */
+    /* SUMMED, NOT scrollHeight: the dock centres what it holds, and a centred
+       flex box overflows in BOTH directions while scrollHeight counts only the
+       half that hangs below — it read 152 for content standing 223 tall. */
     const kids = [...dock.children]
     const GAP = 10
     const natural =
       24 + GAP * Math.max(0, kids.length - 1) + kids.reduce((n, c) => n + c.getBoundingClientRect().height, 0)
-    const want = Math.round(Math.min(Math.max(natural, bar.getBoundingClientRect().height), capH * 0.52))
+    const want = Math.round(Math.min(natural, capH * 0.52))
+    const blockH = Math.round(block.getBoundingClientRect().height)
     bar.style.setProperty('--dock-h', want + 'px')
     void bar.offsetHeight
     const target = playerBox(root, WATCH.ratio)
-    const wasW = root.style.getPropertyValue('--take-w')
     const willW = target ? Math.max(420, Math.round(target[2])) + 'px' : wasW
-    /* the timeline is stretched IN THE FRAME IT WILL LAND IN — the dock is
-       about to be the picture's width, and fitting it to the width it has now
-       would leave it overhanging by the difference */
+    /* the timeline is stretched IN THE FRAME IT WILL LAND IN — fitted to the
+       width it has now it would overhang by the difference */
     root.style.setProperty('--take-w', willW)
     void bar.offsetHeight
-    fitTimeline(dock)
+    fitTimeline(block)
     root.style.setProperty('--take-w', wasW)
     bar.classList.remove('is-edit')
     bar.style.setProperty('--dock-h', '0px')
+    block.style.height = '0px'
     void bar.offsetHeight
     root.classList.remove('dz-nofx')
-    /* THE REHEARSAL LEFT THE CLOCK STOPPED, so the starting frame has to be
-       committed with it running again — without this reflow the dock's whole
-       arrival happens inside one task and is never drawn. */
+    /* the rehearsal left the clock stopped: this reflow commits the starting
+       frame with it running again, or the whole move happens inside one task
+       and is never drawn */
     void bar.offsetHeight
 
     bar.classList.add('is-edit')
     bar.style.setProperty('--dock-h', want + 'px')
-    dock.classList.remove('is-in')
+    block.style.height = blockH + 'px'
     if (WATCH.box && target) {
       WATCH.at = target
       boxAt(WATCH.box, ...target)
-      /* and the bars follow the picture's new width, the same rule as on the
-         way in — the timeline took height off it, so it is a smaller picture */
       root.style.setProperty('--take-w', willW)
     }
   }
 
+  /* THE EDITOR FOLDS AWAY FIRST, THEN THE PICTURE GOES HOME (Robert,
+     2026-09-06: "if it open and play window closes first it goes under play
+     window and than windows goes back to preview in card"). Two moves, in that
+     order, because they are two facts: you are done editing, and you are done
+     watching. The picture does not move while the drawer closes — it is
+     positioned in the frame, not in the bar — so the second move starts from
+     exactly where the first one left everything. */
   function watchClose() {
     const { root, card, box } = WATCH
     if (!card || !box) return
     WATCH.card = null
+    const cbar = root.querySelector('.controlbar')
+    const block = cbar && cbar.querySelector('.wdock__edit')
+    if (block) {
+      block.style.height = '0px'
+      cbar.classList.remove('is-edit')
+      cbar.style.setProperty('--dock-h', '0px')
+    }
+    clearTimeout(WATCH.timer)
+    WATCH.timer = setTimeout(() => watchGoHome(root, card, box), block ? 300 : 0)
+  }
+
+  function watchGoHome(root, card, box) {
     const takes = root.querySelector('.takes')
     if (takes) takes.classList.remove('is-watch')
     root.style.removeProperty('--take-w')

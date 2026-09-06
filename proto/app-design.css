@@ -1013,6 +1013,17 @@
 }
 .app-proto .takes.is-watch .watchbar { transform: none; opacity: 1; pointer-events: auto; }
 .app-proto .wrow { display: flex; align-items: center; gap: 10px; }
+/* WHEN THE ROW RUNS OUT OF ROOM THE WORDS GO, NOT THE CROSS. Keeping the play
+   bar in the dock costs height, the picture narrows to pay for it, and the head
+   narrows with the picture — at 493 the five labelled buttons and the way out
+   did not fit, and `overflow: hidden` (which the row swap needs) ate the cross.
+   The head asks its own width and drops the labels when they no longer fit; the
+   glyphs and their tooltips still say what each one is. */
+.app-proto .takes__head { container-type: inline-size; }
+@container (max-width: 575px) {
+  .app-proto .wbtn span { display: none; }
+  .app-proto .wbtn { padding: 0 8px; }
+}
 /* the take's own facts, in the card's order and the card's clothes, under the
    name they belong to */
 .app-proto .wmeta { display: flex; align-items: center; gap: 6px; }
@@ -1138,10 +1149,15 @@
   position: absolute;
   inset: 0;
   transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
+  /* ALWAYS A COLUMN, even when it holds one row. As a row it sized the play row
+     to its content and the transport collapsed to 189 of the 520 it is given in
+     the editor; stretched, the scrubber has the width it is supposed to have,
+     and the drawer under it lines up with it. */
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   transform: translateY(-100%);
   opacity: 0;
   pointer-events: none;
@@ -1151,32 +1167,35 @@
    animation too"). The dock's content is replaced, not the dock, so the swap
    sets it back above the bar with the clock stopped and then lets it come down
    — the same arrival, on the same curve, as the bar it replaces. */
-/* IT COMES OUT FROM UNDER THE PLAY WINDOW (Robert, 2026-09-06: "edit bar must
-   come from under play window") — it starts a full bar-height ABOVE its place,
-   behind the picture, and comes down out of it. The selector has to carry the
-   whole .controlbar.is-watch chain or the rule that puts the dock in place wins
-   on specificity and the arrival never leaves the ground. */
-.app-proto .controlbar.is-watch .watchdock.is-in {
-  transform: translateY(-100%);
-  opacity: 0;
-  transition: none;
+/* THE PLAY ROW IS ONE ROW AND IT STAYS. The transport keeps the width the
+   editor gives it and the Edit button sits beside it. */
+.app-proto .wdock__play { display: flex; align-items: center; justify-content: center; gap: 14px; }
+/* AND THE EDITOR OPENS OUT FROM UNDER IT (Robert, 2026-09-06: "edit bar must
+   come straight from under play window, not diagonaly", "play bar must stay
+   too"). A drawer, not a slide: it grows from no height to its own, clipped, so
+   the only direction anything moves is down. Sliding it would have read as a
+   diagonal — the bar narrows to the picture's new width on the same clock, and
+   a box that travels down while its edges travel in is a corner, not a drawer. */
+.app-proto .wdock__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 0;
+  overflow: hidden;
+  transition: height var(--dz-slide) var(--dz-ease);
 }
 /* and when the timeline is in it, the bar is as tall as the timeline needs */
 .app-proto .controlbar { transition: max-width var(--dz-slide) var(--dz-ease), min-height var(--dz-slide) var(--dz-ease); }
 .app-proto .controlbar.is-edit { min-height: var(--dock-h, 200px); }
-.app-proto .controlbar.is-edit .watchdock {
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 0;
-}
+.app-proto .controlbar.is-edit .watchdock { padding: 12px 0; }
 /* AND THE TIMELINE KEEPS ITS OWN HEIGHT. As a flex column child it shrank to
    whatever the bar happened to be, which then measured as the height the bar
    should grow to — a rehearsal that reads its own starting point. */
 .app-proto .controlbar.is-edit .watchdock > * { flex: none; }
 /* the app's own transport, at the width it has in the editor */
 .app-proto .watchdock .transport { flex: 0 1 520px; }
+.app-proto .wdock__edit .tl,
+.app-proto .wdock__edit .tools { width: 100%; }
 .app-proto .watchdock .tl,
 .app-proto .watchdock .tools { width: 100%; }
 .app-proto .wedit { flex: none; }
