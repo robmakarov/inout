@@ -27,6 +27,7 @@
     sort: '<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>',
     device: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/>',
     cloud: '<path d="M7 18h10.5a3.5 3.5 0 0 0 .3-7 5.5 5.5 0 0 0-10.6-1.3A4.2 4.2 0 0 0 7 18z"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
   }
   const dic = (n) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DRAWN[n]}</svg>`
@@ -57,6 +58,19 @@
   /* the glyph the app already uses for this action, taken off the element that
      uses it; the sprite name is only the fallback for a screen with no cards */
   const glyphOf = (root, sel, fallback) => root.querySelector(sel + ' svg')?.outerHTML || ic(fallback)
+
+  /* THE MONTH IS SPELLED OUT (Robert, 2026-09-06). The app abbreviates it
+     because its date shares a line with three other facts; here the date has
+     its own end of a row and nothing is fighting it for the space, and a word
+     is read where an abbreviation is decoded. Written on whatever the app
+     handed over, so a locale that already spells it out passes through. */
+  const MONTHS = {
+    jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June',
+    jul: 'July', aug: 'August', sep: 'September', sept: 'September', oct: 'October',
+    nov: 'November', dec: 'December',
+  }
+  const month = (s) =>
+    String(s || '').replace(/\b([A-Za-z]{3,4})\.?\b/g, (w, k) => MONTHS[k.toLowerCase()] || w)
 
   const bytes = (n) =>
     n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.round(n / 1e3) + ' KB'
@@ -134,7 +148,7 @@
           return s
         }
         when.textContent = ''
-        when.append(span('wdate', m ? m[1] : full))
+        when.append(span('wdate', month(m ? m[1] : full)))
         if (m) when.append(span('wtime', m[2]))
       }
 
@@ -172,19 +186,23 @@
          picture rather than words; the name is what you read once you have
          found the row, and the date is the footnote under both.
 
-         THE QUALITY AND THE SIZE RIDE THE SAME ROW. How good it is and how big
-         it came out are the same sentence as what it was made of — screen and
-         mic AT 1080p COSTING 3.4 MB — so the row reads chips, quality, size,
-         and the line below is left to say only when. */
+         THE QUALITY AND THE SIZE LEAD THE LAST ROW (Robert, 2026-09-06). They
+         went up beside the inputs first and came back down: what a take is MADE
+         OF is one sentence, and how good it came out, how big it is and when it
+         happened are another — the facts you sort by. So the last line reads
+         quality, size, then the date, and the size is a tag now like the two
+         beside it rather than loose text between them. */
       const kinds = card.querySelector('.takecard__kinds')
       if (kinds && !kinds.querySelector('.kind')) {
         const names = kinds.textContent.split('·').map((s) => s.trim()).filter(Boolean)
         kinds.innerHTML = names.map((n) => `<span class="kind">${ic(glyphFor(n))}${n}</span>`).join('')
         if (body) body.insertBefore(kinds, body.firstChild)
-        const step = card.querySelector('.takecard__step')
-        const size = card.querySelector('.takecard__size')
-        if (step) kinds.appendChild(step)
-        if (size) kinds.appendChild(size)
+      }
+      const step = card.querySelector('.takecard__step')
+      const size = card.querySelector('.takecard__size')
+      if (when && step && size && when.previousElementSibling !== size) {
+        when.parentElement.insertBefore(step, when)
+        when.parentElement.insertBefore(size, when)
       }
 
       /* ONE ICON SET IN THE FRAME. The chips and the kind badges already wear
@@ -234,6 +252,153 @@
         card.insertBefore(pick, card.firstChild)
       }
     }
+  }
+
+  /* ---------- 2b. WATCH IT WHERE IT IS ------------------------------------
+     Robert, 2026-09-06: "when card clicked preview image animation transform to
+     watch video that push away cards and its card content and fills height, top
+     bar and tool bar follows its width."
+
+     THE PICTURE YOU PRESSED IS THE PLAYER. A take is a video and the card
+     already shows a frame of it, so opening one should not be a cut to another
+     screen with a different picture in a different place — the frame grows into
+     the thing you watch and the feed steps out from under it. The card's own
+     name and tags leave with the feed: beside a picture that size they are a
+     caption on a photograph.
+
+     THE FRAME GIVES THE HEIGHT AND THE TAKE GIVES THE WIDTH. The player fills
+     the room between the head and the control bar; its width follows from the
+     take's own shape — a phone take is a tall one and gets a narrow player —
+     and then --take-w, the one token the head, the feed and the control bar
+     already share, is set to that width. So the app widens around the video
+     instead of the video sitting in a column that was sized for a list. */
+  const WATCH = { root: null, card: null, box: null, timer: 0 }
+  const boxAt = (el, x, y, w, h) => {
+    el.style.left = Math.round(x) + 'px'
+    el.style.top = Math.round(y) + 'px'
+    el.style.width = Math.round(w) + 'px'
+    el.style.height = Math.round(h) + 'px'
+  }
+
+  function watchOpen(root, card) {
+    if (WATCH.card || !card) return
+    const takes = root.querySelector('.takes')
+    const cap = root.querySelector('.capture')
+    const thumb = card.querySelector('.takecard__thumb')
+    const img = thumb && thumb.querySelector('img')
+    const headEl = takes && takes.querySelector('.takes__head')
+    if (!takes || !cap || !img || !headEl) return
+    const r0 = thumb.getBoundingClientRect()
+    const ratio = r0.height ? r0.width / r0.height : 16 / 9
+
+    clearTimeout(WATCH.timer)
+    WATCH.root = root
+    WATCH.card = card
+    takes.classList.add('is-watch')
+    card.classList.add('is-watching')
+
+    /* MEASURED WITH THE STATE ALREADY ON. The column stops hugging its content
+       the moment .is-watch lands, which puts the head at the top of the frame —
+       measure before that and the player is sized to the list it is replacing,
+       which is exactly as tall as however many takes happen to be in it. */
+    const capR = cap.getBoundingClientRect()
+    const headR = headEl.getBoundingClientRect()
+    const bar = root.querySelector('.controlbar')
+    const barTop = bar ? bar.getBoundingClientRect().top : capR.bottom
+    const pad = 14
+    const top = headR.bottom + pad
+    const room = Math.max(140, barTop - pad - top)
+    let h = room
+    let w = h * ratio
+    const maxW = capR.width - 2 * pad
+    if (w > maxW) {
+      w = maxW
+      h = w / ratio
+    }
+
+    const box = document.createElement('div')
+    box.className = 'watchbox'
+    box.innerHTML =
+      `<img alt="" src="${img.currentSrc || img.src}">` +
+      `<span class="watchplay">${ic('play')}</span>` +
+      `<button type="button" class="watchx" title="Back to the list" aria-label="Back to the list">${dic('close')}</button>`
+    const dur = thumb.querySelector('.dur')
+    if (dur) box.appendChild(dur.cloneNode(true))
+    cap.appendChild(box)
+    WATCH.box = box
+    /* the flight: it starts as the card's own picture, to the pixel */
+    boxAt(box, r0.left - capR.left, r0.top - capR.top, r0.width, r0.height)
+    void box.offsetWidth
+    box.classList.add('is-open')
+    boxAt(box, (capR.width - w) / 2, top - capR.top + (room - h) / 2, w, h)
+    root.style.setProperty('--take-w', Math.max(600, Math.round(w)) + 'px')
+  }
+
+  function watchClose() {
+    const { root, card, box } = WATCH
+    if (!card || !box) return
+    WATCH.card = null
+    const takes = root.querySelector('.takes')
+    const cap = root.querySelector('.capture')
+    if (takes) takes.classList.remove('is-watch')
+    root.style.removeProperty('--take-w')
+    box.classList.add('is-closing')
+    /* it goes home to the slot it came out of — measured AFTER the list is back,
+       so it lands on where the card is now and not on where it used to be. A
+       card the list no longer holds (a tab changed under it) has no slot to go
+       home to, and the picture simply leaves. */
+    const thumb = card.querySelector('.takecard__thumb')
+    const r = thumb ? thumb.getBoundingClientRect() : null
+    if (r && r.width > 2 && cap) {
+      const capR = cap.getBoundingClientRect()
+      boxAt(box, r.left - capR.left, r.top - capR.top, r.width, r.height)
+    } else {
+      box.classList.add('is-gone')
+    }
+    WATCH.timer = setTimeout(() => {
+      box.remove()
+      card.classList.remove('is-watching')
+      WATCH.box = null
+    }, 440)
+  }
+
+  function watch(root) {
+    const takes = root.querySelector('.takes')
+    if (!takes || takes.dataset.dzWatch) return
+    takes.dataset.dzWatch = '1'
+    takes.addEventListener('click', (e) => {
+      const thumb = e.target.closest('.takecard__thumb')
+      if (!thumb || takes.classList.contains('is-picking')) return
+      /* app-sim.js listens for this same press on the app root and takes it to
+         the editor screen — the flow it wires for BOTH tabs. The proposal
+         answers the press here, deeper in the tree, and stops it going up. */
+      e.preventDefault()
+      e.stopPropagation()
+      watchOpen(root, thumb.closest('.takecard'))
+    })
+    if (window.__dzWatch) return
+    window.__dzWatch = true
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') watchClose()
+    })
+    /* A PRESS ANYWHERE ELSE IS A PRESS ON THE APP BEHIND THE VIDEO — a tab, the
+       search, the record button. The video gets out of the way and the press
+       does what it always did; only the player itself is not that. */
+    document.addEventListener(
+      'click',
+      (e) => {
+        if (!WATCH.card) return
+        if (e.target.closest('.watchx')) {
+          e.preventDefault()
+          e.stopPropagation()
+          watchClose()
+          return
+        }
+        if (e.target.closest('.watchbox')) return
+        watchClose()
+      },
+      true,
+    )
   }
 
   /* ---------- 3. the bar above the list ---------------------------------- */
@@ -1017,6 +1182,7 @@
     if (!root) return
     chips(root)
     cards(root)
+    watch(root)
     motion(root)
     head(root)
     account(root)

@@ -106,7 +106,15 @@
    different components of the app, so the width is a token rather than three
    numbers that drift apart. */
 .app-proto .takes,
-.app-proto .controlbar { max-width: var(--take-w); margin-left: auto; margin-right: auto; width: 100%; }
+.app-proto .controlbar {
+  max-width: var(--take-w);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  /* and because it is ONE token, watching a take can widen all three at once
+     by setting it — see the watch block at the end of this file */
+  transition: max-width var(--dz-slide) var(--dz-ease);
+}
 
 /* THE RECORD SCREEN SITS IN THE MIDDLE, NOT ON THE FLOOR.
    The app's capture body is a flex column with `justify-content: flex-end`,
@@ -166,7 +174,8 @@
      ENTERS should be on screen at once and settle, where the ease-in-out that
      is right for a height (which starts and stops in place) leaves an empty
      column for the first hundred milliseconds. */
-  transition: height var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-enter);
+  transition: height var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-enter),
+    opacity var(--dz-slide) var(--dz-ease);
 }
 /* the frame it starts from: set by swapList, a full width right for Cloud and
    left for Device. No transition on this class — it is the jump to the starting
@@ -323,7 +332,7 @@
   width: fit-content;
   min-width: 3ch;
   max-width: calc(100% - var(--tools-band) - var(--tag-inset));
-  margin: 0 0 2px var(--tag-inset);
+  margin: 0 0 10px var(--tag-inset);
   padding: 0;
   border: 0;
   border-bottom: 1px solid transparent;
@@ -332,7 +341,7 @@
   outline: none;
   box-shadow: none;
   font-family: var(--font);
-  font-size: 13.5px;
+  font-size: 15.5px;
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: 0;
@@ -359,7 +368,7 @@
 
 /* THE LAST LINE SAYS ONLY WHEN. The size and the quality went up to the tag row
    where they belong, so what is left is the date — the footnote under the name. */
-.app-proto .takecard__top { gap: 8px; align-items: baseline; flex-wrap: wrap; padding-left: var(--tag-inset); }
+.app-proto .takecard__top { gap: 6px; align-items: center; flex-wrap: wrap; }
 /* the date is read, not scanned, so it takes the app's own text face rather than
    the condensed display one — Barlow is for labels */
 .app-proto .takecard__when {
@@ -397,20 +406,33 @@
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
-  margin: 0 0 3px;
+  /* +8px between every row in the card (Robert, 2026-09-06): the three lines
+     were stacked tight enough to read as one block. */
+  margin: 0 0 11px;
 }
-/* the quality badge keeps the app's own colour — it is the one coloured thing
-   on the card and it is the fact the card is judged on — and the size follows
-   it in the date's face and the date's grey, because it is the same kind of
-   footnote fact and this row should not gain a third voice. */
-.app-proto .takecard__kinds .takecard__step { margin-left: 3px; }
-.app-proto .takecard__kinds .takecard__size {
-  font-family: var(--font);
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0;
-  text-transform: none;
+/* THE SIZE IS A TAG NOW, AND IT IS THE BLACK ONE (Robert, 2026-09-06). Three
+   facts sit at the head of the last row and each has its own weight: the
+   quality wears the app's accent because it is what a take is judged on, the
+   size wears a filled black pill because it is a hard number you scan for, and
+   the date follows as plain words. Same pill as the input tags — same height,
+   same corner, same little caps — so the card has one tag shape and only its
+   fill changes. */
+.app-proto .takecard__top .takecard__step { margin-left: 0; }
+.app-proto .takecard__size {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--surface-3);
+  border-radius: 999px;
+  background: #000;
   color: var(--text-dim);
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .app-proto .kind {
   display: inline-flex;
@@ -884,3 +906,101 @@
   font-size: 11px;
   color: var(--text-faint);
 }
+
+
+/* ==========================================================================
+   9. WATCH IT WHERE IT IS
+   Robert, 2026-09-06: "when card clicked preview image animation transform to
+   watch video that push away cards and its card content and fills height, top
+   bar and tool bar follows its width."
+
+   The card's own picture flies out of the row and becomes the player. Nothing
+   here is a new screen: the head stays where it is and widens, the feed pushes
+   down and out from under the picture, and the control bar widens with the
+   head — so the app opens AROUND the video rather than cutting to it.
+   ========================================================================== */
+.app-proto .capture { position: relative; }
+/* the column stops hugging its content while a take is playing: the head goes
+   to the top of the frame, and everything under it is the player's room. Sized
+   to the FRAME, so a list of one take and a list of thirty open the same. */
+.app-proto .capture:has(.takes.is-watch) { justify-content: stretch; }
+.app-proto .capture:has(.takes.is-watch) .capture__body { flex: 1 1 auto; min-height: 0; }
+.app-proto .takes.is-watch { flex: 1 1 auto; }
+/* THE FEED PUSHES AWAY — the cards, and with them the watched card's own name,
+   tags and date. At the size the picture becomes, a caption beside it is noise. */
+.app-proto .takes.is-watch .takes__list {
+  opacity: 0;
+  transform: translateY(18px);
+  pointer-events: none;
+}
+/* and the picture has left its slot, so the slot is empty rather than showing a
+   second copy of it under the one that flew */
+.app-proto .takecard.is-watching .takecard__thumb { visibility: hidden; }
+
+/* THE PLAYER ITSELF. Positioned in .capture, which does not move while the
+   head and the control bar are widening under --take-w — anchoring it to the
+   feed would have made it ride that width change on its way out. */
+.app-proto .watchbox {
+  position: absolute;
+  z-index: 40;
+  overflow: hidden;
+  border: 1px solid var(--surface-3);
+  border-radius: 8px;
+  background: #000;
+}
+/* the flight. The class is added between the start box and the target box, so
+   the first placement lands with no transition and only the travel animates. */
+.app-proto .watchbox.is-open {
+  transition: left var(--dz-slide) var(--dz-ease), top var(--dz-slide) var(--dz-ease),
+    width var(--dz-slide) var(--dz-ease), height var(--dz-slide) var(--dz-ease),
+    opacity var(--dz-fast) var(--dz-ease);
+}
+.app-proto .watchbox.is-gone { opacity: 0; }
+.app-proto .watchbox img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.app-proto .watchbox .dur { right: 10px; bottom: 10px; padding: 2px 6px; font-size: 12px; }
+/* the two controls arrive after the picture has landed, not during the flight:
+   a button sliding and scaling across the frame is the one thing that would say
+   "a dialog opened" instead of "the picture grew". */
+.app-proto .watchplay,
+.app-proto .watchx {
+  opacity: 0;
+  transition: opacity var(--dz-fast) var(--dz-ease);
+}
+.app-proto .watchbox.is-open .watchplay,
+.app-proto .watchbox.is-open .watchx { opacity: 1; transition-delay: 260ms; }
+.app-proto .watchbox.is-closing .watchplay,
+.app-proto .watchbox.is-closing .watchx { opacity: 0; transition-delay: 0s; }
+.app-proto .watchplay {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  pointer-events: none;
+}
+.app-proto .watchplay svg { width: 24px; height: 24px; margin-left: 3px; }
+.app-proto .watchx {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease),
+    opacity var(--dz-fast) var(--dz-ease);
+}
+.app-proto .watchx:hover { background: rgba(0, 0, 0, 0.8); color: var(--text); }
+.app-proto .watchx svg { width: 15px; height: 15px; }
