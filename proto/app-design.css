@@ -1111,3 +1111,60 @@
   background: color-mix(in srgb, var(--accent) 26%, transparent);
   color: var(--accent);
 }
+
+
+/* ---------- 11. the tool bar hands its place over --------------------------
+   Robert, 2026-09-06: "in play window when open make toolbar replaced from
+   above with bar for player and button edit, when edit pressed make player bar
+   replaced with timeline and other shit for editing."
+
+   Inputs and a record button are what you need BEFORE a take; there is a
+   finished one on the screen. So the bar's own row drops out of the way and the
+   take's row comes down from ABOVE it — from the picture it belongs to, where
+   the head's row came up from below. The bar keeps its height while it is a
+   player, and grows to the timeline's when Edit is pressed. */
+.app-proto .controlbar { position: relative; }
+.app-proto .controlbar > * {
+  transition: opacity var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease);
+}
+.app-proto .controlbar.is-watch > *:not(.watchdock) {
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+}
+.app-proto .watchdock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+.app-proto .controlbar.is-watch .watchdock { transform: none; opacity: 1; pointer-events: auto; }
+/* and when the timeline is in it, the bar is as tall as the timeline needs */
+.app-proto .controlbar { transition: max-width var(--dz-slide) var(--dz-ease), min-height var(--dz-slide) var(--dz-ease); }
+.app-proto .controlbar.is-edit { min-height: var(--dock-h, 200px); }
+.app-proto .controlbar.is-edit .watchdock {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+/* AND THE TIMELINE KEEPS ITS OWN HEIGHT. As a flex column child it shrank to
+   whatever the bar happened to be, which then measured as the height the bar
+   should grow to — a rehearsal that reads its own starting point. */
+.app-proto .controlbar.is-edit .watchdock > * { flex: none; }
+/* the app's own transport, at the width it has in the editor */
+.app-proto .watchdock .transport { flex: 0 1 520px; }
+.app-proto .watchdock .tl,
+.app-proto .watchdock .tools { width: 100%; }
+.app-proto .wedit { flex: none; }
+
+/* the rehearsal state: one task, no paint, so nothing here is ever seen — it
+   exists so a move can be measured in the layout it will END in */
+.app-proto.dz-nofx,
+.app-proto.dz-nofx * { transition: none !important; }

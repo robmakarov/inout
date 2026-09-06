@@ -272,7 +272,35 @@
      and then --take-w, the one token the head, the feed and the control bar
      already share, is set to that width. So the app widens around the video
      instead of the video sitting in a column that was sized for a list. */
-  const WATCH = { root: null, card: null, box: null, from: null, timer: 0 }
+  const WATCH = { root: null, card: null, box: null, from: null, at: null, ratio: 16 / 9, timer: 0 }
+  /* WHERE THE PICTURE GOES, GIVEN THE FRAME AS IT IS NOW. Close under the bar
+     it belongs to (the head names the take it is showing) and clear of the one
+     it does not (the control bar is the app's own furniture and wants the
+     room). Asked again whenever the frame changes under it — pressing Edit
+     grows the bar, and the answer is a different box, not a guess. */
+  function playerBox(root, ratio) {
+    const cap = root.querySelector('.capture')
+    const takes = root.querySelector('.takes')
+    const headEl = takes && takes.querySelector('.takes__head')
+    const bar = root.querySelector('.controlbar')
+    if (!cap || !headEl) return null
+    const capR = cap.getBoundingClientRect()
+    const headR = headEl.getBoundingClientRect()
+    const barTop = bar ? bar.getBoundingClientRect().top : capR.bottom
+    const padTop = 8
+    const padBottom = 30
+    const padSide = 14
+    const top = headR.bottom + padTop
+    const room = Math.max(120, barTop - padBottom - top)
+    let h = room
+    let w = h * ratio
+    const maxW = capR.width - 2 * padSide
+    if (w > maxW) {
+      w = maxW
+      h = w / ratio
+    }
+    return [(capR.width - w) / 2, top - capR.top + (room - h) / 2, w, h]
+  }
   const boxAt = (el, x, y, w, h) => {
     el.style.left = Math.round(x) + 'px'
     el.style.top = Math.round(y) + 'px'
@@ -305,25 +333,6 @@
        control bar, both of which stay exactly where they are. Nothing is
        stretched to make space; the picture floats in what is there. */
     const capR = cap.getBoundingClientRect()
-    const headR = headEl.getBoundingClientRect()
-    const bar = root.querySelector('.controlbar')
-    const barTop = bar ? bar.getBoundingClientRect().top : capR.bottom
-    /* CLOSE UNDER THE BAR IT BELONGS TO, CLEAR OF THE ONE IT DOES NOT (Robert,
-       2026-09-06). The player and the head are one object — the bar names the
-       take the picture is showing — so they sit together; the control bar is
-       the app's own furniture and wants the room. */
-    const padTop = 8
-    const padBottom = 30
-    const padSide = 14
-    const top = headR.bottom + padTop
-    const room = Math.max(140, barTop - padBottom - top)
-    let h = room
-    let w = h * ratio
-    const maxW = capR.width - 2 * padSide
-    if (w > maxW) {
-      w = maxW
-      h = w / ratio
-    }
 
     const box = document.createElement('div')
     box.className = 'watchbox'
@@ -344,8 +353,11 @@
     boxAt(box, ...WATCH.from)
     void box.offsetWidth
     box.classList.add('is-open')
-    boxAt(box, (capR.width - w) / 2, top - capR.top + (room - h) / 2, w, h)
-    root.style.setProperty('--take-w', Math.max(600, Math.round(w)) + 'px')
+    WATCH.ratio = ratio
+    WATCH.at = playerBox(root, ratio)
+    boxAt(box, ...WATCH.at)
+    root.style.setProperty('--take-w', Math.max(600, Math.round(WATCH.at[2])) + 'px')
+    watchDock(root, 'play')
   }
 
   /* THE HEAD IS THE PLAYER'S BAR WHILE IT PLAYS (Robert, 2026-09-06: "top bar
@@ -447,6 +459,124 @@
     headEl.appendChild(bar)
   }
 
+  /* ---------- the tool bar becomes the player's, and then the editor's -------
+     Robert, 2026-09-06: "in play window when open make toolbar replaced from
+     above with bar for player and button edit, when edit pressed make player
+     bar replaced with timeline and other shit for editing."
+
+     Choosing inputs and pressing record are things you do BEFORE a take, and
+     there is a finished one on the screen — so the control bar hands its place
+     over, the same way the head does above. It comes from ABOVE because it
+     belongs to the picture over it, where the head's row came from below.
+
+     NOTHING IN IT IS DRAWN HERE. The transport and the timeline are lifted out
+     of the app's own editor screen — SNAP.editor, the frozen capture the third
+     tab is made of — so what you press in the player is the app's real player,
+     and pressing Edit puts the app's real timeline under it. The only new thing
+     is the Edit button, and it is the head's button. */
+  let EDDOC = null
+  const editorDoc = () => {
+    if (EDDOC !== null) return EDDOC
+    try {
+      const src = typeof SNAP !== 'undefined' && SNAP.editor
+      EDDOC = src ? new DOMParser().parseFromString(src, 'text/html') : false
+    } catch (err) {
+      EDDOC = false
+    }
+    return EDDOC
+  }
+
+  function watchDock(root, mode) {
+    const bar = root.querySelector('.controlbar')
+    if (!bar) return null
+    let dock = bar.querySelector('.watchdock')
+    if (!dock) {
+      dock = document.createElement('div')
+      dock.className = 'watchdock'
+      bar.appendChild(dock)
+      void bar.offsetHeight
+    }
+    dock.innerHTML = ''
+    dock.dataset.mode = mode
+    const ed = editorDoc()
+    if (mode === 'play') {
+      const t = ed && ed.querySelector('.transport')
+      if (t) {
+        const c = t.cloneNode(true)
+        /* the editor's back arrow goes to the takes list, and we are ON the
+           takes list with a picture over it — the cross in the head is the way
+           out, so the arrow would be a second one that means something else */
+        const back = c.querySelector('.transport__back')
+        if (back) back.remove()
+        dock.appendChild(c)
+      }
+      const edit = document.createElement('button')
+      edit.type = 'button'
+      edit.className = 'wbtn wedit'
+      edit.title = 'Edit this take'
+      edit.innerHTML = ic('scissors') + '<span>Edit</span>'
+      edit.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        watchEdit(root)
+      })
+      dock.appendChild(edit)
+    } else {
+      for (const sel of ['.tools', '.tl']) {
+        const el = ed && ed.querySelector(sel)
+        if (el) dock.appendChild(el.cloneNode(true))
+      }
+    }
+    bar.classList.add('is-watch')
+    return dock
+  }
+
+  /* THE PICTURE AND THE TIMELINE MOVE ON ONE CLOCK. The bar grows, the frame
+     re-centres and the room over it changes — and asking for that room while
+     the bar is mid-transition reads a number the layout is only passing
+     through, which is exactly the bug that made the return flight land wrong.
+     So the whole move is rehearsed first with the transitions switched off:
+     put the frame in its finished state, ask playerBox where the picture goes,
+     put the frame back, and only then start both for real. No paint happens in
+     between — it is all one task — so nothing of the rehearsal is seen. */
+  function watchEdit(root) {
+    const bar = root.querySelector('.controlbar')
+    const dock = watchDock(root, 'edit')
+    if (!bar || !dock) return
+    const cap = root.querySelector('.capture')
+    const capH = cap ? cap.getBoundingClientRect().height : 660
+    bar.style.setProperty('--dock-h', '0px')
+    root.classList.add('dz-nofx')
+    bar.classList.add('is-edit')
+    void bar.offsetHeight
+    /* SUMMED, NOT scrollHeight. The dock centres what it holds, and a centred
+       flex box overflows in BOTH directions while scrollHeight only counts the
+       half that hangs below — so it read 152 for content that stands 223 tall
+       and the timeline was cut off by exactly the difference. */
+    const kids = [...dock.children]
+    const GAP = 10
+    const natural =
+      24 + GAP * Math.max(0, kids.length - 1) + kids.reduce((n, c) => n + c.getBoundingClientRect().height, 0)
+    const want = Math.round(Math.min(Math.max(natural, bar.getBoundingClientRect().height), capH * 0.52))
+    bar.style.setProperty('--dock-h', want + 'px')
+    void bar.offsetHeight
+    const target = playerBox(root, WATCH.ratio)
+    bar.classList.remove('is-edit')
+    bar.style.setProperty('--dock-h', '0px')
+    void bar.offsetHeight
+    root.classList.remove('dz-nofx')
+
+    bar.classList.add('is-edit')
+    bar.style.setProperty('--dock-h', want + 'px')
+    if (WATCH.box && target) {
+      WATCH.at = target
+      boxAt(WATCH.box, ...target)
+      /* and the bars follow the picture's new width, the same rule as on the
+         way in — the timeline took height off it, so it is a smaller picture */
+      root.style.setProperty('--take-w', Math.max(600, Math.round(target[2])) + 'px')
+    }
+  }
+
   function watchClose() {
     const { root, card, box } = WATCH
     if (!card || !box) return
@@ -454,6 +584,11 @@
     const takes = root.querySelector('.takes')
     if (takes) takes.classList.remove('is-watch')
     root.style.removeProperty('--take-w')
+    const cbar = root.querySelector('.controlbar')
+    if (cbar) {
+      cbar.classList.remove('is-watch', 'is-edit')
+      cbar.style.removeProperty('--dock-h')
+    }
     box.classList.add('is-closing')
     /* home is the slot it came out of, remembered from the way in. A card the
        list no longer holds — a tab changed under it — has no slot to go home
@@ -467,8 +602,11 @@
       card.classList.remove('is-watching')
       const bar = root.querySelector('.watchbar')
       if (bar) bar.remove()
+      const dock = root.querySelector('.watchdock')
+      if (dock) dock.remove()
       WATCH.box = null
       WATCH.from = null
+      WATCH.at = null
     }, 440)
   }
 
@@ -504,7 +642,7 @@
           watchClose()
           return
         }
-        if (e.target.closest('.watchbox, .watchbar')) return
+        if (e.target.closest('.watchbox, .watchbar, .watchdock')) return
         watchClose()
       },
       true,
