@@ -723,8 +723,11 @@
    lives on the items, so the drawer's share of it collapses when the drawer
    does. Stays on one line when select mode doubles its contents. */
 .app-proto .tools2 { min-width: 0; flex-wrap: nowrap; gap: 0; }
-.app-proto .selx__in { margin-right: 4px; }
-.app-proto .totalx { margin-left: 2px; }
+.app-proto .selx__in { margin-right: 0; }
+/* +16 on the count (Robert, 2026-09-06): 8 px of air read as the number being
+   part of the button rather than its own fact. The spacing still lives on the
+   items, so All and Clear open into the same gap instead of adding to it. */
+.app-proto .totalx { margin-left: 18px; }
 
 /* ---------- 5. the quality rail ------------------------------------------- */
 /* the rail carries its own names now, so it is the thing that gets the width */

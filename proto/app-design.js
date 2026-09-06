@@ -240,8 +240,8 @@
         </div>
         <div class="rightgrp">
           <div class="where" role="tablist">
-            <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
-            <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
+            <button role="tab" aria-selected="${WHERE === 'device'}" data-where="device">${dic('device')}Device</button>
+            <button role="tab" aria-selected="${WHERE === 'cloud'}" data-where="cloud">${dic('cloud')}Cloud</button>
           </div>
           <button class="acct__av" data-acct title="Not signed in">${ic('user')}</button>
         </div>
@@ -299,8 +299,10 @@
 
     total(takes)
     wireHead(root, takes, headEl)
-    /* run the filter once on the way in, so the Device tab opens holding only
-       what is on the device rather than everything and a correction later */
+    /* run the filter once on the way in, on whichever tab was last chosen, so
+       the list opens holding the right library rather than everything and a
+       correction later */
+    takes.classList.toggle('is-cloud', WHERE === 'cloud')
     applyFilter(takes)
   }
 
@@ -418,6 +420,7 @@
            for. The device count and the cloud count are separate libraries now,
            and both tabs can be empty on their own terms. */
         const onCloud = w.dataset.where === 'cloud'
+        WHERE = w.dataset.where
         takes.classList.toggle('is-cloud', onCloud)
         // Cloud is the right-hand tab, so its feed arrives from the right
         swapList(takes, onCloud ? 1 : -1, () => applyNow(takes.querySelector('.takes__list')))
@@ -479,6 +482,13 @@
   /* head() wires the filter and then needs to run it; the closure that knows
      about the search box and the kind menu lives inside wireHead, so it leaves
      a handle here rather than either of them reaching into the other. */
+  /* WHICH TAB YOU ARE ON SURVIVES A REFRESH. Every panel press rebuilds #app
+     from the frozen snapshot, so the head is built fresh each time and used to
+     come back on Device — which meant adding a take to the cloud threw you off
+     the tab you were watching it appear on, and it looked like nothing had
+     happened. It lives out here because the DOM that held it is gone by then. */
+  let WHERE = 'device'
+
   const FILTERS = new WeakMap()
   const applyFilter = (takes) => { const f = FILTERS.get(takes); if (f) f() }
 
