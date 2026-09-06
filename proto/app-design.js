@@ -94,9 +94,29 @@
       }
 
       // Watch and Edit go; the picture itself already opens the take
-      for (const b of card.querySelectorAll('.takecard__actions .takecard__btn')) {
+      const btns = [...card.querySelectorAll('.takecard__actions .takecard__btn')]
+      for (const b of btns) {
         const t = (b.textContent || '').trim().toLowerCase()
         if (t === 'watch' || t === 'edit') b.remove()
+      }
+      /* Download, Show in folder and Delete are one group in the corner, in that
+         order. They are icon-only there, so each keeps its name where a name is
+         still needed — the tooltip and the accessible label. */
+      const del = card.querySelector('.takecard__del')
+      if (del && !card.querySelector('.cardtools')) {
+        const tools = document.createElement('div')
+        tools.className = 'cardtools'
+        for (const want of ['download', 'show in folder']) {
+          const b = btns.find((x) => (x.textContent || '').trim().toLowerCase() === want)
+          if (!b) continue
+          const label = (b.textContent || '').trim()
+          b.title = label
+          b.setAttribute('aria-label', label)
+          for (const sp of b.querySelectorAll('span')) sp.remove()
+          tools.appendChild(b)
+        }
+        del.replaceWith(tools)
+        tools.appendChild(del)
       }
 
       // the checkbox lane, empty until select mode is on
