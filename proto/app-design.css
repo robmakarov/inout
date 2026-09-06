@@ -43,6 +43,8 @@
      settle at either end to sit through. */
   --dz-slide: 400ms;
   --dz-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  /* for anything that only arrives: on screen at once, then settles */
+  --dz-enter: cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 /* ---------- 0. the studio ground: grid, tilt and bounce --------------------
@@ -155,17 +157,24 @@
 .app-proto .takes__list { gap: 8px; }
 .app-proto .takes__list,
 .app-proto .cloud-empty {
-  transition: height var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease),
-    opacity var(--dz-slide) var(--dz-ease);
+  /* THE SLIDE IS A SLIDE, NOT A FADE. 28 px of travel under an ease-in-out and
+     an opacity ramp is a blink with a twitch in it: a quarter of the way
+     through the clock the curve has moved 10% of a distance that was already
+     nothing, and the eye only ever registered the fade. So the feed starts a
+     FULL COLUMN off its own side and there is no fade at all — what you see is
+     the thing arriving. The curve is a decelerate, because an element that only
+     ENTERS should be on screen at once and settle, where the ease-in-out that
+     is right for a height (which starts and stops in place) leaves an empty
+     column for the first hundred milliseconds. */
+  transition: height var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-enter);
 }
-/* the frame it starts from: set by swapList, +28 for Cloud, -28 for Device.
-   No transition on this class — it is the jump to the starting line, and the
-   movement is what happens when it comes back off. */
+/* the frame it starts from: set by swapList, a full width right for Cloud and
+   left for Device. No transition on this class — it is the jump to the starting
+   line, and the movement is what happens when it comes back off. */
 .app-proto .takes.is-from .takes__list,
 .app-proto .takes.is-from .cloud-empty {
   transition: none;
   transform: translateX(var(--slide-from, 0px));
-  opacity: 0;
 }
 /* and nothing leans out of the column while it travels */
 .app-proto .takes.is-clip { overflow: hidden; }

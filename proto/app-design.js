@@ -314,9 +314,9 @@
      SIDE: Cloud from the right, Device from the left, which is where each tab
      sits in the pair. `dir` is 0 for a search or a filter — the same rows are
      still there, so nothing should travel. Order matters and it is fiddly: swap
-     the content, put it at the offset with NO transition, pin the old height,
-     one reflow, then release both at once so the height and the slide are one
-     movement rather than two of the same length that start apart. */
+     the content, put it a FULL COLUMN off to that side with NO transition, pin
+     the old height, one reflow, then release both at once so the height and the
+     slide are one movement rather than two of the same length that start apart. */
   const HTIMER = new WeakMap()
   function swapList(takes, dir, mutate) {
     const list = takes && takes.querySelector('.takes__list')
@@ -328,7 +328,7 @@
     const moves = Math.abs(to - from) >= 1
     if (!dir && !moves) return
     if (dir) {
-      takes.style.setProperty('--slide-from', dir * 28 + 'px')
+      takes.style.setProperty('--slide-from', dir > 0 ? '100%' : '-100%')
       takes.classList.add('is-from', 'is-clip')
       void list.offsetHeight
     }
