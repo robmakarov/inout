@@ -320,10 +320,35 @@
      the old height, one reflow, then release both at once so the height and the
      slide are one movement rather than two of the same length that start apart. */
   const HTIMER = new WeakMap()
+  /* THE FEED THAT LEAVES HAS TO LEAVE. Only the arriving one was animated, so
+     the old list blinked out under it — half a transition reads worse than
+     none. The two sets are the same elements with different rows hidden, so
+     they cannot both be in the list at once: the outgoing one is CLONED first,
+     hung over the list with no effect on layout, and slid the other way. Both
+     halves ride the same curve, which is the whole trick — with one curve the
+     gap between them stays exactly one column at every instant and the pair
+     moves as one strip rather than two things passing each other. */
+  function ghostOf(takes, list) {
+    const g = document.createElement('div')
+    g.className = 'listghost'
+    g.style.top = list.offsetTop + 'px'
+    g.style.height = list.getBoundingClientRect().height + 'px'
+    const copy = list.cloneNode(true)
+    copy.style.height = ''
+    g.appendChild(copy)
+    /* cloneNode copies the value ATTRIBUTE, not what is typed in the box, so a
+       take you have named would go blank for the length of the slide */
+    const src = [...list.querySelectorAll('input')]
+    ;[...copy.querySelectorAll('input')].forEach((el, i) => { el.value = src[i] ? src[i].value : '' })
+    const note = takes.querySelector('.cloud-empty')
+    if (note && !note.hidden) g.appendChild(note.cloneNode(true))
+    return g
+  }
   function swapList(takes, dir, mutate) {
     const list = takes && takes.querySelector('.takes__list')
     if (!list) return mutate()
     const from = list.getBoundingClientRect().height
+    const ghost = dir ? ghostOf(takes, list) : null
     mutate()
     list.style.height = ''
     const to = list.getBoundingClientRect().height
@@ -332,14 +357,20 @@
     if (dir) {
       takes.style.setProperty('--slide-from', dir > 0 ? '100%' : '-100%')
       takes.classList.add('is-from', 'is-clip')
+      takes.appendChild(ghost)
       void list.offsetHeight
     }
     if (moves) list.style.height = from + 'px'
     void list.offsetHeight // the reflow that makes the next lines a transition
     takes.classList.remove('is-from')
     if (moves) list.style.height = to + 'px'
+    if (ghost) ghost.classList.add('is-gone')
     clearTimeout(HTIMER.get(list))
-    HTIMER.set(list, setTimeout(() => { list.style.height = ''; takes.classList.remove('is-clip') }, 460))
+    HTIMER.set(list, setTimeout(() => {
+      list.style.height = ''
+      takes.classList.remove('is-clip')
+      for (const old of takes.querySelectorAll('.listghost')) old.remove()
+    }, 460))
   }
   const animateHeight = (list, mutate) => swapList(list && list.closest('.takes'), 0, mutate)
 

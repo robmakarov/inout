@@ -178,6 +178,19 @@
 }
 /* and nothing leans out of the column while it travels */
 .app-proto .takes.is-clip { overflow: hidden; }
+/* THE FEED THAT LEAVES, held over the list so it cannot move anything. It
+   starts where the list was and goes the OTHER way, on the same curve and the
+   same clock, so the pair travels as one strip. */
+.app-proto .takes { position: relative; }
+.app-proto .listghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  transition: transform var(--dz-slide) var(--dz-enter);
+}
+.app-proto .takes.is-from .listghost { transition: none; transform: none; }
+.app-proto .listghost.is-gone { transform: translateX(calc(-1 * var(--slide-from, 0px))); }
 
 /* NO FILL, NO STROKE — the cards are a list, not a stack of boxes. What
    separates them is the space between them and the picture at the head of each. */
