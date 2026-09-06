@@ -51,11 +51,16 @@
   will-change: transform;
 }
 .app-proto > .app { position: relative; z-index: 1; }
-/* the app paints its own near-black over the frame; with the grid on that is a
-   ground under a ground, so it steps aside and the grid IS the ground */
-.app-proto[data-grid='on'],
+/* WITH THE GRID ON, THE GRID IS THE BACKGROUND — so the app's own layers have to
+   become TRANSPARENT, not black. Painting them black was the bug: the grid sits
+   behind them, and an opaque layer on top of it hides it whatever its colour is.
+   Only the frame itself keeps a fill, and the grid draws on that. Grid off and
+   every one of them gets its own colour straight back. */
+.app-proto[data-grid='on'] { background: #000; }
 .app-proto[data-grid='on'] > .app,
-.app-proto[data-grid='on'] .capture { background: #000; }
+.app-proto[data-grid='on'] .capture,
+.app-proto[data-grid='on'] .capture__body,
+.app-proto[data-grid='on'] .editor { background: transparent; }
 
 /* ---------- 1. input chips: neon's type and glyphs, the app's colour -------- */
 .app-proto .chip {

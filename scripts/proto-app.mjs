@@ -636,6 +636,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 :is(.col-filters, .col-detail) .panel .btn-h { text-align: center; cursor: pointer; }
 :is(.col-filters, .col-detail) .panel .btn-h:hover { background: #212126; color: #fff; }
+:is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='true'] { background: #2b2b31; color: #fff; border-color: #3a3a42; }
+:is(.col-filters, .col-detail) .panel .btn-h[aria-pressed='false'] { color: #6a6a74; }
 .tab {
   display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px;
   color: #85858f; font-size: 12px; transition: background 120ms, color 120ms;
@@ -859,11 +861,11 @@ F    frame
   <div class="col col-detail">
     <aside class="panel detail">
       <div class="panel__title">The app</div>
+/*DESIGN_PANEL*/
       <div class="panel__group">
         <div class="panel__label">Captured</div>
         <div class="readout">/*STAMP*/</div>
       </div>
-/*DESIGN_PANEL*/
       <div class="panel__group">
         <div class="panel__label">Refresh it</div>
         <div class="readout">node scripts/proto-app.mjs</div>
