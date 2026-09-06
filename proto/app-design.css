@@ -450,34 +450,47 @@
 .app-proto .takecard.is-picked .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
 .app-proto .takecard.is-picked { background: var(--accent-soft); }
 
+/* NOT A FLOATING PANEL. It lives in the tool row, immediately right of the
+   select button, and wears that group's clothes: same 28 height, same 7 corner,
+   same faint-until-hovered ghost. A slab under the list was a second place to
+   look for the result of a press made two rows above it. */
 .app-proto .picked {
   display: none;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: var(--surface-2);
-  border-radius: 10px;
-  font-size: 13px;
-  color: var(--text-dim);
+  gap: 4px;
+  margin: 0 0 0 8px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-faint);
+  /* the head is a row of uppercase condensed labels and everything in it
+     inherits that; this is a sentence, so it opts out the way room__note does */
+  font-family: var(--font);
+  text-transform: none;
+  letter-spacing: 0;
 }
 .app-proto .takes.is-picking .picked { display: flex; }
-.app-proto .picked__n { color: var(--text); font-weight: 600; }
-.app-proto .picked__sp { margin-left: auto; }
+.app-proto .picked__n { color: var(--text); font-weight: 600; margin-right: 3px; }
 .app-proto .picked button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 28px;
-  padding: 0 10px;
+  margin-left: 2px;
+  padding: 0 9px;
   border-radius: 7px;
-  background: var(--surface-3);
-  color: var(--text-dim);
+  background: none;
+  color: var(--text-faint);
   font-size: 12px;
+  transition: color 120ms, background 120ms;
 }
-.app-proto .picked button:hover { color: var(--text); }
-.app-proto .picked button.is-danger:hover { color: var(--record); }
-.app-proto .picked svg { width: 13px; height: 13px; }
+.app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
+.app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }
+.app-proto .picked svg { width: 14px; height: 14px; }
+/* the group has to stay on one line when select mode doubles its contents */
+.app-proto .tools2 { min-width: 0; flex-wrap: nowrap; }
 
 /* ---------- 5. the quality rail ------------------------------------------- */
 /* the rail carries its own names now, so it is the thing that gets the width */

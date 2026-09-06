@@ -182,14 +182,17 @@
         }
       </div>`
 
+    /* WHAT YOU DO WITH A SELECTION GOES BESIDE THE BUTTON THAT STARTED IT.
+       It was a panel that slid in under the list — a second place to look for
+       the answer to a press you just made two rows up. In the tool group it is
+       one row: filter, sort, select, then what select is for. */
     if (!takes.querySelector('.picked')) {
       const p = document.createElement('div')
       p.className = 'picked'
       p.innerHTML = `<span class="picked__n">0</span> selected
-        <span class="picked__sp"></span>
         <button data-p="save">${ic('download')}Download</button>
         <button data-p="del" class="is-danger">${ic('trash')}Delete</button>`
-      takes.appendChild(p)
+      headEl.querySelector('.tools2').appendChild(p)
     }
     wireHead(root, takes, headEl)
   }
@@ -330,12 +333,22 @@
     const el = takes.querySelector('.picked__n')
     if (el) el.textContent = String(n)
   }
+  /* THE LIST IS INSIDE .takes, NOT ABOVE IT. This walked only upward, found
+     nothing that scrolls, and fell back to `el.closest('.takes__list')` — which
+     is null, because closest looks at ancestors and the list is a child. So the
+     surface came back as .takes itself, an element with no overflow, and the
+     edge autoscroll spent every frame moving a scrollTop that does not exist:
+     a drag simply stopped dead at the last visible row. Look down first. */
+  const canScroll = (n) => {
+    if (!n) return false
+    const s = getComputedStyle(n).overflowY
+    return (s === 'auto' || s === 'scroll') && n.scrollHeight > n.clientHeight + 4
+  }
   const scrollSurface = (el) => {
-    for (let n = el; n && n !== document.body; n = n.parentElement) {
-      const s = getComputedStyle(n).overflowY
-      if ((s === 'auto' || s === 'scroll') && n.scrollHeight > n.clientHeight + 4) return n
-    }
-    return el.closest('.takes__list') || el
+    const list = el.querySelector('.takes__list')
+    if (canScroll(list)) return list
+    for (let n = el; n && n !== document.body; n = n.parentElement) if (canScroll(n)) return n
+    return list || el
   }
 
   function picking(root) {
@@ -370,26 +383,39 @@
 
       const startY = e.clientY
       const st = { armed: false, moved: false, mode: null, from: null, startY: 0, surf: null }
-      const move = (ev) => {
-        lastY = ev.clientY
-        if (!st.armed) return
-        st.moved = true
+      /* Sweep the rect over the rows, from lastY rather than from an event, so
+         the EDGE TIMER can call it too: while the pointer is held still at the
+         bottom of the list the rows scrolling up under it have to keep joining
+         the selection, which is the whole point of the autoscroll. */
+      const applyRect = () => {
         const surf = st.surf
         const r = surf.getBoundingClientRect()
-        const nowY = ev.clientY - r.top + surf.scrollTop
+        /* the proto draws the app inside a scaled frame, so a rect is in
+           scaled pixels while scrollTop is not: divide the scale out or the
+           selection drifts away from the pointer the moment the list moves */
+        const z = surf.offsetHeight ? r.height / surf.offsetHeight : 1
+        const nowY = (lastY - r.top) / z + surf.scrollTop
         const top = Math.min(st.startY, nowY)
         const bot = Math.max(st.startY, nowY)
         for (const c of takes.querySelectorAll('.takecard')) {
           if (c.hidden) continue
           const cr = c.getBoundingClientRect()
-          const cTop = cr.top - r.top + surf.scrollTop
-          const overlaps = cTop + cr.height > top && cTop < bot
+          const cTop = (cr.top - r.top) / z + surf.scrollTop
+          const overlaps = cTop + cr.height / z > top && cTop < bot
           const want = overlaps ? st.mode === 'select' : st.from.get(c) === true
           c.classList.toggle('is-picked', want)
         }
         count(takes)
-        if (edge(surf)) { if (!edgeTimer) edgeTimer = setInterval(() => edge(surf), 16) }
-        else stopEdge()
+      }
+      const move = (ev) => {
+        lastY = ev.clientY
+        if (!st.armed) return
+        st.moved = true
+        applyRect()
+        const surf = st.surf
+        if (edge(surf)) {
+          if (!edgeTimer) edgeTimer = setInterval(() => { if (edge(surf)) applyRect(); else stopEdge() }, 16)
+        } else stopEdge()
       }
       const end = () => {
         clearTimeout(timer)
@@ -406,7 +432,9 @@
         st.from = new Map()
         for (const c of takes.querySelectorAll('.takecard')) st.from.set(c, c.classList.contains('is-picked'))
         st.surf = scrollSurface(takes)
-        st.startY = startY - st.surf.getBoundingClientRect().top + st.surf.scrollTop
+        const sr = st.surf.getBoundingClientRect()
+        const sz = st.surf.offsetHeight ? sr.height / st.surf.offsetHeight : 1
+        st.startY = (startY - sr.top) / sz + st.surf.scrollTop
       }, 200)
       document.addEventListener('pointermove', move)
       document.addEventListener('pointerup', end)
