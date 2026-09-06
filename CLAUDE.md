@@ -89,8 +89,14 @@ current path as fallback); the engine never refuses a record press.
   `proto/app-sim.js` = the TESTING layer, inlined into BOTH, because a proposal you can drive
   against a control you cannot is not an A/B. The sim drives the app's real controls (quality rail,
   chips, speeds, swatches, lane eyes) and simulates real states (input availability, take count,
-  a channel that never connected) using the app's OWN class names, so it renders through either
-  design. Nothing in the proposal is agreed for the product.
+  empty, signed in/out, a channel that never connected) using the app's OWN class names, so it
+  renders through either design. It also carries the FLOW: a record press really goes to the
+  recording screen, stop to the editor, Export to the dock and on to saved, a take's picture opens
+  it, back returns — each press landing on the screen the app would actually be on, because every
+  screen is a real capture of it. Nothing in the proposal is agreed for the product.
+  `--mirror` (rebuild → photograph the built proto's own frame → rebuild, ~5 s, records no takes)
+  puts a still of the proto INSIDE the preview, because what the app records is a screen and the
+  screen has the app on it. Re-run it after anything that changes how the proto looks.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
 commits the files THIS session edited, and files no live session claims only when it is the last

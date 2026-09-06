@@ -91,7 +91,7 @@ function borrowFromNeon() {
  * check below stands either way: a take short of a channel is discarded and
  * recorded again, so an error banner can never be frozen into the proto.
  */
-const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000, takes: 3, rebuild: false }
+const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000, takes: 3, rebuild: false, mirror: false }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6).replace(/\/$/, '')
   else if (a === '--headed') opts.headed = true
@@ -107,6 +107,11 @@ for (const a of process.argv.slice(2)) {
      and a write, about a second. Use it for anything that is not a question
      about the app's own markup; a plain run still drives the live build. */
   else if (a === '--rebuild') opts.rebuild = true
+  /* PHOTOGRAPH THE PROTO'S OWN FRAME and keep it in the capture, so the preview
+     inside the app shows the app. It needs the page built first, so this is a
+     rebuild, one screenshot, and a rebuild — about five seconds, and it records
+     no takes. Run it after any change that alters how the proto LOOKS. */
+  else if (a === '--mirror') { opts.rebuild = true; opts.mirror = true }
   else {
     console.error(`proto-app: unknown flag ${a}`)
     process.exit(1)
@@ -209,6 +214,7 @@ const STATES = [
 const shots = {}
 let css = ''
 let room = null
+let mirror = null
 let capturedAt = null
 const log = (m) => process.stderr.write(`proto-app: ${m}\n`)
 
@@ -221,6 +227,7 @@ if (opts.rebuild) {
   Object.assign(shots, c.shots)
   css = c.css
   room = c.room
+  mirror = c.mirror || null
   capturedAt = c.capturedAt
   log(`rebuilt from the capture of ${capturedAt} — nothing was recorded`)
 }
@@ -471,7 +478,7 @@ if (!opts.rebuild) try {
 
 if (!opts.rebuild) {
   capturedAt = new Date().toISOString()
-  writeFileSync(CACHE, JSON.stringify({ capturedAt, url: APP, css, room, shots }), 'utf8')
+  writeFileSync(CACHE, JSON.stringify({ capturedAt, url: APP, css, room, mirror, shots }), 'utf8')
   log(`capture cached — next design change rebuilds with --rebuild, no recording`)
 }
 
@@ -556,6 +563,7 @@ quality rail. Colours are the app&#8217;s own, untouched.</div>
     .replace('/*DESIGN_CSS*/', () => designCss)
     .replace('/*DESIGN_JS*/', () => esc(designJs))
     .replace('/*ROOM*/', () => JSON.stringify(room))
+    .replace('/*MIRROR*/', () => JSON.stringify(mirror))
     .replace('/*STATE_TABS*/', () => tabs)
     .replace('/*STATE_NOTES*/', () => notes)
     .replace('/*APP_CSS*/', () => rehang(css))
@@ -879,6 +887,9 @@ F    frame
 
 <script>
 window.PROTO_ROOM = /*ROOM*/
+/* a still of this proto's own frame — what the app is recording is the screen,
+   and the screen has the app on it */
+window.PROTO_MIRROR = /*MIRROR*/
 /* What the panel is simulating right now. Read by app-sim.js, which is in BOTH
    tabs, so the shipping tab is drivable too. */
 window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', lost: 'none' }
@@ -912,6 +923,9 @@ function paint() {
 }
 /* one way back in for anything that changes the simulation */
 window.protoRefresh = () => { show(S.id) }
+/* and one way for a press INSIDE the app to move to another screen — the flow
+   in app-sim.js drives the proto through the same path the app takes */
+window.protoGo = (id) => { if (SNAP[id]) show(id) }
 
 const KINDS = ['screen', 'camera', 'mic', 'tab audio']
 function buildSim() {
@@ -1116,8 +1130,56 @@ fit()
 </html>
 `
 
-for (const [file, design] of [[OUT, true], [OUT_SHIPS, false]]) {
-  const page = readTemplate(design)
-  writeFileSync(file, page, 'utf8')
-  log(`wrote ${file} — ${(page.length / 1024).toFixed(0)} KB, ${got.length} states: ${got.map((x) => x.id).join(', ')}`)
+function writeBoth() {
+  for (const [file, design] of [[OUT, true], [OUT_SHIPS, false]]) {
+    const page = readTemplate(design)
+    writeFileSync(file, page, 'utf8')
+    log(`wrote ${file} — ${(page.length / 1024).toFixed(0)} KB, ${got.length} states: ${got.map((x) => x.id).join(', ')}`)
+  }
+}
+writeBoth()
+
+if (opts.mirror) {
+  /* The picture the app is "recording" is a picture of the app, so it can only
+     be taken once the page exists. Photograph the frame element itself, not the
+     window: the tool's own panels are not part of the product. */
+  const mProfile = mkdtempSync(join(tmpdir(), 'inout-proto-mirror-'))
+  let mSession = null
+  try {
+    mSession = await launchChromeRetrying({
+      bin: resolveChrome(),
+      profile: mProfile,
+      url: 'about:blank',
+      headed: false,
+      scriptsOff: true,
+    })
+    const { send, evaluate } = mSession
+    const url = 'file://' + encodeURI(OUT) + '#p=main&f=desktop&z=-&n=-&acc=out'
+    await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false })
+    await send('Page.navigate', { url })
+    for (let i = 0; i < 200; i++) {
+      if ((await evaluate('document.readyState')) === 'complete') break
+      await sleep(100)
+    }
+    await sleep(1200)
+    // fill the zone so the frame is as large as the window allows: a bigger
+    // source picture means the preview is not a blur when it is scaled up
+    await evaluate(`document.getElementById('zfill').click()`)
+    await sleep(700)
+    const box = await evaluate(`(() => { const r = document.getElementById('frameEl').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } })()`)
+    const shot = await send('Page.captureScreenshot', {
+      format: 'jpeg',
+      quality: 82,
+      clip: { x: box.x, y: box.y, width: box.width, height: box.height, scale: 1 },
+    })
+    mirror = 'data:image/jpeg;base64,' + shot.data
+    log(`mirror captured — ${Math.round(box.width)}x${Math.round(box.height)}, ${(mirror.length / 1024).toFixed(0)} KB`)
+  } finally {
+    if (mSession) { try { await quitChrome(mSession) } catch { /* already gone */ } }
+    removeProfile(mProfile)
+  }
+  const c = JSON.parse(readFileSync(CACHE, 'utf8'))
+  c.mirror = mirror
+  writeFileSync(CACHE, JSON.stringify(c), 'utf8')
+  writeBoth()
 }

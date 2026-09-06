@@ -76,6 +76,57 @@
     thumb.style.left = ((i / Math.max(1, labels.length - 1)) * 100).toFixed(3) + '%'
   }
 
+  /* ---------- what the app is recording: itself ---------------------------
+     Robert: "instead of record show ui screeshot itself like its mirrored". The
+     capture's synthetic source is a painted test pattern, which says nothing
+     about the product; a picture of THIS proto in the preview says the obvious
+     true thing — you are recording your screen, and your screen has the app on
+     it. window.PROTO_MIRROR is a still of the proto's own frame, taken by
+     `proto-app.mjs --mirror` after the page is built. It does not animate, and
+     does not need to: it is a still of a screen, not a video of one. */
+  function mirror(root) {
+    const src = window.PROTO_MIRROR
+    if (!src) return
+    for (const im of $$('.stage__screen, .takecard__thumb img, .stage__composite', root)) {
+      if (im.tagName !== 'IMG' || im.dataset.mirrored) continue
+      im.dataset.mirrored = '1'
+      im.src = src
+    }
+  }
+
+  /* ---------- the flow: this proto behaves like the app -------------------
+     Every screen here is a real capture of the real app, so wiring the presses
+     between them costs nothing and buys the only thing stills cannot show —
+     whether the path from a record press to a saved file reads right. Nothing
+     is faked: each press lands on the screen the app would actually be on. */
+  function flow(root) {
+    if (root.dataset.simFlow) return
+    root.dataset.simFlow = '1'
+    const go = (id) => window.protoGo && window.protoGo(id)
+    root.addEventListener('click', (e) => {
+      const rec = e.target.closest('.recbtn')
+      if (rec && !rec.disabled) {
+        // the same button is start and stop, exactly as the app has it
+        go(root.querySelector('.recbtn__inner--stop') ? 'editor' : 'recording')
+        return
+      }
+      // a take's picture opens it, which is what the app does with that press
+      if (e.target.closest('.takecard__thumb')) { go('editor'); return }
+      if (e.target.closest('.transport__back')) { go('main'); return }
+      const btn = e.target.closest('button')
+      if (!btn || btn.disabled) return
+      const label = (btn.textContent || '').trim().toLowerCase()
+      if (label.startsWith('export') || label === 'for ai') {
+        go('exporting')
+        // the render is real in the app and takes time; here it is a beat, so
+        // the dock's two states can both be seen from one press
+        setTimeout(() => go('saved'), 1400)
+        return
+      }
+      if (btn.classList.contains('xstrip__x')) go('editor')
+    })
+  }
+
   /* ---------- every other control the app already draws ------------------- */
   function controls(root) {
     if (root.dataset.simWired) return
@@ -209,6 +260,8 @@
 
   window.applySim = function (root, sim) {
     if (!root || !sim) return
+    mirror(root)
+    flow(root)
     inputs(root, sim)
     account(root, sim)
     takes(root, sim)
