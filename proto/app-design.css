@@ -34,6 +34,18 @@
 .app-proto .takes,
 .app-proto .controlbar { max-width: var(--take-w); margin-left: auto; margin-right: auto; width: 100%; }
 
+/* THE RECORD SCREEN SITS IN THE MIDDLE, NOT ON THE FLOOR.
+   The app's capture body is a flex column with `justify-content: flex-end`,
+   which is right when a preview fills the space above the controls, and leaves
+   the screen hugging the bottom edge when there is none — every visit that
+   opens on the takes list. Centring the BODY is not the fix: the control bar is
+   a SIBLING of it, so that only re-centres the list and leaves the bar in its
+   own band below. The body has to stop eating the free space, and .capture has
+   to centre the pair. Only when there is no preview — a take in progress still
+   wants the stage against the controls, exactly as it ships. */
+.app-proto .capture:not(:has(.stage)) { justify-content: center; }
+.app-proto .capture:not(:has(.stage)) .capture__body { flex: 0 1 auto; }
+
 /* ---------- 3. the control bar: inputs left, record right ------------------
    The shipping bar is a centred column — quality rail, then chips, then the
    record button under both. This puts the inputs and their quality on the left
@@ -230,6 +242,12 @@
 .app-proto .room__fill.is-tight { background: var(--warn); }
 .app-proto .room__note { margin-top: 5px; font-size: 11px; color: var(--text-faint); text-transform: none; letter-spacing: 0; }
 .app-proto .room__note b { color: var(--text-dim); font-weight: 600; }
+
+/* ---------- 3b. the account, signed in and signed out --------------------- */
+.app-proto .acct__av.is-in { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; font-size: 11px; }
+.app-proto .acct__av.is-in svg { display: none; }
+/* what the cloud tab says when there is no account behind it */
+.app-proto .cloud-empty { padding: 18px 0; text-align: center; }
 
 /* ---------- 4. select mode ------------------------------------------------ */
 .app-proto .takecard__pick {

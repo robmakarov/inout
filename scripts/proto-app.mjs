@@ -565,7 +565,10 @@ quality rail. Colours are the app&#8217;s own, untouched.</div>
     .replace(/\/\*FRAME_H\*\//g, () => String(FRAME.h))
 }
 
-/* ---------- the file itself: the same harness the other two tabs wear ---------- */
+/* ---------- the file itself: the same harness the other tabs wear ----------
+   NO BACKTICKS BELOW THIS LINE, in code OR in a comment: the whole page is one
+   String.raw template literal and a stray backtick ends it. It has cost three
+   runs; when a comment wants to quote a CSS property, write its name in words. */
 const TEMPLATE = String.raw`<!doctype html>
 <html lang="en" data-frame="desktop">
 <head>
@@ -745,6 +748,10 @@ body.f .filters, body.d .detail { opacity: 1; }
    swallow its own second and third lines — the kinds and the action row were in
    the DOM the whole time, just clipped. Cards keep their height; the list scrolls. */
 .app-proto .takes__list > * { flex: none; }
+/* An author's own display rule beats the UA's [hidden] rule — the same trap the
+   <svg hidden> sprite set. The app styles .takes as a flex column, so hiding it
+   for the empty state has to say so louder. */
+.app-proto .takes[hidden] { display: none !important; }
 
 /* Barlow Condensed 600/700, lifted from proto/neon.html so the two protos share
    one copy of the faces. SIL Open Font License 1.1 — Copyright 2017 The Barlow
@@ -797,7 +804,15 @@ body.f .filters, body.d .detail { opacity: 1; }
           <button class="btn-h" id="takeAdd">+ take</button>
           <button class="btn-h" id="takeDel">&#8722; take</button>
         </div>
+        <button class="btn-h" id="takeNone" style="margin-top:6px">Empty &#8212; nothing kept</button>
         <div class="readout" id="takeN" style="margin-top:6px"></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Account</div>
+        <select id="simAcct">
+          <option value="out">signed out</option>
+          <option value="in">signed in</option>
+        </select>
       </div>
       <div class="panel__group">
         <div class="panel__label">On the editor</div>
@@ -866,7 +881,7 @@ F    frame
 window.PROTO_ROOM = /*ROOM*/
 /* What the panel is simulating right now. Read by app-sim.js, which is in BOTH
    tabs, so the shipping tab is drivable too. */
-window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: 0, lost: 'none' }
+window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: null, account: 'out', lost: 'none' }
 /*SIM_JS*/
 /*DESIGN_JS*/
 </script>
@@ -890,7 +905,10 @@ function paint() {
   if (window.applySim) window.applySim($('#app'), window.PROTO_SIM)
   if (window.applyDesign) window.applyDesign($('#app'))
   const n = $('#app').querySelectorAll('.takecard').length
-  $('#takeN').textContent = n ? n + (n === 1 ? ' take in the list' : ' takes in the list') : 'no takes on this screen'
+  const takesEl = $('#app').querySelector('.takes')
+  $('#takeN').textContent = !takesEl || takesEl.hidden
+    ? 'empty — nothing kept'
+    : n + (n === 1 ? ' take in the list' : ' takes in the list')
 }
 /* one way back in for anything that changes the simulation */
 window.protoRefresh = () => { show(S.id) }
@@ -911,16 +929,12 @@ function buildSim() {
       save()
     })
   }
-  $('#takeAdd').addEventListener('click', () => {
-    const n = $('#app').querySelectorAll('.takecard').length
-    window.PROTO_SIM.takes = n + 1
-    show(S.id); save()
-  })
-  $('#takeDel').addEventListener('click', () => {
-    const n = $('#app').querySelectorAll('.takecard').length
-    window.PROTO_SIM.takes = Math.max(1, n - 1)
-    show(S.id); save()
-  })
+  const nowTakes = () => $('#app').querySelectorAll('.takecard').length
+  $('#takeAdd').addEventListener('click', () => { window.PROTO_SIM.takes = nowTakes() + 1; show(S.id); save() })
+  $('#takeDel').addEventListener('click', () => { window.PROTO_SIM.takes = Math.max(0, nowTakes() - 1); show(S.id); save() })
+  $('#takeNone').addEventListener('click', () => { window.PROTO_SIM.takes = 0; show(S.id); save() })
+  $('#simAcct').value = window.PROTO_SIM.account
+  $('#simAcct').addEventListener('change', (e) => { window.PROTO_SIM.account = e.target.value; show(S.id); save() })
   $('#simLost').value = window.PROTO_SIM.lost
   $('#simLost').addEventListener('change', (e) => { window.PROTO_SIM.lost = e.target.value; show(S.id); save() })
 }
@@ -1058,7 +1072,7 @@ function save() {
   const sim = window.PROTO_SIM
   const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
     '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
-    '&n=' + (sim.takes || 0) + '&l=' + encodeURIComponent(sim.lost)
+    '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost)
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -1084,7 +1098,9 @@ function restore() {
   if (st.a) st.a.split(',').forEach((v, i) => {
     if (KINDS[i] && ['ok', 'denied', 'unavailable'].includes(v)) window.PROTO_SIM.inputs[KINDS[i]] = v
   })
-  if (st.n && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
+  if (st.n === '-') window.PROTO_SIM.takes = null
+  else if (st.n !== undefined && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
+  if (st.acc === 'in' || st.acc === 'out') window.PROTO_SIM.account = st.acc
   if (st.l) window.PROTO_SIM.lost = decodeURIComponent(st.l)
 }
 

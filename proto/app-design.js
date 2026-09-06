@@ -138,7 +138,7 @@
           <button role="tab" aria-selected="true" data-where="device">${dic('device')}Device</button>
           <button role="tab" aria-selected="false" data-where="cloud">${dic('cloud')}Cloud</button>
         </div>
-        <button class="acct__av" title="Not signed in">${ic('user')}</button>
+        <button class="acct__av" data-acct title="Not signed in">${ic('user')}</button>
       </div>
       ${
         pct === null
@@ -415,11 +415,31 @@
     }
   }
 
+  /* the account button and the cloud tab both read the same switch */
+  function account(root) {
+    const sim = window.PROTO_SIM || {}
+    const inAcct = sim.account === 'in'
+    const av = root.querySelector('[data-acct]')
+    if (av) {
+      av.classList.toggle('is-in', inAcct)
+      av.title = inAcct ? 'Signed in as robmakarov23@gmail.com' : 'Not signed in'
+      if (inAcct) av.textContent = 'RM'
+      else av.innerHTML = ic('user')
+    }
+    const empty = root.querySelector('.cloud-empty')
+    if (empty) {
+      empty.textContent = inAcct
+        ? 'Nothing kept in the cloud yet — Send a take to put it there.'
+        : 'Sign in to keep takes in the cloud.'
+    }
+  }
+
   window.applyDesign = function (root) {
     if (!root) return
     chips(root)
     cards(root)
     head(root)
+    account(root)
     picking(root)
     rail(root)
   }

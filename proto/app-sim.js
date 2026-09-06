@@ -136,7 +136,13 @@
     if (!cards.length) return
     const base = Number(list.dataset.base || cards.length)
     list.dataset.base = String(base)
-    const want = Math.max(1, sim.takes || base)
+    /* null means "as captured"; a number is exact, and ZERO IS A REAL STATE —
+       the app renders no takes block at all when there is nothing kept, which
+       is what a first run and a cleared library both look like. */
+    const want = sim.takes == null ? base : Math.max(0, sim.takes)
+    const takesEl = root.querySelector('.takes')
+    if (takesEl) takesEl.hidden = want === 0
+    if (want === 0) return
 
     while ($$('.takecard', list).length > want) list.lastElementChild.remove()
     while ($$('.takecard', list).length < want) {
@@ -189,9 +195,22 @@
     } else if (band) band.remove()
   }
 
+  /* ---------- signed in, signed out -------------------------------------- */
+  /* The cloud buttons are the part of this that exists in the SHIPPING markup,
+     so it lives here rather than in the proposal: both tabs answer the account
+     switch. Send and Copy link are the two things an account actually buys. */
+  function account(root, sim) {
+    const inAcct = sim.account === 'in'
+    for (const b of $$('.takecard__btn, .xstrip__btn', root)) {
+      const t = (b.textContent || '').trim().toLowerCase()
+      if (t === 'send' || t === 'copy link' || t === 'make a link') b.disabled = !inAcct
+    }
+  }
+
   window.applySim = function (root, sim) {
     if (!root || !sim) return
     inputs(root, sim)
+    account(root, sim)
     takes(root, sim)
     editor(root, sim)
     rail(root)
