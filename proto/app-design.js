@@ -272,7 +272,7 @@
      and then --take-w, the one token the head, the feed and the control bar
      already share, is set to that width. So the app widens around the video
      instead of the video sitting in a column that was sized for a list. */
-  const WATCH = { root: null, card: null, box: null, from: null, at: null, ratio: 16 / 9, timer: 0 }
+  const WATCH = { root: null, card: null, box: null, from: null, at: null, playAt: null, playW: '', ratio: 16 / 9, timer: 0 }
   /* WHERE THE PICTURE GOES, GIVEN THE FRAME AS IT IS NOW. Close under the bar
      it belongs to (the head names the take it is showing) and clear of the one
      it does not (the control bar is the app's own furniture and wants the
@@ -356,6 +356,10 @@
     WATCH.ratio = ratio
     WATCH.at = playerBox(root, ratio)
     boxAt(box, ...WATCH.at)
+    /* the frame the picture plays in, kept: shutting the drawer puts it back
+       rather than measuring a second time for an answer already known */
+    WATCH.playAt = WATCH.at
+    WATCH.playW = Math.max(420, Math.round(WATCH.at[2])) + 'px'
     /* THE FRAME IS THE PICTURE'S WIDTH, EXACTLY (Robert, 2026-09-06: "make bars
        and bg cards meny resize with play window when edit bar comes, make edit
        bar same width as play window"). The head, the feed and the control bar
@@ -363,7 +367,7 @@
        take being played — and when the timeline takes height off the picture,
        everything narrows with it. The floor is only there so the head's own row
        has somewhere to stand; nothing normal reaches it. */
-    root.style.setProperty('--take-w', Math.max(420, Math.round(WATCH.at[2])) + 'px')
+    root.style.setProperty('--take-w', WATCH.playW)
     watchDock(root)
   }
 
@@ -551,6 +555,7 @@
     edit.type = 'button'
     edit.className = 'wbtn wedit'
     edit.title = 'Edit this take'
+    edit.setAttribute('aria-pressed', 'false')
     edit.innerHTML = ic('scissors') + '<span>Edit</span>'
     edit.addEventListener('click', (e) => {
       e.preventDefault()
@@ -582,7 +587,27 @@
     const bar = root.querySelector('.controlbar')
     const dock = watchDock(root)
     const ed = editorDoc()
-    if (!bar || !dock || dock.querySelector('.wdock__edit')) return
+    if (!bar || !dock) return
+    /* THE BUTTON IS A SWITCH (Robert, 2026-09-06). Pressed again it shuts the
+       drawer the same way closing the player does — fold, and the picture takes
+       back the room it lent. The block is thrown away rather than parked at
+       zero: the timeline it holds has been scaled to a width, and scaling the
+       same nodes again would compound it. */
+    const open = dock.querySelector('.wdock__edit')
+    if (open) {
+      open.style.height = '0px'
+      bar.classList.remove('is-edit')
+      bar.style.setProperty('--dock-h', '0px')
+      const btn = dock.querySelector('.wedit')
+      if (btn) btn.setAttribute('aria-pressed', 'false')
+      if (WATCH.box && WATCH.playAt) {
+        WATCH.at = WATCH.playAt
+        boxAt(WATCH.box, ...WATCH.playAt)
+        root.style.setProperty('--take-w', WATCH.playW)
+      }
+      setTimeout(() => open.remove(), 440)
+      return
+    }
 
     const block = document.createElement('div')
     block.className = 'wdock__edit'
@@ -634,6 +659,8 @@
     bar.classList.add('is-edit')
     bar.style.setProperty('--dock-h', want + 'px')
     block.style.height = blockH + 'px'
+    const btn = dock.querySelector('.wedit')
+    if (btn) btn.setAttribute('aria-pressed', 'true')
     if (WATCH.box && target) {
       WATCH.at = target
       boxAt(WATCH.box, ...target)
@@ -690,6 +717,7 @@
       WATCH.box = null
       WATCH.from = null
       WATCH.at = null
+      WATCH.playAt = null
     }, 440)
   }
 

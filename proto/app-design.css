@@ -1082,6 +1082,8 @@
 .app-proto .picked button:hover:not(:disabled),
 .app-proto .tool2--txt:hover:not(:disabled) { border-color: var(--text-faint); color: var(--text); background: transparent; }
 /* the bin is the one that answers in red, in both rows */
+/* a switch says which way it is thrown */
+.app-proto .wbtn[aria-pressed='true'] { border-color: var(--text-faint); color: var(--text); }
 .app-proto .wbtn--del:hover:not(:disabled),
 .app-proto .picked button.is-danger:hover:not(:disabled) {
   border-color: var(--record);
