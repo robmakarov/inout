@@ -98,6 +98,13 @@
         thumb.appendChild(d)
       }
 
+      /* THE PREVIEW IS NOT DRAGGABLE. Chrome makes every <img> a drag source,
+         so pulling down a card to sweep a selection picked the picture up and
+         carried a ghost of it around instead — and a stray drag out of the
+         window is not something a take list should ever offer. */
+      const im = thumb && thumb.querySelector('img')
+      if (im) im.draggable = false
+
       /* and the opposite corner says whether there is a copy of it in the
          cloud — the one fact that decides whether this card can be sent or
          linked at all. The mark is on every card and CSS shows it on the ones
@@ -232,7 +239,7 @@
                as the same fact being restated rather than a new control. -->
           <span class="swapv totalx">
             <span class="swapv__a"><b class="total__n">0</b><span class="total__w">files</span></span>
-            <span class="swapv__b"><b class="picked__n">0</b><i class="picked__sl">/</i><span class="picked__tot">0</span></span>
+            <span class="swapv__b"><b class="picked__n">0</b><i class="picked__sl">/</i><span class="picked__tot">0</span><span class="picked__w">selected</span></span>
           </span>
         </div>
         <!-- AND THE OTHER END OF THE ROW SWAPS THE SAME WAY. How much room is
@@ -251,8 +258,8 @@
                  <div class="room__note"><b>${bytes(room.quota - room.usage)}</b> free of ${bytes(room.quota)}</div>`
           }</span>
           <span class="swapv__b picked">
-            <button data-p="save" title="Download" aria-label="Download">${glyphOf(root, '.cardtools [title="Download"]', 'download')}</button>
-            <button data-p="del" class="is-danger" title="Delete" aria-label="Delete">${glyphOf(root, '.cardtools .takecard__del', 'trash')}</button>
+            <button data-p="save">${glyphOf(root, '.cardtools [title="Download"]', 'download')}<span>Download</span></button>
+            <button data-p="del" class="is-danger">${glyphOf(root, '.cardtools .takecard__del', 'trash')}<span>Delete</span></button>
           </span>
         </div>
       </div>`

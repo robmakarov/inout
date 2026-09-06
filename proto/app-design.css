@@ -28,6 +28,10 @@
      made the settle longer. easeInOutCubic spends the time on the travel —
      10% of the distance in the first quarter, half at half — so the movement
      is the thing you watch rather than the thing you catch the end of. */
+  /* ONE HEIGHT FOR EVERY CONTROL IN THE HEAD. The search pill and the
+     Device/Cloud pill were already 30; the avatar was 26 and the icon tools 28,
+     so a row that should read as one bar had three heights in it. */
+  --dz-h: 30px;
   --dz-fast: 140ms;
   /* 320 was a snap, 520 dragged — 400, and the curve is the reason that number
      can be small: with the travel spread evenly across it there is no dead
@@ -204,6 +208,9 @@
   color: rgba(255, 255, 255, 0.85);
 }
 .app-proto .cloudmark svg { display: block; width: 12px; height: 12px; }
+/* the attribute stops the drag; this stops the blue selection flash that a
+   press-and-sweep across the row leaves on the picture on the way past */
+.app-proto .takecard__thumb img { -webkit-user-drag: none; user-select: none; }
 .app-proto .takecard[data-cloud='1'] .cloudmark { display: block; }
 
 /* the top line reads: when it was taken, then how big it is */
@@ -323,8 +330,8 @@
    its own above it */
 .app-proto .acct__who { display: none; }
 .app-proto .acct__av {
-  width: 26px;
-  height: 26px;
+  width: var(--dz-h);
+  height: var(--dz-h);
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -374,13 +381,14 @@
 
 .app-proto .tools2 { display: flex; align-items: center; gap: 4px; }
 .app-proto .tool2 {
-  width: 28px;
-  height: 28px;
+  width: var(--dz-h);
+  height: var(--dz-h);
   display: grid;
   place-items: center;
   border-radius: 7px;
   color: var(--text-faint);
   transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
+  flex: none;
 }
 .app-proto .tool2 svg { width: 15px; height: 15px; }
 .app-proto .tool2:hover { background: var(--surface-2); color: var(--text); }
@@ -449,6 +457,7 @@
 .app-proto .totalx .picked__n { color: var(--text-dim); font-weight: 600; }
 .app-proto .totalx .swapv__b { gap: 0; color: var(--text-faint); }
 .app-proto .totalx .picked__sl { font-style: normal; margin: 0 1px; }
+.app-proto .totalx .picked__w { margin-left: 4px; }
 
 .app-proto .tool2--txt {
   width: auto;
@@ -463,7 +472,7 @@
    IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
    control nobody presses first the biggest thing above the takes; capped, it is
    a field the size of what you type into it and the bar reads as a bar. */
-.app-proto .find { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--surface-2); border-radius: 8px; flex: 0 1 220px; max-width: 220px; }
+.app-proto .find { display: flex; align-items: center; gap: 6px; height: var(--dz-h); padding: 0 10px; background: var(--surface-2); border-radius: 8px; flex: 0 1 220px; max-width: 220px; }
 .app-proto .find svg { width: 14px; height: 14px; color: var(--text-faint); flex: none; }
 .app-proto .find input {
   flex: 1;
@@ -545,6 +554,13 @@
 .app-proto .takes.is-picking .takecard__pick { width: 28px; padding-left: 10px; }
 .app-proto .takes.is-picking .takecard__pick .pick { opacity: 1; transform: translateX(0); }
 .app-proto .takes.is-picking .takecard__actions { display: none; }
+/* AND ONCE SOMETHING IS PICKED, THE CARD'S OWN TOOLS STEP ASIDE. What you press
+   now is the pair in the head, and it acts on the selection — a download arrow
+   on the row underneath, meaning only that row, is a trap at exactly the wrong
+   moment. They fade rather than un-render, so the card does not reflow around
+   the space they were holding. */
+.app-proto .cardtools { transition: opacity var(--dz-slide) var(--dz-ease); }
+.app-proto .takes.has-picked .cardtools { opacity: 0; pointer-events: none; }
 .app-proto .takes.is-picking .takecard { cursor: default; user-select: none; }
 .app-proto .pick {
   width: 18px;
@@ -575,23 +591,34 @@
   gap: 2px;
   color: var(--text-faint);
 }
-/* icon-only, and the same 28 square as every other tool in this row */
+/* NAMED, not icon-only. They are the two things that happen to everything you
+   just picked — a bin with no word next to a download with no word is a guess
+   at the worst moment. Same height as every other control in the head. */
 .app-proto .picked button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--dz-h);
+  padding: 0 10px;
   border-radius: 7px;
   background: none;
   color: var(--text-faint);
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
   transition: color var(--dz-fast) var(--dz-ease), background var(--dz-fast) var(--dz-ease);
 }
+.app-proto .picked svg { flex: none; }
 .app-proto .picked button:hover { background: var(--surface-2); color: var(--text); }
 .app-proto .picked button.is-danger:hover { background: var(--record-soft); color: var(--record); }
 .app-proto .picked svg { width: 15px; height: 15px; }
 /* the corner is 28 tall either way, so the row never changes height mid-swap */
-.app-proto .room.swapv { min-height: 28px; }
+.app-proto .room.swapv { min-height: var(--dz-h); }
+/* the corner grows a little when the names are in it; the group above it stays
+   pinned to the right edge rather than drifting left inside a wider column */
+.app-proto .rightgrp { justify-content: flex-end; }
 .app-proto .room .swapv__a { align-self: center; width: 100%; }
 /* the group has to stay on one line when select mode doubles its contents */
 .app-proto .tools2 { min-width: 0; flex-wrap: nowrap; }
