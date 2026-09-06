@@ -272,7 +272,7 @@
      and then --take-w, the one token the head, the feed and the control bar
      already share, is set to that width. So the app widens around the video
      instead of the video sitting in a column that was sized for a list. */
-  const WATCH = { root: null, card: null, box: null, timer: 0 }
+  const WATCH = { root: null, card: null, box: null, from: null, timer: 0 }
   const boxAt = (el, x, y, w, h) => {
     el.style.left = Math.round(x) + 'px'
     el.style.top = Math.round(y) + 'px'
@@ -294,13 +294,15 @@
     clearTimeout(WATCH.timer)
     WATCH.root = root
     WATCH.card = card
+    /* the list keeps the width it has now, so widening the head and the control
+       bar to the player does not drag the cards sideways under it */
+    takes.style.setProperty('--list-w', Math.round(takes.getBoundingClientRect().width) + 'px')
     takes.classList.add('is-watch')
     card.classList.add('is-watching')
 
-    /* MEASURED WITH THE STATE ALREADY ON. The column stops hugging its content
-       the moment .is-watch lands, which puts the head at the top of the frame —
-       measure before that and the player is sized to the list it is replacing,
-       which is exactly as tall as however many takes happen to be in it. */
+    /* THE ROOM IS THE ROOM THE APP ALREADY HAS — between the head and the
+       control bar, both of which stay exactly where they are. Nothing is
+       stretched to make space; the picture floats in what is there. */
     const capR = cap.getBoundingClientRect()
     const headR = headEl.getBoundingClientRect()
     const bar = root.querySelector('.controlbar')
@@ -326,8 +328,14 @@
     if (dur) box.appendChild(dur.cloneNode(true))
     cap.appendChild(box)
     WATCH.box = box
+    /* THE SLOT IT CAME OUT OF, KEPT. It is also where it goes home to: the
+       layout behind the player never changes, so the rect measured here is
+       still true when it comes back — and measuring it again on the way out
+       read the bars mid-transition and sent the picture to a place the card
+       was only passing through, which is what made the return look broken. */
+    WATCH.from = [r0.left - capR.left, r0.top - capR.top, r0.width, r0.height]
     /* the flight: it starts as the card's own picture, to the pixel */
-    boxAt(box, r0.left - capR.left, r0.top - capR.top, r0.width, r0.height)
+    boxAt(box, ...WATCH.from)
     void box.offsetWidth
     box.classList.add('is-open')
     boxAt(box, (capR.width - w) / 2, top - capR.top + (room - h) / 2, w, h)
@@ -339,26 +347,22 @@
     if (!card || !box) return
     WATCH.card = null
     const takes = root.querySelector('.takes')
-    const cap = root.querySelector('.capture')
     if (takes) takes.classList.remove('is-watch')
     root.style.removeProperty('--take-w')
     box.classList.add('is-closing')
-    /* it goes home to the slot it came out of — measured AFTER the list is back,
-       so it lands on where the card is now and not on where it used to be. A
-       card the list no longer holds (a tab changed under it) has no slot to go
-       home to, and the picture simply leaves. */
+    /* home is the slot it came out of, remembered from the way in. A card the
+       list no longer holds — a tab changed under it — has no slot to go home
+       to, and the picture simply leaves. */
     const thumb = card.querySelector('.takecard__thumb')
-    const r = thumb ? thumb.getBoundingClientRect() : null
-    if (r && r.width > 2 && cap) {
-      const capR = cap.getBoundingClientRect()
-      boxAt(box, r.left - capR.left, r.top - capR.top, r.width, r.height)
-    } else {
-      box.classList.add('is-gone')
-    }
+    const gone = !thumb || thumb.getBoundingClientRect().width < 2
+    if (gone || !WATCH.from) box.classList.add('is-gone')
+    else boxAt(box, ...WATCH.from)
     WATCH.timer = setTimeout(() => {
       box.remove()
       card.classList.remove('is-watching')
+      if (takes) takes.style.removeProperty('--list-w')
       WATCH.box = null
+      WATCH.from = null
     }, 440)
   }
 

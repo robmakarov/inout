@@ -688,7 +688,9 @@
    IT IS NOT THE WIDTH OF THE COLUMN. Filling 404 of the bar's 600 made the one
    control nobody presses first the biggest thing above the takes; capped, it is
    a field the size of what you type into it and the bar reads as a bar. */
-.app-proto .find { display: flex; align-items: center; gap: 6px; height: var(--dz-h); padding: 0 10px; background: var(--surface-2); border-radius: 8px; flex: 0 1 220px; max-width: 220px; }
+/* NARROWER (Robert, 2026-09-06). A search box takes the width of what you type
+   into it, and what you type in here is a word off a file name, not a sentence. */
+.app-proto .find { display: flex; align-items: center; gap: 6px; height: var(--dz-h); padding: 0 10px; background: var(--surface-2); border-radius: 8px; flex: 0 1 168px; max-width: 168px; }
 .app-proto .find svg { width: 14px; height: 14px; color: var(--text-faint); flex: none; }
 .app-proto .find input {
   flex: 1;
@@ -920,18 +922,27 @@
    head — so the app opens AROUND the video rather than cutting to it.
    ========================================================================== */
 .app-proto .capture { position: relative; }
-/* the column stops hugging its content while a take is playing: the head goes
-   to the top of the frame, and everything under it is the player's room. Sized
-   to the FRAME, so a list of one take and a list of thirty open the same. */
-.app-proto .capture:has(.takes.is-watch) { justify-content: stretch; }
-.app-proto .capture:has(.takes.is-watch) .capture__body { flex: 1 1 auto; min-height: 0; }
-.app-proto .takes.is-watch { flex: 1 1 auto; }
-/* THE FEED PUSHES AWAY — the cards, and with them the watched card's own name,
-   tags and date. At the size the picture becomes, a caption beside it is noise. */
+/* IT FLOATS. NOTHING UNDER IT MOVES (Robert, 2026-09-06: "preview dont push
+   away shit when enters, just float above cards and shit"). The first pass
+   stretched the column so the head went to the top of the frame and pushed the
+   feed out from under the picture — three things moving to show one. Now the
+   only thing that travels is the picture, and it flies over a list that stays
+   exactly where it was.
+
+   THE ONE WIDTH THAT STILL FOLLOWS IS THE BARS' — his own earlier line, "top
+   bar and tool bar follows its width". They share --take-w with the FEED, so
+   widening it would have dragged the cards sideways under the player; the list
+   is pinned to the width it had while a take is playing, and only the head and
+   the control bar open out. */
+/* WIDTH, NOT MAX-WIDTH. The list is a flex item, and an auto margin on a flex
+   item makes it size to its content — pinned with max-width it collapsed to
+   441 and the cards moved anyway, which is the thing this rule exists to
+   prevent. An explicit width leaves them exactly where they were. */
 .app-proto .takes.is-watch .takes__list {
-  opacity: 0;
-  transform: translateY(18px);
-  pointer-events: none;
+  width: var(--list-w, 600px);
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
 }
 /* and the picture has left its slot, so the slot is empty rather than showing a
    second copy of it under the one that flew */
@@ -947,6 +958,9 @@
   border: 1px solid var(--surface-3);
   border-radius: 8px;
   background: #000;
+  /* the one shadow in the proposal, and it earns it: this is the only surface
+     that sits ON another one rather than beside it */
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7);
 }
 /* the flight. The class is added between the start box and the target box, so
    the first placement lands with no transition and only the travel animates. */
