@@ -71,6 +71,13 @@ current path as fallback); the engine never refuses a record press.
   **`proto/app.html` IS GENERATED AND MUST NEVER BE HAND-EDITED** — `node scripts/proto-app.mjs`
   drives the deployed build through its real states and freezes its real DOM and real stylesheet, so
   the third tab is the control the other two are judged against. Edit the script, not the file.
+  **`--rebuild` IS THE ONE YOU WANT** while iterating: the capture (three real takes, an export,
+  minutes of Chrome on screen) is cached in `proto/.app-capture.json`, and a rebuild rewrites the
+  page from it in ~0.1 s. Re-recording to try a font size is waste the person watching pays for.
+  The design under discussion lives in `proto/app-design.css` and `proto/app-design.js` — hand-
+  authored, inlined at generation time, applied as a LAYER over the frozen markup, with an
+  "As it ships / Proposed" switch in the right panel as the A/B. Nothing in that layer is agreed
+  for the product; it is a proposal against the control, which is the point of keeping both.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
 commits the files THIS session edited, and files no live session claims only when it is the last

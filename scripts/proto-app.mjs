@@ -10,9 +10,17 @@
  * real DOM and the real stylesheet into proto/app.html. Nothing in that file is
  * drawn by hand; when the app changes, run this again.
  *
- *   node scripts/proto-app.mjs                    # from the live build
+ *   node scripts/proto-app.mjs                    # capture from the live build
+ *   node scripts/proto-app.mjs --rebuild          # design change only: ~1 s, records nothing
  *   node scripts/proto-app.mjs --url=http://localhost:5174
  *   node scripts/proto-app.mjs --headed           # watch it drive
+ *
+ * CAPTURE ONCE, REBUILD OFTEN. The capture is the slow half — three real takes,
+ * an export, minutes of a headed Chrome on the screen — and none of it changes
+ * when the edit is to proto/app-design.css or proto/app-design.js. So every
+ * capture is cached in proto/.app-capture.json and `--rebuild` writes the page
+ * again from it in about a second. Re-recording to try a font size is waste,
+ * and it is waste the person watching the screen has to sit through.
  *
  * WHAT IS FROZEN AND WHAT IS NOT. The snapshots carry the app's own markup, its
  * own classes, its own inline styles and its own stylesheet, so every surface is
@@ -32,7 +40,7 @@
  *                                 video has no stream, so each is frozen to its
  *                                 own current pixels as a data: URL.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,6 +49,30 @@ import { launchChromeRetrying, resolveChrome, quitChrome, removeProfile, sleep }
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, '..', 'proto', 'app.html')
 const FRAME = { w: 1040, h: 660 }
+const CACHE = join(HERE, '..', 'proto', '.app-capture.json')
+const DESIGN_CSS = join(HERE, '..', 'proto', 'app-design.css')
+const DESIGN_JS = join(HERE, '..', 'proto', 'app-design.js')
+const NEON = join(HERE, '..', 'proto', 'neon.html')
+
+/**
+ * THE FONT AND THE GLYPHS COME OUT OF proto/neon.html, NOT OUT OF A SECOND COPY.
+ * Robert asked for the neon prototype's type and icons on the app proto's chips.
+ * Two embedded Barlow faces are ~30 KB of base64 each; committing them twice
+ * would mean two things to keep in step, and the second one silently going
+ * stale. So they are lifted at generation time from the file that owns them,
+ * along with the icon sprite the <use href="#i-..."> references need.
+ * Barlow Condensed is OFL 1.1 — the notice is in neon.html's header, and it
+ * rides along with these bytes.
+ */
+function borrowFromNeon() {
+  const neon = readFileSync(NEON, 'utf8')
+  const faces = neon.match(/@font-face \{ font-family: 'Barlow Condensed';[^\n]*\n/g)
+  if (!faces || faces.length < 2) throw new Error('proto-app: could not find the Barlow faces in proto/neon.html')
+  const open = neon.indexOf('<svg hidden')
+  const close = neon.indexOf('</svg>', open)
+  if (open < 0 || close < 0) throw new Error('proto-app: could not find the icon sprite in proto/neon.html')
+  return { faces: faces.join(''), sprite: neon.slice(open, close + 6) }
+}
 
 /**
  * THE MAIN TAKE IS 14 SECONDS SO ITS TIMELINE HAS SOMETHING TO SHOW — not
@@ -52,7 +84,7 @@ const FRAME = { w: 1040, h: 660 }
  * check below stands either way: a take short of a channel is discarded and
  * recorded again, so an error banner can never be frozen into the proto.
  */
-const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000, takes: 3 }
+const opts = { url: 'https://inout-kappa.vercel.app', headed: false, take: 14_000, takes: 3, rebuild: false }
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--url=')) opts.url = a.slice(6).replace(/\/$/, '')
   else if (a === '--headed') opts.headed = true
@@ -61,6 +93,13 @@ for (const a of process.argv.slice(2)) {
   // list with one card is not what the screen looks like in use. The extra ones
   // are shorter so the cards differ in length the way real ones do.
   else if (a.startsWith('--takes=')) opts.takes = Number(a.slice(8))
+  /* REBUILD WITHOUT RECORDING ANYTHING. The capture is the slow half — three
+     real takes, an export, a headed Chrome on screen for minutes — and it does
+     not change when the only edit is to proto/app-design.css or .js. Every
+     capture is cached beside the proto, so a design iteration is a file read
+     and a write, about a second. Use it for anything that is not a question
+     about the app's own markup; a plain run still drives the live build. */
+  else if (a === '--rebuild') opts.rebuild = true
   else {
     console.error(`proto-app: unknown flag ${a}`)
     process.exit(1)
@@ -160,18 +199,34 @@ const STATES = [
   { id: 'firstrun', label: 'First run', note: 'the record screen before anything has been recorded' },
 ]
 
-const bin = resolveChrome()
-if (!bin) {
+const shots = {}
+let css = ''
+let room = null
+let capturedAt = null
+const log = (m) => process.stderr.write(`proto-app: ${m}\n`)
+
+if (opts.rebuild) {
+  if (!existsSync(CACHE)) {
+    console.error('proto-app: --rebuild needs a cached capture, and there is none. Run it once without --rebuild.')
+    process.exit(1)
+  }
+  const c = JSON.parse(readFileSync(CACHE, 'utf8'))
+  Object.assign(shots, c.shots)
+  css = c.css
+  room = c.room
+  capturedAt = c.capturedAt
+  log(`rebuilt from the capture of ${capturedAt} — nothing was recorded`)
+}
+
+const bin = opts.rebuild ? null : resolveChrome()
+if (!opts.rebuild && !bin) {
   console.error('proto-app: no Chrome found (set CHROME_BIN)')
   process.exit(1)
 }
-const profile = mkdtempSync(join(tmpdir(), 'inout-proto-app-'))
+const profile = opts.rebuild ? null : mkdtempSync(join(tmpdir(), 'inout-proto-app-'))
 let session = null
-const shots = {}
-let css = ''
-const log = (m) => process.stderr.write(`proto-app: ${m}\n`)
 
-try {
+if (!opts.rebuild) try {
   session = await launchChromeRetrying({ bin, profile, url: APP, headed: opts.headed, scriptsOff: true })
   const { send, evaluate } = session
   await send('Emulation.setDeviceMetricsOverride', { width: FRAME.w, height: FRAME.h, deviceScaleFactor: 1, mobile: false })
@@ -372,13 +427,45 @@ try {
   // screen the app opens on. Dismiss it the way its own × does.
   await evaluate(`document.querySelectorAll('.xstrip__x').forEach((b) => b.click())`)
   await sleep(700)
+  /* THE CARD'S CLOCK IS ONLY A CLOCK — the app prints "08:24" because the take
+     is from today. The proposed card shows the whole date, and that is data the
+     frozen DOM does not carry, so it is stamped on from each take's OWN record
+     rather than invented. Cards and records are both newest-first, so they zip. */
+  const stamped = await evaluate(`(async () => {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('inout')
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+    })
+    const all = await new Promise((res, rej) => {
+      const r = db.transaction('recordings').objectStore('recordings').getAll()
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+    })
+    const recs = all.sort((a, b) => b.createdAt - a.createdAt)
+    const cards = [...document.querySelectorAll('.takecard .takecard__when')]
+    const fmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    cards.forEach((el, i) => { if (recs[i]) el.dataset.whenFull = fmt.format(new Date(recs[i].createdAt)) })
+    return cards.length
+  })()`)
+  log(`stamped the full date onto ${stamped} card(s)`)
+  /* And the real room left where these takes are kept — the proposed bar is a
+     measurement, not a drawing of one. */
+  room = await evaluate(`(async () => {
+    try { const e = await navigator.storage.estimate(); return { usage: e.usage || 0, quota: e.quota || 0 } } catch { return null }
+  })()`)
+  if (room) log(`storage: ${(room.usage / 1e6).toFixed(0)} MB used of ${(room.quota / 1e9).toFixed(1)} GB`)
   shots.main = await evaluate('window.__proto.snap()')
   log(`main captured — the record screen with ${cards} take card(s) on it${thumbs ? ', thumbnails decoded' : ''}`)
 } finally {
   if (session) {
     try { await quitChrome(session) } catch { /* already gone */ }
   }
-  removeProfile(profile)
+  if (profile) removeProfile(profile)
+}
+
+if (!opts.rebuild) {
+  capturedAt = new Date().toISOString()
+  writeFileSync(CACHE, JSON.stringify({ capturedAt, url: APP, css, room, shots }), 'utf8')
+  log(`capture cached — next design change rebuilds with --rebuild, no recording`)
 }
 
 const got = STATES.filter((s) => shots[s.id])
@@ -421,8 +508,16 @@ function readTemplate() {
   const snaps = got.map((s) => `  ${s.id}: ${JSON.stringify(shots[s.id])},`).join('\n')
   // every replacement is a FUNCTION: a `$&` or `$1` in the captured stylesheet
   // or in a snapshot is text, not a pattern, and string replacements read them.
-  const stamp = `${APP} · ${new Date().toISOString().slice(0, 10)}`
-  return TEMPLATE.replace('/*STATE_TABS*/', () => tabs)
+  const stamp = `${APP} · ${(capturedAt || new Date().toISOString()).slice(0, 10)}`
+  const neon = borrowFromNeon()
+  const designCss = readFileSync(DESIGN_CSS, 'utf8')
+  const designJs = readFileSync(DESIGN_JS, 'utf8')
+  return TEMPLATE.replace('/*NEON_FACES*/', () => neon.faces)
+    .replace('/*NEON_SPRITE*/', () => neon.sprite)
+    .replace('/*DESIGN_CSS*/', () => designCss)
+    .replace('/*DESIGN_JS*/', () => esc(designJs))
+    .replace('/*ROOM*/', () => JSON.stringify(room))
+    .replace('/*STATE_TABS*/', () => tabs)
     .replace('/*STATE_NOTES*/', () => notes)
     .replace('/*APP_CSS*/', () => rehang(css))
     .replace('/*SNAPSHOTS*/', () => esc(snaps))
@@ -550,6 +645,11 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 .app-proto img { display: block; }
 
+/* Barlow Condensed 600/700, lifted from proto/neon.html so the two protos share
+   one copy of the faces. SIL Open Font License 1.1 — Copyright 2017 The Barlow
+   Project Authors (https://github.com/jpt/barlow), http://scripts.sil.org/OFL */
+/*NEON_FACES*/
+
 /* ==========================================================================
    1. THE APP'S OWN STYLESHEET — captured from /*STAMP*/, with :root, html,
    body and #root re-hung on .app-proto and the viewport units pointed at the
@@ -557,8 +657,14 @@ body.f .filters, body.d .detail { opacity: 1; }
    ========================================================================== */
 /*APP_CSS*/
 </style>
+<style id="dz">
+/*DESIGN_CSS*/
+</style>
 </head>
 <body>
+
+<!-- the icon sprite, lifted from proto/neon.html with the faces above -->
+/*NEON_SPRITE*/
 
 <div class="cluster">
  <div class="row">
@@ -623,6 +729,14 @@ Nothing inside the frame reacts to a press: the app&#8217;s script is not in thi
 Switch state on the left.</div>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Design</div>
+        <button class="btn-h" id="dzOn" aria-pressed="true">Proposed</button>
+        <button class="btn-h" id="dzOff" aria-pressed="false" style="margin-top:6px">As it ships</button>
+        <div class="note" style="margin-top:8px">The proposal is a layer over the frozen
+markup: chips in the neon type, the length on the picture, a rebuilt takes bar
+and a segmented quality rail. &#8220;As it ships&#8221; is the untouched capture.</div>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Refresh it</div>
         <div class="readout">node scripts/proto-app.mjs</div>
       </div>
@@ -631,6 +745,11 @@ Switch state on the left.</div>
 
  </div>
 </div>
+
+<script>
+window.PROTO_ROOM = /*ROOM*/
+/*DESIGN_JS*/
+</script>
 
 <script>
 const $ = (s) => document.querySelector(s)
@@ -644,10 +763,21 @@ const NOTE = {
 const IDS = Object.keys(SNAP)
 const S = { id: IDS[0], frame: 'desktop' }
 
+/* The proposal is applied to the markup each time a state is injected, and
+   turning it off is a re-inject with the sheet disabled — so "as it ships" is
+   the untouched capture rather than the proposal with its paint scraped off. */
+const dz = { on: true }
+function paint() {
+  document.getElementById('dz').disabled = !dz.on
+  $('#dzOn').setAttribute('aria-pressed', String(dz.on))
+  $('#dzOff').setAttribute('aria-pressed', String(!dz.on))
+  if (dz.on && window.applyDesign) window.applyDesign($('#app'))
+}
 function show(id) {
   if (!SNAP[id]) return
   S.id = id
   $('#app').innerHTML = SNAP[id]
+  paint()
   $('#note').textContent = NOTE[id] || ''
   document.querySelectorAll('[data-tab]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === id)))
   save()
@@ -679,6 +809,8 @@ $('#tabs').addEventListener('click', (e) => {
   if (t) show(t.dataset.tab)
 })
 $('#frame').addEventListener('change', (e) => { S.frame = e.target.value; fit(); save() })
+$('#dzOn').addEventListener('click', () => { dz.on = true; show(S.id); save() })
+$('#dzOff').addEventListener('click', () => { dz.on = false; show(S.id); save() })
 
 /* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
 const togglePanel = (c) => { document.body.classList.toggle(c); save() }
@@ -704,7 +836,7 @@ addEventListener('keydown', (e) => {
 const STORE = 'inout-proto/app/v1'
 function save() {
   const z = (document.body.classList.contains('f') ? 'f' : '') + (document.body.classList.contains('d') ? 'd' : '')
-  const s = 'p=' + S.id + '&f=' + S.frame + '&z=' + (z || '-')
+  const s = 'p=' + S.id + '&f=' + S.frame + '&z=' + (z || '-') + '&d=' + (dz.on ? '1' : '0')
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -718,6 +850,7 @@ function restore() {
   const st = {}
   raw.split('&').forEach((pair) => { const i = pair.indexOf('='); if (i > 0) st[pair.slice(0, i)] = pair.slice(i + 1) })
   if (SNAP[st.p]) S.id = st.p
+  if (st.d === '0' || st.d === '1') dz.on = st.d === '1'
   if (SIZES[st.f]) S.frame = st.f
   if (st.z) {
     document.body.classList.toggle('f', st.z.indexOf('f') >= 0)

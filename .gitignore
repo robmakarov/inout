@@ -11,3 +11,6 @@ inout-*.mp4
 
 # Robert recordings dropped in for a rig run — never committed.
 public/__*
+
+# the proto captures its own snapshots; a cache, not a source
+proto/.app-capture.json
