@@ -47,11 +47,18 @@ import { fileURLToPath } from 'node:url'
 import { launchChromeRetrying, resolveChrome, quitChrome, removeProfile, sleep } from './lib/chrome.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+/* TWO FILES OUT OF ONE CAPTURE (Robert, 2026-09-06: "as it ships make as
+   separate fourth proto"). app.html is the proposal — the design layer applied
+   over the frozen markup — and ships.html is the same capture with no layer at
+   all, so the control is a tab of its own rather than a switch inside the
+   proposal. Neither is hand-edited; both are rewritten by --rebuild. */
 const OUT = join(HERE, '..', 'proto', 'app.html')
+const OUT_SHIPS = join(HERE, '..', 'proto', 'ships.html')
 const FRAME = { w: 1040, h: 660 }
 const CACHE = join(HERE, '..', 'proto', '.app-capture.json')
 const DESIGN_CSS = join(HERE, '..', 'proto', 'app-design.css')
 const DESIGN_JS = join(HERE, '..', 'proto', 'app-design.js')
+const SIM_JS = join(HERE, '..', 'proto', 'app-sim.js')
 const NEON = join(HERE, '..', 'proto', 'neon.html')
 
 /**
@@ -497,7 +504,7 @@ function rehang(cssText) {
 
 const esc = (s) => s.replace(/<\/script>/gi, '<\\/script>')
 
-function readTemplate() {
+function readTemplate(design) {
   const tabs = got
     .map(
       (s, i) =>
@@ -510,9 +517,41 @@ function readTemplate() {
   // or in a snapshot is text, not a pattern, and string replacements read them.
   const stamp = `${APP} · ${(capturedAt || new Date().toISOString()).slice(0, 10)}`
   const neon = borrowFromNeon()
-  const designCss = readFileSync(DESIGN_CSS, 'utf8')
-  const designJs = readFileSync(DESIGN_JS, 'utf8')
-  return TEMPLATE.replace('/*NEON_FACES*/', () => neon.faces)
+  const designCss = design ? readFileSync(DESIGN_CSS, 'utf8') : ''
+  const designJs = design ? readFileSync(DESIGN_JS, 'utf8') : ''
+  const protoTabs = design
+    ? `        <button class="tab" role="tab" aria-selected="true">App</button>
+        <a class="tab" role="tab" href="ships.html" aria-selected="false">As it ships &#8599;</a>`
+    : `        <a class="tab" role="tab" href="app.html" aria-selected="false">App &#8599;</a>
+        <button class="tab" role="tab" aria-selected="true">As it ships</button>`
+  const what = design
+    ? `The shipping app with the PROPOSED design over it. Every surface below the layer
+is the real one &#8212; the app&#8217;s own markup, inline styles and stylesheet, captured
+from the deployed build. The layer changes type, geometry and the takes bar; it
+changes no colour.
+
+Captured /*STAMP*/.
+
+The control is the &#8220;As it ships&#8221; tab: the same capture, no layer.`
+    : `The shipping app, frozen, with NOTHING added. Its markup, its inline styles and
+its own stylesheet, captured from the deployed build &#8212; not a drawing of it, and
+not the proposal. This is the control the other tabs are judged against.
+
+Captured /*STAMP*/.`
+  const designPanel = design
+    ? `      <div class="panel__group">
+        <div class="panel__label">The layer</div>
+        <div class="note">Chips in the neon type and glyphs, the length on the picture, a
+card stripped to date &#183; size &#183; inputs, a rebuilt takes bar and a segmented
+quality rail. Colours are the app&#8217;s own, untouched.</div>
+      </div>`
+    : ''
+  const simJs = readFileSync(SIM_JS, 'utf8')
+  return TEMPLATE.replace('/*SIM_JS*/', () => esc(simJs))
+    .replace('/*PROTO_TABS*/', () => protoTabs)
+    .replace('/*WHAT*/', () => what)
+    .replace('/*DESIGN_PANEL*/', () => designPanel)
+    .replace('/*NEON_FACES*/', () => neon.faces)
     .replace('/*NEON_SPRITE*/', () => neon.sprite)
     .replace('/*DESIGN_CSS*/', () => designCss)
     .replace('/*DESIGN_JS*/', () => esc(designJs))
@@ -565,6 +604,11 @@ body {
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 select { font: inherit; }
 a { color: inherit; text-decoration: none; }
+/* the borrowed icon sprite is <svg hidden>, and the UA's [hidden] rule is
+   namespaced to HTML — an SVG element ignores it, so the sprite lays out a
+   blank band and pushes the whole tool down the page. Same bug, same fix, as
+   proto/neon.html. */
+svg[hidden] { display: none; }
 
 :root { --ease-h: cubic-bezier(0.22, 1, 0.36, 1); --dur: 0.34s; --fw: 0px; --dw: 0px; }
 body.f { --fw: 228px; }
@@ -637,6 +681,47 @@ body.f .filters, body.d .detail { opacity: 1; }
   border-radius: 14px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
 }
 [data-frame='phone'] .frame { border-radius: 36px; }
+
+/* capture-studio__resize, copied verbatim from proto/style.html (which lifted it
+   from inout copy 2) — 44px corner hit target, corner-weighted glow, three-dot
+   grip, aqua on hover / white while dragging. It sits on .slot (the scaled box)
+   so the grip keeps its size at any zoom. All three protos carry the same one:
+   Robert, 2026-09-06, "all three protos must share same ui of testing". */
+.fresize {
+  position: absolute; right: 0; bottom: 0; width: 44px; height: 44px;
+  padding: 0; margin: 0; border: none;
+  border-radius: 10px 0 var(--corner, 14px) 0;
+  z-index: 60; cursor: nwse-resize; touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(ellipse 115% 115% at 100% 100%, rgba(95, 255, 212, 0.14) 0%, rgba(120, 200, 255, 0.06) 42%, transparent 68%);
+  opacity: 0.5;
+  transition: opacity 0.2s var(--ease-h), background 0.22s ease, transform 0.2s var(--ease-h);
+}
+.fresize:hover:not(.fresize--dragging), .fresize:focus-visible:not(.fresize--dragging) {
+  opacity: 0.92;
+  background: radial-gradient(ellipse 115% 115% at 100% 100%, rgba(80, 220, 255, 0.28) 0%, rgba(120, 175, 255, 0.16) 46%, transparent 74%);
+  outline: none;
+}
+.fresize:active, .fresize--dragging {
+  opacity: 1; transition-duration: 0.1s;
+  background: radial-gradient(ellipse 115% 115% at 100% 100%, rgba(255, 255, 255, 0.42) 0%, rgba(235, 242, 255, 0.2) 48%, transparent 78%);
+}
+.fresize::after {
+  content: ''; position: absolute; right: 10px; bottom: 10px;
+  width: 3.5px; height: 3.5px; border-radius: 50%;
+  background: rgba(230, 245, 255, 0.92);
+  box-shadow: -5px 0 0 0 rgba(230, 245, 255, 0.72), 0 -5px 0 0 rgba(230, 245, 255, 0.52);
+  pointer-events: none;
+  transition: transform 0.2s var(--ease-h), opacity 0.2s ease;
+}
+.fresize:hover::after, .fresize:focus-visible::after { transform: scale(1.08); }
+.fresize--dragging::after { opacity: 1; transition: none; animation: resizeDotsBreathe 1.15s ease-in-out infinite; }
+@keyframes resizeDotsBreathe {
+  0%, 100% { opacity: 0.82; transform: scale(1.06); }
+  50% { opacity: 1; transform: scale(1.13); }
+}
+.zonebar__step { border: 1px solid #2b2b31; border-radius: 5px; padding: 3px 7px; color: #85858f; font: inherit; }
+.zonebar__step:hover { background: #212126; color: #fff; }
 /* the app's own viewport: every 100vh/100dvh/100vw in its stylesheet reads these */
 .app-proto {
   position: relative; width: 100%; height: 100%; overflow: hidden;
@@ -644,6 +729,15 @@ body.f .filters, body.d .detail { opacity: 1; }
   --app-h: /*FRAME_H*/px;
 }
 .app-proto img { display: block; }
+/* THE TAKE LIST SCROLLS INSIDE THE FRAME. The proto's frame is a fixed size, so
+   a list long enough to be worth testing would otherwise run off the bottom of
+   it with no way to reach the end. This is the proto's own affordance, in both
+   tabs, so "add a take" until it overflows is a thing you can actually do. */
+.app-proto .takes__list { overflow-y: auto; max-height: calc(var(--app-h) * 0.46); scrollbar-width: thin; }
+/* the list is a flex column, so a max-height made every card SHRINK to fit and
+   swallow its own second and third lines — the kinds and the action row were in
+   the DOM the whole time, just clipped. Cards keep their height; the list scrolls. */
+.app-proto .takes__list > * { flex: none; }
 
 /* Barlow Condensed 600/700, lifted from proto/neon.html so the two protos share
    one copy of the faces. SIL Open Font License 1.1 — Copyright 2017 The Barlow
@@ -676,7 +770,7 @@ body.f .filters, body.d .detail { opacity: 1; }
         <div class="panel__label">Proto</div>
         <a class="tab" role="tab" href="style.html" aria-selected="false">Style &#8599;</a>
         <a class="tab" role="tab" href="neon.html" aria-selected="false">Neon &#8599;</a>
-        <button class="tab" role="tab" aria-selected="true">App</button>
+/*PROTO_TABS*/
       </div>
       <div class="panel__group" role="tablist" id="tabs">
         <div class="panel__label">Screen</div>
@@ -685,6 +779,29 @@ body.f .filters, body.d .detail { opacity: 1; }
       <div class="panel__group">
         <div class="panel__label">What you are looking at</div>
         <div class="note" id="note"></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Simulate inputs</div>
+        <div id="sim-inputs"></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Takes</div>
+        <div class="rowbtns">
+          <button class="btn-h" id="takeAdd">+ take</button>
+          <button class="btn-h" id="takeDel">&#8722; take</button>
+        </div>
+        <div class="readout" id="takeN" style="margin-top:6px"></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">On the editor</div>
+        <select id="simLost">
+          <option value="none">nothing went wrong</option>
+          <option value="screen">screen never connected</option>
+          <option value="camera">camera never connected</option>
+          <option value="mic">mic never connected</option>
+          <option value="tab audio">tab audio never connected</option>
+          <option value="stalled">a source froze mid-take</option>
+        </select>
       </div>
       <div class="panel__group">
         <div class="panel__label">Keys</div>
@@ -709,9 +826,14 @@ F    frame
         </select>
         <span class="zonebar__size" id="zsize">/*FRAME_W*/ &#215; /*FRAME_H*/</span>
         <span class="zonebar__hint" id="zfit">100%</span>
+        <button class="zonebar__step" id="zfill">fill</button>
+        <span class="zonebar__hint">drag the corner</span>
       </div>
 
-      <div class="slot" id="slot"><div class="frame" id="frameEl"><div class="app-proto" id="app"></div></div></div>
+      <div class="slot" id="slot">
+        <button class="fresize" id="resize" aria-label="Resize the screen zone — double-click for min or max"></button>
+        <div class="frame" id="frameEl"><div class="app-proto" id="app"></div></div>
+      </div>
     </main>
   </div>
 
@@ -720,22 +842,9 @@ F    frame
       <div class="panel__title">The app</div>
       <div class="panel__group">
         <div class="panel__label">What this tab is</div>
-        <div class="note">The shipping app, frozen. Its markup, its inline styles and its own
-stylesheet, captured from the deployed build &#8212; not a drawing of it.
-
-Captured /*STAMP*/.
-
-Nothing inside the frame reacts to a press: the app&#8217;s script is not in this file.
-Switch state on the left.</div>
+        <div class="note">/*WHAT*/</div>
       </div>
-      <div class="panel__group">
-        <div class="panel__label">Design</div>
-        <button class="btn-h" id="dzOn" aria-pressed="true">Proposed</button>
-        <button class="btn-h" id="dzOff" aria-pressed="false" style="margin-top:6px">As it ships</button>
-        <div class="note" style="margin-top:8px">The proposal is a layer over the frozen
-markup: chips in the neon type, the length on the picture, a rebuilt takes bar
-and a segmented quality rail. &#8220;As it ships&#8221; is the untouched capture.</div>
-      </div>
+/*DESIGN_PANEL*/
       <div class="panel__group">
         <div class="panel__label">Refresh it</div>
         <div class="readout">node scripts/proto-app.mjs</div>
@@ -748,6 +857,10 @@ and a segmented quality rail. &#8220;As it ships&#8221; is the untouched capture
 
 <script>
 window.PROTO_ROOM = /*ROOM*/
+/* What the panel is simulating right now. Read by app-sim.js, which is in BOTH
+   tabs, so the shipping tab is drivable too. */
+window.PROTO_SIM = { inputs: { screen: 'ok', camera: 'ok', mic: 'ok', 'tab audio': 'ok' }, on: {}, takes: 0, lost: 'none' }
+/*SIM_JS*/
 /*DESIGN_JS*/
 </script>
 
@@ -763,15 +876,46 @@ const NOTE = {
 const IDS = Object.keys(SNAP)
 const S = { id: IDS[0], frame: 'desktop' }
 
-/* The proposal is applied to the markup each time a state is injected, and
-   turning it off is a re-inject with the sheet disabled — so "as it ships" is
-   the untouched capture rather than the proposal with its paint scraped off. */
-const dz = { on: true }
+/* The proposal is applied to the markup each time a state is injected. In
+   ships.html there is no layer inlined at all, so this is a no-op there and the
+   control is the file rather than a switch inside the proposal. */
 function paint() {
-  document.getElementById('dz').disabled = !dz.on
-  $('#dzOn').setAttribute('aria-pressed', String(dz.on))
-  $('#dzOff').setAttribute('aria-pressed', String(!dz.on))
-  if (dz.on && window.applyDesign) window.applyDesign($('#app'))
+  if (window.applySim) window.applySim($('#app'), window.PROTO_SIM)
+  if (window.applyDesign) window.applyDesign($('#app'))
+  const n = $('#app').querySelectorAll('.takecard').length
+  $('#takeN').textContent = n ? n + (n === 1 ? ' take in the list' : ' takes in the list') : 'no takes on this screen'
+}
+/* one way back in for anything that changes the simulation */
+window.protoRefresh = () => { show(S.id) }
+
+const KINDS = ['screen', 'camera', 'mic', 'tab audio']
+function buildSim() {
+  $('#sim-inputs').innerHTML = KINDS.map(
+    (k) =>
+      '<div class="perm"><label>' + (k === 'tab audio' ? 'sound' : k) + '</label>' +
+      '<select data-input="' + k + '"><option value="ok">ok</option>' +
+      '<option value="denied">denied</option><option value="unavailable">unavailable</option></select></div>',
+  ).join('')
+  for (const sel of document.querySelectorAll('[data-input]')) {
+    sel.value = window.PROTO_SIM.inputs[sel.dataset.input] || 'ok'
+    sel.addEventListener('change', () => {
+      window.PROTO_SIM.inputs[sel.dataset.input] = sel.value
+      show(S.id)
+      save()
+    })
+  }
+  $('#takeAdd').addEventListener('click', () => {
+    const n = $('#app').querySelectorAll('.takecard').length
+    window.PROTO_SIM.takes = n + 1
+    show(S.id); save()
+  })
+  $('#takeDel').addEventListener('click', () => {
+    const n = $('#app').querySelectorAll('.takecard').length
+    window.PROTO_SIM.takes = Math.max(1, n - 1)
+    show(S.id); save()
+  })
+  $('#simLost').value = window.PROTO_SIM.lost
+  $('#simLost').addEventListener('change', (e) => { window.PROTO_SIM.lost = e.target.value; show(S.id); save() })
 }
 function show(id) {
   if (!SNAP[id]) return
@@ -783,24 +927,88 @@ function show(id) {
   save()
 }
 
-function fit() {
-  const [w, h] = SIZES[S.frame]
+/* The screen zone is DRAGGABLE, the same one the other two protos have — one
+   tool, one way of testing (Robert, 2026-09-06). Frame presets set the size;
+   the corner grip and the fill button change it from there. (No backticks in
+   this comment: it lives inside a template literal.) */
+const MIN_W = 320, MIN_H = 260, MAX_W = 3840, MAX_H = 2400
+let FRAME_W = SIZES.desktop[0], FRAME_H = SIZES.desktop[1], SCALE = 1
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+function fitBox() {
   const box = $('#canvas').getBoundingClientRect()
   // never negative: a collapsed pane must not flip or zero the frame. 76 = padding + zone bar.
-  const s = Math.min(1, Math.max(120, box.width - 48) / w, Math.max(120, box.height - 76) / h)
-  const f = $('#frameEl')
-  f.style.width = w + 'px'
-  f.style.height = h + 'px'
-  f.style.transform = 'scale(' + s + ')'
-  $('#slot').style.width = w * s + 'px'
-  $('#slot').style.height = h * s + 'px'
-  // the app's stylesheet reads these two for every 100vh/100vw it had
-  f.style.setProperty('--app-w', w + 'px')
-  f.style.setProperty('--app-h', h + 'px')
-  $('#zsize').textContent = w + ' × ' + h
-  $('#zfit').textContent = Math.round(s * 100) + '%'
-  document.documentElement.dataset.frame = S.frame
+  return { w: Math.max(120, box.width - 48), h: Math.max(120, box.height - 76) }
 }
+function fit() {
+  const { w, h } = fitBox()
+  const s = Math.min(1, w / FRAME_W, h / FRAME_H)
+  SCALE = s
+  const f = $('#frameEl')
+  f.style.width = FRAME_W + 'px'
+  f.style.height = FRAME_H + 'px'
+  f.style.transform = 'scale(' + s + ')'
+  $('#slot').style.width = FRAME_W * s + 'px'
+  $('#slot').style.height = FRAME_H * s + 'px'
+  // the grip's corner must match the screen's rounding as drawn, i.e. scaled
+  const r = document.documentElement.dataset.frame === 'phone' ? 36 : 14
+  $('#slot').style.setProperty('--corner', (r * s).toFixed(1) + 'px')
+  // the app's stylesheet reads these two for every 100vh/100vw it had
+  f.style.setProperty('--app-w', FRAME_W + 'px')
+  f.style.setProperty('--app-h', FRAME_H + 'px')
+  $('#zsize').textContent = FRAME_W + ' × ' + FRAME_H
+  $('#zfit').textContent = Math.round(s * 100) + '%'
+}
+
+/* corner grip — capture-studio__resize's drag, copied from proto/style.html.
+   Scale is snapshotted at pointerdown because the frame rescales as it grows,
+   and reading it per move fights the drag. */
+const grip = $('#resize')
+let gripId = null, gx = 0, gy = 0, gw = 0, gh = 0, gs = 1, gRaf = null, gPend = null
+grip.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return
+  e.preventDefault(); e.stopPropagation()
+  gripId = e.pointerId
+  gx = e.clientX; gy = e.clientY
+  gw = FRAME_W; gh = FRAME_H; gs = SCALE || 1
+  grip.classList.add('fresize--dragging')
+  try { grip.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointer */ }
+})
+grip.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== gripId) return
+  gPend = [
+    clamp(Math.round(gw + (e.clientX - gx) / gs), MIN_W, MAX_W),
+    clamp(Math.round(gh + (e.clientY - gy) / gs), MIN_H, MAX_H),
+  ]
+  if (gRaf != null) return
+  gRaf = requestAnimationFrame(() => {
+    gRaf = null
+    if (!gPend) return
+    FRAME_W = gPend[0]; FRAME_H = gPend[1]
+    gPend = null
+    fit(); save()
+  })
+})
+function endGrip(e) {
+  if (gripId == null || e.pointerId !== gripId) return
+  gripId = null
+  grip.classList.remove('fresize--dragging')
+  try { grip.releasePointerCapture(e.pointerId) } catch (err) { /* already released */ }
+}
+grip.addEventListener('pointerup', endGrip)
+grip.addEventListener('pointercancel', endGrip)
+function fillZone() {
+  const { w, h } = fitBox()
+  FRAME_W = clamp(Math.round(w), MIN_W, MAX_W)
+  FRAME_H = clamp(Math.round(h), MIN_H, MAX_H)
+  fit(); save()
+}
+grip.addEventListener('dblclick', (e) => {
+  e.preventDefault()
+  const { w } = fitBox()
+  if (FRAME_W > (MIN_W + w) / 2) { FRAME_W = MIN_W; FRAME_H = MIN_H; fit(); save() }
+  else fillZone()
+})
+$('#zfill').addEventListener('click', fillZone)
 addEventListener('resize', fit)
 new ResizeObserver(fit).observe($('#canvas')) // keeps the fit honest while a panel slides
 
@@ -808,9 +1016,12 @@ $('#tabs').addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab]')
   if (t) show(t.dataset.tab)
 })
-$('#frame').addEventListener('change', (e) => { S.frame = e.target.value; fit(); save() })
-$('#dzOn').addEventListener('click', () => { dz.on = true; show(S.id); save() })
-$('#dzOff').addEventListener('click', () => { dz.on = false; show(S.id); save() })
+$('#frame').addEventListener('change', (e) => {
+  S.frame = e.target.value
+  document.documentElement.dataset.frame = S.frame
+  FRAME_W = SIZES[S.frame][0]; FRAME_H = SIZES[S.frame][1]
+  fit(); save()
+})
 
 /* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
 const togglePanel = (c) => { document.body.classList.toggle(c); save() }
@@ -825,8 +1036,9 @@ addEventListener('keydown', (e) => {
     const k = Object.keys(SIZES)
     S.frame = k[(k.indexOf(S.frame) + 1) % k.length]
     $('#frame').value = S.frame
-    fit()
-    save()
+    document.documentElement.dataset.frame = S.frame
+    FRAME_W = SIZES[S.frame][0]; FRAME_H = SIZES[S.frame][1]
+    fit(); save()
   } else if (e.key === '[') togglePanel('f')
   else if (e.key === ']') togglePanel('d')
 })
@@ -836,7 +1048,10 @@ addEventListener('keydown', (e) => {
 const STORE = 'inout-proto/app/v1'
 function save() {
   const z = (document.body.classList.contains('f') ? 'f' : '') + (document.body.classList.contains('d') ? 'd' : '')
-  const s = 'p=' + S.id + '&f=' + S.frame + '&z=' + (z || '-') + '&d=' + (dz.on ? '1' : '0')
+  const sim = window.PROTO_SIM
+  const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
+    '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
+    '&n=' + (sim.takes || 0) + '&l=' + encodeURIComponent(sim.lost)
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -850,17 +1065,27 @@ function restore() {
   const st = {}
   raw.split('&').forEach((pair) => { const i = pair.indexOf('='); if (i > 0) st[pair.slice(0, i)] = pair.slice(i + 1) })
   if (SNAP[st.p]) S.id = st.p
-  if (st.d === '0' || st.d === '1') dz.on = st.d === '1'
-  if (SIZES[st.f]) S.frame = st.f
+  if (SIZES[st.f]) { S.frame = st.f; FRAME_W = SIZES[st.f][0]; FRAME_H = SIZES[st.f][1] }
+  if (st.w) {
+    const wh = st.w.split('x').map(Number)
+    if (wh.length === 2 && wh.every((n) => n > 0)) { FRAME_W = clamp(wh[0], MIN_W, MAX_W); FRAME_H = clamp(wh[1], MIN_H, MAX_H) }
+  }
   if (st.z) {
     document.body.classList.toggle('f', st.z.indexOf('f') >= 0)
     document.body.classList.toggle('d', st.z.indexOf('d') >= 0)
   }
+  if (st.a) st.a.split(',').forEach((v, i) => {
+    if (KINDS[i] && ['ok', 'denied', 'unavailable'].includes(v)) window.PROTO_SIM.inputs[KINDS[i]] = v
+  })
+  if (st.n && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
+  if (st.l) window.PROTO_SIM.lost = decodeURIComponent(st.l)
 }
 
 document.body.classList.add('f', 'd')
 restore()
 $('#frame').value = S.frame
+document.documentElement.dataset.frame = S.frame
+buildSim()
 show(S.id)
 fit()
 </script>
@@ -868,6 +1093,8 @@ fit()
 </html>
 `
 
-const page = readTemplate()
-writeFileSync(OUT, page, 'utf8')
-log(`wrote ${OUT} — ${(page.length / 1024).toFixed(0)} KB, ${got.length} states: ${got.map((x) => x.id).join(', ')}`)
+for (const [file, design] of [[OUT, true], [OUT_SHIPS, false]]) {
+  const page = readTemplate(design)
+  writeFileSync(file, page, 'utf8')
+  log(`wrote ${file} — ${(page.length / 1024).toFixed(0)} KB, ${got.length} states: ${got.map((x) => x.id).join(', ')}`)
+}

@@ -60,24 +60,35 @@ current path as fallback); the engine never refuses a record press.
   From a second worktree run mirror-watch from THAT worktree, and replace a symlinked `node_modules`
   with a real copy (`rsync -a "<main>/node_modules/" /tmp/inout-dev/node_modules/`). Deletable the day
   the repo moves out of `~/Downloads` (Robert's call; recommended).
-- `proto/style.html`, `proto/neon.html` and `proto/app.html` (the proto UI's three tabs; each links
-  to the other two) are opened off disk with `file://` and never served: one self-contained file
-  each, no `<script src>`, no `<link>`, no fetch, no modules, no external assets (fonts and video
-  frames are embedded data: URLs); state persists through the URL fragment first because
-  `localStorage` can be refused on `file://`. All three wear the SAME shell — squeeze-panels from
-  ~/org/lib, left panel (proto · screen · simulate) + centre zone + right panel — so the tabs read
-  as one tool; a new tab copies that shell verbatim rather than inventing chrome. A picture of any:
-  `node scripts/see.mjs "file:///…/proto/neon.html#p=editor" --shot=<png>`.
+- `proto/style.html`, `proto/neon.html`, `proto/app.html` and `proto/ships.html` (the proto UI's
+  FOUR tabs; each links to the other three) are opened off disk with `file://` and never served: one
+  self-contained file each, no `<script src>`, no `<link>`, no fetch, no modules, no external assets
+  (fonts and video frames are embedded data: URLs); state persists through the URL fragment first
+  because `localStorage` can be refused on `file://`. **ALL FOUR WEAR THE SAME TESTING UI and that
+  is a standing rule** (Robert 2026-09-06: "all three protos must share same ui of testing") —
+  squeeze-panels from ~/org/lib, left panel (proto · screen · simulate) + centre zone + right panel,
+  and on the zone the frame select, the true size, the fit %, `fill`, and the draggable corner grip
+  (`.fresize`, copied verbatim between files, double-click for min/max). A new tab copies that shell
+  and that zone verbatim rather than inventing chrome; a control added to one belongs in all four.
+  A picture of any: `node scripts/see.mjs "file:///…/proto/neon.html#p=editor" --shot=<png>`.
+  **AN INLINED `<svg hidden>` SPRITE LAYS OUT A BLANK BAND** and pushes the whole tool down the
+  page — the UA's `[hidden]` rule is namespaced to HTML, so an SVG ignores it. `svg[hidden] {
+  display: none }` is in each file that carries a sprite; it has cost two sessions already.
   **`proto/app.html` IS GENERATED AND MUST NEVER BE HAND-EDITED** — `node scripts/proto-app.mjs`
   drives the deployed build through its real states and freezes its real DOM and real stylesheet, so
   the third tab is the control the other two are judged against. Edit the script, not the file.
+  ONE CAPTURE WRITES BOTH `app.html` (the proposal) and `ships.html` (the same capture with no
+  layer at all — the control, its own tab since 2026-09-06).
   **`--rebuild` IS THE ONE YOU WANT** while iterating: the capture (three real takes, an export,
-  minutes of Chrome on screen) is cached in `proto/.app-capture.json`, and a rebuild rewrites the
-  page from it in ~0.1 s. Re-recording to try a font size is waste the person watching pays for.
-  The design under discussion lives in `proto/app-design.css` and `proto/app-design.js` — hand-
-  authored, inlined at generation time, applied as a LAYER over the frozen markup, with an
-  "As it ships / Proposed" switch in the right panel as the A/B. Nothing in that layer is agreed
-  for the product; it is a proposal against the control, which is the point of keeping both.
+  minutes of Chrome on screen) is cached in `proto/.app-capture.json`, and a rebuild rewrites both
+  pages from it in ~0.1 s. Re-recording to try a font size is waste the person watching pays for.
+  Three hand-authored files feed the generator, and the split matters:
+  `proto/app-design.css` + `proto/app-design.js` = the PROPOSAL, inlined into `app.html` only;
+  `proto/app-sim.js` = the TESTING layer, inlined into BOTH, because a proposal you can drive
+  against a control you cannot is not an A/B. The sim drives the app's real controls (quality rail,
+  chips, speeds, swatches, lane eyes) and simulates real states (input availability, take count,
+  a channel that never connected) using the app's OWN class names, so it renders through either
+  design. Nothing in the proposal is agreed for the product.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends. It
 commits the files THIS session edited, and files no live session claims only when it is the last

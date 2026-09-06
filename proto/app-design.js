@@ -11,6 +11,10 @@
    marks what it has done and leaves it alone the second time.
    ========================================================================== */
 ;(function () {
+  /* app-sim.js positions the shipping rail's thumb and must not fight this
+     file's segmented one. It asks for this flag rather than for a <style id>,
+     which exists in both tabs (empty in the shipping one) and answered wrong. */
+  window.PROTO_DESIGN = true
   const ic = (n, cls) => `<svg class="${cls || ''}" aria-hidden="true"><use href="#i-${n}"/></svg>`
   /* FIVE GLYPHS THE NEON SPRITE DOES NOT HAVE. Search, filter, sort, device and
      cloud are new controls, so there was nothing to borrow — the first pass
