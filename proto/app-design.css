@@ -19,6 +19,39 @@
   --feed-gap: 20px;
 }
 
+/* ---------- 0. the studio ground: grid, tilt and bounce --------------------
+   Copied from proto/style.html, which lifted it from inout copy 2 — the same
+   controls, the same defaults, the same feel, so a judgement made on one proto
+   carries to the other. The grid is a stroked path per tile, NOT two crossing
+   gradients: two gradient layers composite over each other and every crossing
+   carries double alpha, which reads as a field of dots rather than a grid.
+   Grey, not tinted — this proto keeps the app's own colour and adds no hue. */
+.app-proto {
+  --grid-k: 0.7;
+  --grid-cell: 24px;
+  --grid-img: none;
+  --grid-glow: rgba(255, 255, 255, calc(0.035 * var(--grid-k)));
+}
+.app-proto .dzgrid {
+  position: absolute;
+  inset: -14%;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grid-img), radial-gradient(ellipse 100% 80% at 50% 120%, var(--grid-glow), transparent 50%);
+  background-size: var(--grid-cell) var(--grid-cell), 100% 100%;
+  /* pointer parallax + hub bump, exactly as the source composes them */
+  background-position:
+    calc(50% + var(--bg-shift-x, 0px) + var(--bump-x, 0px))
+    calc(50% + var(--bg-shift-y, 0px) + var(--bump-y, 0px));
+  background-repeat: repeat, no-repeat;
+  transform-origin: 50% 50%;
+  transform: perspective(1600px)
+    rotateX(calc(var(--tilt-y, 0) * -3deg))
+    rotateY(calc(var(--tilt-x, 0) * 3deg));
+  will-change: transform;
+}
+.app-proto > .app { position: relative; z-index: 1; }
+
 /* ---------- 1. input chips: neon's type and glyphs, the app's colour -------- */
 .app-proto .chip {
   font-family: var(--dz);
@@ -47,7 +80,7 @@
    to centre the pair. Only when there is no preview — a take in progress still
    wants the stage against the controls, exactly as it ships. */
 .app-proto .capture:not(:has(.stage)) { justify-content: center; }
-.app-proto .capture:not(:has(.stage)) .capture__body { flex: 0 1 auto; }
+.app-proto .capture:not(:has(.stage)) .capture__body { flex: 0 1 auto; min-height: 0; }
 
 /* ---------- 3. the control bar: inputs left, record right ------------------
    The shipping bar is a centred column — quality rail, then chips, then the

@@ -448,10 +448,176 @@
     }
   }
 
+  /* ---------- the studio motion, copied from proto/style.html --------------
+     initBgGridPointerTilt: the grid leans toward the pointer (lerp .11, +-10px).
+     initElasticHubScroll:  a wheel notch injects velocity into a damped spring
+     that moves the screen and drags the grid behind it. The five numbers that
+     decide how it feels live on PHYS so the panel can move them mid-flight;
+     style.html's values are the defaults, so the two protos feel the same. */
+  const PHYS = { k: 344, c: 25.5, imp: 4.4, follow: 0.31, wall: 0.14 }
+  const GRID = { k: 0.7, cell: 24, on: true }
+
+  function gridImage() {
+    // one path, stroked once per tile — see the note in the stylesheet
+    const a = (0.075 * GRID.k).toFixed(4)
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">' +
+      // half-pixel offsets: a stroke centred on the tile edge is half-covered,
+      // so the corner is the union of two half-covered bands and reads brighter
+      // than the lines. Inset to 23.5 and every pixel gets full coverage.
+      '<path d="M23.5 0V24M0 23.5H24" fill="none" stroke="rgba(255,255,255,' + a + ')" stroke-width="1"/></svg>'
+    const app = document.getElementById('app')
+    if (!app) return
+    app.style.setProperty('--grid-img', GRID.on ? 'url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '")' : 'none')
+    app.style.setProperty('--grid-k', String(GRID.k))
+    app.style.setProperty('--grid-cell', GRID.cell + 'px')
+  }
+
+  function motion(root) {
+    if (!root.querySelector('.dzgrid')) {
+      const g = document.createElement('div')
+      g.className = 'dzgrid'
+      root.insertBefore(g, root.firstChild)
+    }
+    gridImage()
+    if (root.dataset.dzMotion) return
+    root.dataset.dzMotion = '1'
+
+    const BG_LERP = 0.11
+    const BG_SHIFT_MAX_PX = 10
+    let curX = 0, curY = 0, tgtX = 0, tgtY = 0, tiltRaf = 0
+    function tiltTick() {
+      tiltRaf = 0
+      curX += (tgtX - curX) * BG_LERP
+      curY += (tgtY - curY) * BG_LERP
+      root.style.setProperty('--tilt-x', curX.toFixed(5))
+      root.style.setProperty('--tilt-y', curY.toFixed(5))
+      root.style.setProperty('--bg-shift-x', (curX * BG_SHIFT_MAX_PX).toFixed(2) + 'px')
+      root.style.setProperty('--bg-shift-y', (curY * BG_SHIFT_MAX_PX).toFixed(2) + 'px')
+      if (Math.abs(tgtX - curX) > 0.0008 || Math.abs(tgtY - curY) > 0.0008) tiltRaf = requestAnimationFrame(tiltTick)
+    }
+    root.addEventListener('mousemove', (e) => {
+      const r = root.getBoundingClientRect()
+      tgtX = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1))
+      tgtY = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1))
+      if (!tiltRaf) tiltRaf = requestAnimationFrame(tiltTick)
+    })
+
+    const pixelDeltaBoost = 1.72
+    const velCap = 5200
+    const edgePad = 2
+    let posX = 0, posY = 0, velX = 0, velY = 0, physRaf = null, lastT = 0
+    const cluster = () => root.querySelector('.capture')
+    // the spring belongs to the waiting screen, not to a running take: once the
+    // stage is up the controls are a bar and must not drift off it
+    const live = () => !!cluster() && !root.querySelector('.stage')
+    /* THE ONE ADAPTATION FROM style.html, AND IT HAD TO BE MADE. There the
+       cluster is a small centred group, so the room around it IS the travel and
+       the maths is scale-proof. Here the cluster is the whole record screen and
+       fills the frame, so that derivation came out zero and the spring settled
+       before it moved — the throw did nothing at all. A screen that fills its
+       frame gets a fixed elastic overscroll instead; a cluster with real room
+       around it still uses that room, capped so it never sails off. */
+    const TRAVEL_CAP = 48
+    function bounds() {
+      const c = cluster()
+      if (!c) return { maxX: 0, maxY: 0 }
+      const roomX = (root.clientWidth - c.offsetWidth) / 2 - edgePad
+      const roomY = (root.clientHeight - c.offsetHeight) / 2 - edgePad
+      return {
+        maxX: roomX > 0 ? Math.min(roomX, TRAVEL_CAP) : TRAVEL_CAP,
+        maxY: roomY > 0 ? Math.min(roomY, TRAVEL_CAP) : TRAVEL_CAP,
+      }
+    }
+    function apply(x, y) {
+      posX = x
+      posY = y
+      const c = cluster()
+      if (!c) return
+      if (Math.abs(x) < 0.02 && Math.abs(y) < 0.02) {
+        c.style.transform = ''
+        root.style.removeProperty('--bump-x')
+        root.style.removeProperty('--bump-y')
+      } else {
+        c.style.transform = 'translate3d(' + x.toFixed(2) + 'px, ' + y.toFixed(2) + 'px, 0)'
+        root.style.setProperty('--bump-x', (x * PHYS.follow).toFixed(2) + 'px')
+        root.style.setProperty('--bump-y', (y * PHYS.follow).toFixed(2) + 'px')
+      }
+    }
+    function rest() {
+      posX = posY = velX = velY = 0
+      lastT = 0
+      const c = cluster()
+      if (c) c.style.transform = ''
+      root.style.removeProperty('--bump-x')
+      root.style.removeProperty('--bump-y')
+    }
+    function step(t) {
+      physRaf = null
+      if (!lastT) lastT = t
+      let dt = (t - lastT) / 1000
+      lastT = t
+      if (dt > 0.055) dt = 0.055
+      if (dt <= 0) dt = 1 / 60
+      velX += (-PHYS.k * posX - PHYS.c * velX) * dt
+      velY += (-PHYS.k * posY - PHYS.c * velY) * dt
+      posX += velX * dt
+      posY += velY * dt
+      const b = bounds()
+      if (posX > b.maxX) { posX = b.maxX; velX *= -PHYS.wall }
+      else if (posX < -b.maxX) { posX = -b.maxX; velX *= -PHYS.wall }
+      if (posY > b.maxY) { posY = b.maxY; velY *= -PHYS.wall }
+      else if (posY < -b.maxY) { posY = -b.maxY; velY *= -PHYS.wall }
+      if (Math.hypot(posX, posY) < 0.55 && Math.hypot(velX, velY) < 6) return rest()
+      apply(posX, posY)
+      physRaf = requestAnimationFrame(step)
+    }
+    const kick = () => { if (physRaf == null) physRaf = requestAnimationFrame(step) }
+    const norm = (d, mode) => (mode === 1 ? d * 16 : mode === 2 ? d * Math.min(900, root.clientHeight * 0.85) : d * pixelDeltaBoost)
+    root.addEventListener(
+      'wheel',
+      (e) => {
+        if (!live()) return
+        /* A WHEEL OVER THE TAKES LIST SCROLLS THE LIST. The spring owns the
+           screen's empty space, not a scrollable thing inside it — otherwise the
+           feed can never be reached with the wheel at all. */
+        const list = e.target.closest && e.target.closest('.takes__list')
+        if (list && list.scrollHeight > list.clientHeight + 2) return
+        const dx = norm(e.deltaX, e.deltaMode)
+        const dy = norm(e.deltaY, e.deltaMode)
+        if (!dx && !dy) return
+        e.preventDefault()
+        e.stopPropagation()
+        velX += -dx * PHYS.imp
+        velY += -dy * PHYS.imp
+        const sp = Math.hypot(velX, velY)
+        if (sp > velCap) { velX *= velCap / sp; velY *= velCap / sp }
+        kick()
+      },
+      { passive: false, capture: true },
+    )
+    // moving to another screen puts it back on its seat, mid-flight
+    window.addEventListener('protoscreen', () => { if (physRaf != null) cancelAnimationFrame(physRaf); physRaf = null; rest() })
+  }
+
+  /* the panel drives these; the proto keeps style.html's names for them */
+  window.protoMotion = {
+    phys: PHYS,
+    grid: GRID,
+    set(key, value) {
+      if (key in PHYS) PHYS[key] = +value
+      else if (key === 'gridk') GRID.k = +value
+      else if (key === 'gridcell') GRID.cell = +value
+      else if (key === 'gridon') GRID.on = !!value
+      gridImage()
+    },
+  }
+
   window.applyDesign = function (root) {
     if (!root) return
     chips(root)
     cards(root)
+    motion(root)
     head(root)
     account(root)
     picking(root)

@@ -545,12 +545,31 @@ its own stylesheet, captured from the deployed build &#8212; not a drawing of it
 not the proposal. This is the control the other tabs are judged against.
 
 Captured /*STAMP*/.`
+  /* THE SAME SWITCHES proto/style.html HAS, WITH ITS NUMBERS. Same ranges, same
+     defaults, same names — a judgement made about the bounce on one proto has to
+     mean the same thing on the other, and it cannot if the sliders disagree. */
   const designPanel = design
     ? `      <div class="panel__group">
         <div class="panel__label">The layer</div>
         <div class="note">Chips in the neon type and glyphs, the length on the picture, a
 card stripped to date &#183; size &#183; inputs, a rebuilt takes bar and a segmented
 quality rail. Colours are the app&#8217;s own, untouched.</div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Grid</div>
+        <button class="btn-h" id="g-on" aria-pressed="true">Cell grid</button>
+        <div class="slider"><label for="s-g">strength</label><input type="range" id="s-g" min="0" max="2" step="0.05" value="0.7"><output id="o-g">0.70</output></div>
+        <div class="slider"><label for="s-cell">cell</label><input type="range" id="s-cell" min="12" max="64" step="1" value="24"><output id="o-cell">24</output></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Scroll bounce</div>
+        <div class="slider"><label for="p-k">stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="344"><output id="o-pk">344</output></div>
+        <div class="slider"><label for="p-c">damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="25.5"><output id="o-pc">25.5</output></div>
+        <div class="slider"><label for="p-i">impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="4.4"><output id="o-pi">4.4</output></div>
+        <div class="slider"><label for="p-f">bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.31"><output id="o-pf">0.31</output></div>
+        <div class="slider"><label for="p-w">wall</label><input type="range" id="p-w" min="0" max="0.8" step="0.02" value="0.14"><output id="o-pw">0.14</output></div>
+        <div class="note" style="margin-top:8px">Throw the record screen with the wheel.
+The feed keeps the wheel for itself when it has somewhere to scroll.</div>
       </div>`
     : ''
   const simJs = readFileSync(SIM_JS, 'utf8')
@@ -751,7 +770,12 @@ body.f .filters, body.d .detail { opacity: 1; }
    a list long enough to be worth testing would otherwise run off the bottom of
    it with no way to reach the end. This is the proto's own affordance, in both
    tabs, so "add a take" until it overflows is a thing you can actually do. */
-.app-proto .takes__list { overflow-y: auto; max-height: calc(var(--app-h) * 0.46); scrollbar-width: thin; }
+/* THE FEED TAKES THE ROOM IT NEEDS AND NO MORE. A fixed ceiling meant a long
+   list stopped short of the space it had and a short one still reserved it.
+   The list grows until it runs out of frame and then scrolls, so three takes sit
+   in a small centred block and thirty fill the height. */
+.app-proto .takes__list { overflow-y: auto; min-height: 0; flex: 0 1 auto; scrollbar-width: thin; }
+.app-proto .takes { min-height: 0; }
 /* the list is a flex column, so a max-height made every card SHRINK to fit and
    swallow its own second and third lines — the kinds and the action row were in
    the DOM the whole time, just clipped. Cards keep their height; the list scrolls. */
@@ -927,6 +951,37 @@ window.protoRefresh = () => { show(S.id) }
    in app-sim.js drives the proto through the same path the app takes */
 window.protoGo = (id) => { if (SNAP[id]) show(id) }
 
+/* the sliders land on protoMotion, which is style.html's PHYS and grid under
+   another name; changing one mid-flight is the point — you feel it on the next
+   throw. Absent in the shipping tab, which carries no layer to drive. */
+const MOTION = [
+  { el: 's-g', out: 'o-g', key: 'gridk', dp: 2 },
+  { el: 's-cell', out: 'o-cell', key: 'gridcell', dp: 0 },
+  { el: 'p-k', out: 'o-pk', key: 'k', dp: 0 },
+  { el: 'p-c', out: 'o-pc', key: 'c', dp: 1 },
+  { el: 'p-i', out: 'o-pi', key: 'imp', dp: 1 },
+  { el: 'p-f', out: 'o-pf', key: 'follow', dp: 2 },
+  { el: 'p-w', out: 'o-pw', key: 'wall', dp: 2 },
+]
+function buildMotion() {
+  if (!window.protoMotion || !$('#s-g')) return
+  for (const m of MOTION) {
+    const input = $('#' + m.el)
+    const put = () => {
+      window.protoMotion.set(m.key, input.value)
+      $('#' + m.out).textContent = (+input.value).toFixed(m.dp)
+    }
+    input.addEventListener('input', () => { put(); save() })
+    put()
+  }
+  $('#g-on').addEventListener('click', () => {
+    const on = $('#g-on').getAttribute('aria-pressed') !== 'true'
+    $('#g-on').setAttribute('aria-pressed', String(on))
+    window.protoMotion.set('gridon', on)
+    save()
+  })
+}
+
 const KINDS = ['screen', 'camera', 'mic', 'tab audio']
 function buildSim() {
   $('#sim-inputs').innerHTML = KINDS.map(
@@ -954,6 +1009,8 @@ function buildSim() {
 }
 function show(id) {
   if (!SNAP[id]) return
+  // a screen change settles the spring rather than leaving the last throw on it
+  dispatchEvent(new Event('protoscreen'))
   S.id = id
   $('#app').innerHTML = SNAP[id]
   paint()
@@ -1086,7 +1143,8 @@ function save() {
   const sim = window.PROTO_SIM
   const s = 'p=' + S.id + '&f=' + S.frame + '&w=' + FRAME_W + 'x' + FRAME_H + '&z=' + (z || '-') +
     '&a=' + KINDS.map((k) => sim.inputs[k]).join(',') +
-    '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost)
+    '&n=' + (sim.takes == null ? '-' : sim.takes) + '&acc=' + sim.account + '&l=' + encodeURIComponent(sim.lost) +
+    (window.protoMotion && $('#s-g') ? '&m=' + MOTION.map((x) => $('#' + x.el).value).join(',') + ($('#g-on').getAttribute('aria-pressed') === 'true' ? '' : '&g0=1') : '')
   let wrote = false
   try { history.replaceState(null, '', '#' + s); wrote = true } catch (err) { /* try the next one */ }
   if (!wrote) { try { location.hash = s } catch (err) { /* nowhere left to write */ } }
@@ -1115,6 +1173,10 @@ function restore() {
   if (st.n === '-') window.PROTO_SIM.takes = null
   else if (st.n !== undefined && !isNaN(+st.n)) window.PROTO_SIM.takes = +st.n
   if (st.acc === 'in' || st.acc === 'out') window.PROTO_SIM.account = st.acc
+  if (st.m && $('#s-g')) {
+    st.m.split(',').forEach((v, i) => { if (MOTION[i] && !isNaN(+v)) $('#' + MOTION[i].el).value = v })
+  }
+  if (st.g0 === '1' && $('#g-on')) $('#g-on').setAttribute('aria-pressed', 'false')
   if (st.l) window.PROTO_SIM.lost = decodeURIComponent(st.l)
 }
 
@@ -1124,6 +1186,7 @@ $('#frame').value = S.frame
 document.documentElement.dataset.frame = S.frame
 buildSim()
 show(S.id)
+buildMotion()
 fit()
 </script>
 </body>
