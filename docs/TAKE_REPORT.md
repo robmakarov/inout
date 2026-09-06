@@ -31,7 +31,7 @@ await __inoutLateness(5000)          // G7: sample THIS thread for 5 s wherever 
 | `picture` | a video source froze mid-take | `stalled` |
 | `rate` | the take gave something up to keep up | `stopStats.degradedWhy` |
 | `elastic` | a PICTURE step was taken while the unseen work was still running — the order of defence, violated (E2). NOT a failure: shedding and recovering, or ending a take still shed. The detail line carries the whole ledger's shape and how long the picture took to come back | `stopStats.elastic` (core/elasticLog.ts `auditElastic`) |
-| `sync` | a channel carries no B7 anchor while others do | `diagnostics.anchor` |
+| `sync` | a channel carries no B7 anchor while others do, OR one is anchored outside its own take (begins after every other channel ended, or capture refused its anchor at stop) | `diagnostics.anchor`, `anchor.anchorRefusedMs`, `startOffsetMs` |
 | `storage` | it ended with under 2 min of headroom at its own write rate | `stopStats` storage + bytes |
 | `memory` | heap at stop ≥ 70 % of the engine's limit | `stopStats.heapBytes` |
 | `lateness` | the worst ONE-SECOND window of main-thread lateness exceeded 30 ms — Phase 1's own claim ("no editor stall > 30 ms"), so the card and the claim are one number (G7). Graded on the window, not on a single sample: at 60 samples a second an hour-long take takes 216,000 of them and something is over any threshold eventually. The strict "> 1 frame late is a defect" reading stays in the detail as `overFrame` | `stopStats.lateness` (core/lateness.ts) |

@@ -196,6 +196,15 @@ export interface ChannelAnchor {
    */
   rawAnchorMs?: number
   /**
+   * THE ANCHOR THIS TAKE THREW AWAY, present only when it threw one away.
+   *
+   * An anchor past `wall − media` says the channel began after the take had
+   * already recorded everything it holds, which no device can do and every
+   * broken clock can. Absent on a healthy take; a number here is a clock bug
+   * caught at stop rather than shipped as an 8-hour hole (core/realmClock.ts).
+   */
+  anchorRefusedMs?: number
+  /**
    * AUDIO. The platform-reported input latency subtracted from the raw anchor
    * (measuredAudio bounds it at 200 ms). A Bluetooth headset's real 100-300 ms
    * is INVISIBLE here — Chrome reports the part it knows and no more — so a

@@ -15,6 +15,7 @@ import {
 } from '@core/door'
 import { CAPTURE_PERIOD_MS, startLateness, type LatenessRun } from '@core/lateness'
 import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
+import { findPlacementRepairs } from '@core/timeline/placement'
 import { glueRecorded } from '@core/glue'
 import { captureQualityMode, preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import {
@@ -3581,6 +3582,26 @@ class Session implements CaptureSession {
     const minOffset = channels.reduce((m, c) => Math.min(m, c.startOffsetMs), Infinity)
     if (Number.isFinite(minOffset) && minOffset !== 0) {
       for (const c of channels) c.startOffsetMs -= minOffset
+    }
+    // AND NO TAKE LEAVES HERE WITH A CHANNEL BEHIND ITS OWN END. Every anchor
+    // above is built from a clock, and the day one of them lies the take must
+    // not be the thing that carries the lie downstream: a 46-minute take was
+    // handed to the editor as 553.6 minutes because the audio anchor read 8 h
+    // 27 min (timeline/placement.ts, core/realmClock.ts). Costs one pass over
+    // at most a dozen channels and is silent on every healthy take.
+    const misplaced = findPlacementRepairs({ channels } as unknown as Recording)
+    if (misplaced.length > 0) {
+      for (const c of channels) {
+        const r = misplaced.find((m) => m.channelId === c.id)
+        if (r) {
+          console.error(
+            `[capture] ${c.kind} anchored ${Math.round(r.wasMs)}ms into a take nothing else was ` +
+              `still recording at — REFUSED at build, placed at ${r.nowMs}ms. A clock under this ` +
+              `channel was wrong; see core/realmClock.ts.`,
+          )
+          c.startOffsetMs = r.nowMs
+        }
+      }
     }
 
     const recording: Recording = {

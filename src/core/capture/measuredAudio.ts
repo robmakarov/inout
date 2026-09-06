@@ -30,12 +30,17 @@ import {
 } from './audioTap'
 import type { AudioTapMsg, AudioTapReply } from './audioTap.worker'
 import { ReviveSchedule, SILENCE_CONVICTS_AT_ATTEMPT } from './reviveSchedule'
+import { RealmOffset } from '@core/realmClock'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
 const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
 /** Anchor min-filter window; at 50ppm clock skew the bias stays < 0.2ms. */
 const ANCHOR_WINDOW_S = 3
+/** How far past the take's own arithmetic an anchor may still be believed.
+ *  Batching, the drain and the stop budget all cost real milliseconds; a
+ *  second of them is jitter, and the failure this bounds was 30,445,691. */
+const ANCHOR_SLACK_MS = 1000
 
 /** Nearest-rank quantile over an unsorted sample. Copies, so the caller's
  *  array keeps its order (X11a reads two quantiles off one sample). */
@@ -725,6 +730,14 @@ export async function startMeasuredAudioCapture(opts: {
    * and the worker reader 0, scripts/x11a-workertap.mjs). Null = the main pump.
    */
   let tapWorker: Worker | null = null
+  /**
+   * THE WORKER'S CLOCK MINUS THIS THREAD'S, MEASURED FROM THE BATCHES
+   * THEMSELVES. It replaces `performance.timeOrigin` arithmetic, which is a
+   * shared clock only in a page younger than its machine's last sleep — the
+   * 553-minute take is written up in core/realmClock.ts. One per worker: a
+   * revival that builds a new one starts a new zero.
+   */
+  let tapRealm = new RealmOffset()
   /** Bumped on every revival; a retiring pump's batches are ignored. */
   let tapGeneration = 0
   let tapEndedResolve: (() => void) | null = null
@@ -739,6 +752,9 @@ export async function startMeasuredAudioCapture(opts: {
    * second, ~2,600 a minute of Float64) and reduced once at stop.
    */
   const tapHandoffMs: number[] = []
+  /** Set only when the stop below threw an impossible anchor away. Null on
+   *  every healthy take, which is what makes its presence a finding. */
+  let anchorRefusedMs: number | null = null
   /**
    * B12's gap counter is CUMULATIVE ACROSS REVIVALS on the main pump — it is
    * never reset by `swapTrackReader` — and the worker's is cumulative per
@@ -1121,9 +1137,13 @@ export async function startMeasuredAudioCapture(opts: {
     if (audioTapThreadChoice() === 'worker' && canTransferReadable()) {
       try {
         const readable = trackPcmReadable(clone, bufChunks)
-        const w =
-          tapWorker ??
-          new Worker(new URL('./audioTap.worker.ts', import.meta.url), { type: 'module' })
+        let w = tapWorker
+        if (!w) {
+          w = new Worker(new URL('./audioTap.worker.ts', import.meta.url), { type: 'module' })
+          // A new realm is a new zero; the old offset describes a worker that
+          // no longer exists.
+          tapRealm = new RealmOffset()
+        }
         w.onmessage = (ev: MessageEvent<AudioTapReply>) => {
           const msg = ev.data
           if (msg.generation !== tapGeneration) return
@@ -1138,10 +1158,12 @@ export async function startMeasuredAudioCapture(opts: {
           tapGapUs = tapGapBaseUs + tapGapThisGenUs
           if (msg.tapMaxGapUs > tapMaxGapUs) tapMaxGapUs = msg.tapMaxGapUs
           // The worker's clock, in this thread's frame. See AudioTapBatch.
-          const stampedMs = msg.stampMs - performance.timeOrigin
           // Read BEFORE onBatch: everything that batch triggers (interleave,
           // loudness, the encoder) would otherwise be charged to the hand-off.
-          tapHandoffMs.push(performance.now() - stampedMs)
+          const receivedAtMs = performance.now()
+          tapRealm.note(msg.workerNowMs, receivedAtMs)
+          const stampedMs = tapRealm.toLocal(msg.workerNowMs)
+          tapHandoffMs.push(receivedAtMs - stampedMs)
           onBatch(msg.frames, msg.channels, msg.lastChunkTimeS, msg.planar, stampedMs)
         }
         const open: AudioTapMsg = {
@@ -1328,8 +1350,31 @@ export async function startMeasuredAudioCapture(opts: {
       if (encodeError) fatal(encodeError)
       // Refined min-filter anchor beats the provisional first-arrival value,
       // then step back by the input latency the anchor structurally cannot see.
-      const rawOffset =
+      //
+      // AND IT IS BOUNDED BY THE TAKE ITSELF, which is the guard that has to
+      // hold even when the clock underneath it does not. A channel that wrote
+      // `mediaMs` of audio inside a take that ran `wallMs` cannot have STARTED
+      // later than `wallMs - mediaMs`; anything past that is not a late channel,
+      // it is a broken clock, and shipping it silently is what put 8 h 27 min of
+      // nothing between Robert's picture and his sound (core/realmClock.ts).
+      // The provisional offset — this thread's own `performance.now()` at the
+      // first batch — is never wrong by more than a batch, so it is what stands.
+      const anchorMs =
         anchorWallMs !== Infinity ? Math.max(0, anchorWallMs - opts.epoch) : (startOffsetMs ?? 0)
+      const wallMs = Math.max(0, performance.now() - opts.epoch)
+      const mediaMs = (framesWritten / sampleRate) * 1000
+      const anchorCeilingMs = Math.max(0, wallMs - mediaMs) + ANCHOR_SLACK_MS
+      let rawOffset = anchorMs
+      if (anchorMs > anchorCeilingMs) {
+        rawOffset = Math.max(0, Math.min(startOffsetMs ?? 0, anchorCeilingMs))
+        console.error(
+          `[capture] ${label} audio anchor ${Math.round(anchorMs)}ms is past everything this take ` +
+            `could hold (${Math.round(mediaMs)}ms of audio inside ${Math.round(wallMs)}ms of take) — ` +
+            `REFUSED, placed at ${Math.round(rawOffset)}ms. A clock under this channel is wrong; ` +
+            `see core/realmClock.ts.`,
+        )
+        anchorRefusedMs = Math.round(anchorMs)
+      }
       const offset = Math.max(0, rawOffset - inputLatencyMs)
       if (inputLatencyMs > 0) {
         console.info(
@@ -1432,6 +1477,9 @@ export async function startMeasuredAudioCapture(opts: {
           // it. Descriptive only; nothing here moves an offset.
           anchor: {
             rawAnchorMs: Math.round(rawOffset * 10) / 10,
+            // Written ONLY when the take refused an anchor as impossible, so a
+            // field that exists at all is a clock bug caught in the act.
+            ...(anchorRefusedMs !== null ? { anchorRefusedMs } : {}),
             // B13: what the platform REPORTED, always — not what was used. The
             // companion flag below says whether it was applied, so one field
             // can no longer mean two different takes.

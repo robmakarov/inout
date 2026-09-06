@@ -942,9 +942,9 @@ export async function startLiveCompositeV2(
     // worker rather than being decided against here.
     painter: painterChoice(),
     // P9: only the rung where the worker reads tracks itself needs to be told
-    // where the main thread's clock starts. Every other rung stamps its frames
-    // here and the field stays absent, so the shipped message is unchanged.
-    ...(intake === 'worker-processor' ? { mainTimeOrigin: performance.timeOrigin } : null),
+    // what this thread's clock reads. Every other rung stamps its frames here
+    // and the field stays absent, so the shipped message is unchanged.
+    ...(intake === 'worker-processor' ? { mainNowMs: performance.now() } : null),
     longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,

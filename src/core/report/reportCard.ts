@@ -41,6 +41,7 @@ import { auditElastic } from '@core/elasticLog'
 import { STALL_FAIL_MS } from '@core/lateness'
 import { REVIVE_BASE_SEC, REVIVE_CEILING_SEC } from '@core/capture/reviveSchedule'
 import { WARN_SECONDS_LEFT } from '@core/capture/diskGuard'
+import { findPlacementRepairs } from '@core/timeline/placement'
 import type { ChannelKind, ChannelRecording, LatenessSummary, Recording } from '@core/types'
 
 /** Every dimension the card grades. Order is the order they are reported in. */
@@ -783,11 +784,35 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
       })
     } else {
       const without = recording.channels.filter((c) => !c.diagnostics?.anchor)
+      /**
+       * AND THE NUMBERS ARE GRADED, NOT ONLY PRINTED. This dimension used to
+       * check that anchors EXIST and nothing else, so the take that opened at
+       * 553.6 minutes — its own anchor line reading `system-audio at
+       * 30445691ms` — came out a PASS. It listed the evidence and convicted
+       * nobody. A channel that begins after every other channel has ended is
+       * impossible (timeline/placement.ts), and a channel whose anchor capture
+       * had to REFUSE at stop says the same thing one step earlier.
+       */
+      const misplacedIds = new Set(findPlacementRepairs(recording).map((m) => m.channelId))
+      const broken = recording.channels.filter(
+        (c) => misplacedIds.has(c.id) || c.diagnostics?.anchor?.anchorRefusedMs !== undefined,
+      )
+      const brokenDetail = (c: (typeof broken)[number]): string => {
+        const at = c.diagnostics?.anchor?.anchorRefusedMs ?? c.startOffsetMs
+        return `${LABEL[c.kind]} anchored ${(at / 60000).toFixed(1)} min into a ${(
+          recording.durationMs / 60000
+        ).toFixed(1)} min take`
+      }
       dims.push({
         id: 'sync',
-        status: without.length ? 'fail' : 'pass',
-        ...(without.length ? { kinds: without.map((c) => c.kind) } : null),
-        detail: without.length
+        status: without.length || broken.length ? 'fail' : 'pass',
+        ...(without.length || broken.length
+          ? { kinds: [...without, ...broken].map((c) => c.kind) }
+          : null),
+        detail: broken.length
+          ? `${broken.map(brokenDetail).join('; ')} — nothing else was still recording there, so a ` +
+            'clock under that channel was wrong (core/realmClock.ts)'
+          : without.length
           ? `${without.map((c) => LABEL[c.kind]).join(' & ')} carry no anchor while the rest do — ` +
             'the alignment inputs for this take are incomplete'
           : list(

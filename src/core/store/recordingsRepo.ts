@@ -1,5 +1,10 @@
 import type { EditState, ExportJobRecord, Recording } from '../types'
 import { blobStore } from './blobStore'
+import {
+  findPlacementRepairs,
+  placementRepairLine,
+  repairPlacement,
+} from '../timeline/placement'
 
 const DB_NAME = 'inout'
 /**
@@ -88,7 +93,35 @@ async function withStore<T>(
 }
 
 function get(id: string): Promise<Recording | undefined> {
-  return withStore('readonly', (s) => s.get(id) as IDBRequest<Recording | undefined>)
+  return withStore('readonly', (s) => s.get(id) as IDBRequest<Recording | undefined>).then(
+    (r) => (r ? healOnRead(r) : r),
+  )
+}
+
+/**
+ * THE TAKES ALREADY WRITTEN WITH A BROKEN CLOCK ARE STILL IN HERE.
+ *
+ * The capture side stopped producing them (core/realmClock.ts, and
+ * measuredAudio refuses an impossible anchor at stop), but Robert's 46-minute
+ * take is on his disk as 553.6 minutes and no fix upstream of the store can
+ * reach it. So every row is checked as it is read, repaired if it is
+ * impossible, and WRITTEN BACK — once, quietly — so the editor, the take
+ * library, the export and every report agree about the same take rather than
+ * each healing its own copy.
+ *
+ * The write is best-effort by construction: a repaired row is returned whether
+ * or not it can be saved, because a take that cannot be persisted must still
+ * OPEN correctly.
+ */
+function healOnRead(r: Recording): Recording {
+  const repairs = findPlacementRepairs(r)
+  if (repairs.length === 0) return r
+  const fixed = repairPlacement(r)
+  console.warn(placementRepairLine(r.id, r.durationMs, fixed.durationMs, repairs))
+  void withStore('readwrite', (s) => s.put(fixed)).catch((err) => {
+    console.warn('[store] the take was repaired in memory but not on disk', err)
+  })
+  return fixed
 }
 
 export const recordingsRepo = {
@@ -100,7 +133,7 @@ export const recordingsRepo = {
 
   async list(): Promise<Recording[]> {
     const rows = await withStore('readonly', (s) => s.getAll() as IDBRequest<Recording[]>)
-    return rows.sort((a, b) => b.createdAt - a.createdAt)
+    return rows.map(healOnRead).sort((a, b) => b.createdAt - a.createdAt)
   },
 
   /**

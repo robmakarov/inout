@@ -681,3 +681,78 @@ describe('audio that dies in the MIDDLE of a take is convicted', () => {
     expect(d.detail).toMatch(/silent in total/)
   })
 })
+
+/**
+ * THE 553-MINUTE TAKE, and the reason the sync dimension now grades its own
+ * numbers. rec_cff9nmm7trmh, 2026-09-06: screen + tab audio, 46.1 min
+ * recorded, opened at 553.6 min with the sound 8 h 27 min after the picture.
+ * The card that was shipped when it was recorded would have printed
+ * `system-audio at 30445691ms` under a PASS.
+ */
+describe('sync — a channel anchored outside its own take', () => {
+  const SCREEN_MS = 2_768_642
+  const AUDIO_MS = 2_768_680
+  const AUDIO_OFF = 30_445_691
+
+  const broken = (): Recording => ({
+    id: 'rec_cff9nmm7trmh',
+    createdAt: 1_757_131_839_690,
+    durationMs: AUDIO_OFF + AUDIO_MS,
+    channels: [
+      {
+        id: 'c_screen',
+        kind: 'screen',
+        media: 'video',
+        mimeType: 'video/mp4',
+        blobKey: 'b_screen',
+        startOffsetMs: 0,
+        durationMs: SCREEN_MS,
+        bytes: 2_623_603_318,
+        width: 3024,
+        height: 1964,
+        fps: 60,
+        diagnostics: { anchor: { rawAnchorMs: 77.3, firstFrameDelayMs: 18.8 } },
+      },
+      {
+        id: 'c_sysaudio',
+        kind: 'system-audio',
+        media: 'audio',
+        mimeType: 'audio/webm;codecs=opus',
+        blobKey: 'b_sysaudio',
+        startOffsetMs: AUDIO_OFF,
+        durationMs: AUDIO_MS,
+        bytes: 43_636_555,
+        diagnostics: { anchor: { rawAnchorMs: 30_445_788.1, reportedInputLatencyMs: 20 } },
+      },
+    ],
+  })
+
+  const sync = (r: Recording) => buildReportCard(r).dimensions.find((d) => d.id === 'sync')!
+
+  it('FAILS, where it used to pass', () => {
+    const d = sync(broken())
+    expect(d.status).toBe('fail')
+    expect(d.kinds).toContain('system-audio')
+    expect(d.detail).toMatch(/nothing else was still recording there/)
+  })
+
+  it('FAILS on the refusal alone, even after the placement was repaired', () => {
+    // What a take made on the fixed build looks like: capture threw the anchor
+    // away at stop, so the channel is placed correctly AND says so.
+    const r = broken()
+    r.channels[1]!.startOffsetMs = 0
+    r.durationMs = AUDIO_MS
+    r.channels[1]!.diagnostics = {
+      anchor: { rawAnchorMs: 41.2, reportedInputLatencyMs: 20, anchorRefusedMs: 30_445_788 },
+    }
+    expect(sync(r).status).toBe('fail')
+  })
+
+  it('still passes the same take with both channels where they belong', () => {
+    const r = broken()
+    r.channels[1]!.startOffsetMs = 0
+    r.durationMs = AUDIO_MS
+    r.channels[1]!.diagnostics = { anchor: { rawAnchorMs: 41.2, reportedInputLatencyMs: 20 } }
+    expect(sync(r).status).toBe('pass')
+  })
+})

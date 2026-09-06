@@ -47,6 +47,7 @@ import { LATE_TICK_MS, PressureSampler, type PressureCounters } from './pressure
 import { createGLCompositor, type GLCompositor } from './compositorGL'
 import { createWGPUCompositor, wgpuDevice, type WGPUCompositor } from './compositorWGPU'
 import { trackProcessorCtor } from './frameIntake'
+import { RealmOffset } from '@core/realmClock'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
 const ROOT_DIR = 'blobs'
@@ -184,21 +185,27 @@ export interface CompositorStartMsg {
    */
   record?: boolean
   /**
-   * P9 — the MAIN THREAD'S `performance.timeOrigin`, so this worker can put a
-   * frame it read ITSELF on the main thread's clock.
+   * P9 — the MAIN THREAD'S `performance.now()` AT THE POST, so this worker can
+   * put a frame it read ITSELF on the main thread's clock.
    *
    * The composite has exactly one clock and it is the main thread's: every
    * `atMs` in every message is `performance.now()` over THERE, and the audio
    * batches carry the same. A worker's own `performance.now()` counts from a
    * different origin, so the `worker-processor` rung — the one where frames
    * never touch the main thread — would otherwise stamp its video on a clock
-   * the audio is not on. `timeOrigin` is the absolute instant each context's
-   * zero sits at, so `now() + (ours - theirs)` is their reading of now.
+   * the audio is not on.
+   *
+   * IT USED TO BE `performance.timeOrigin`, differenced against this worker's.
+   * That premise is dead: `performance.now()` stops while the machine sleeps
+   * and `timeOrigin` does not, so two realms built on opposite sides of a sleep
+   * disagree by the whole sleep — 8 h 27 min of it in Robert's 2026-09-06 take
+   * (core/realmClock.ts). A reading of the main thread's own clock is a sample
+   * the worker can measure against instead of a conversion it has to trust.
    *
    * Absent on the rungs that stamp on the main thread, where it is not needed
-   * and the delta stays 0.
+   * and the offset comes from the frames themselves.
    */
-  mainTimeOrigin?: number
+  mainNowMs?: number
 }
 
 /**
@@ -713,7 +720,6 @@ const latest: Partial<Record<'screen' | 'camera', VideoFrame>> = {}
  * mean "the page is reading them for you". Both end in the same `ingestFrame`,
  * so no stage after the intake can tell which rung it is serving.
  */
-let clockDeltaMs = 0
 const workerReaders: { cancel: () => void }[] = []
 const workerTracks = new Map<'screen' | 'camera', MediaStreamTrack>()
 const workerSourceStats = new Map<'screen' | 'camera', { frames: number; mediaSec: number }>()
@@ -761,7 +767,7 @@ function attachWorkerTrack(kind: 'screen' | 'camera', track: MediaStreamTrack): 
         st.mediaSec = value.timestamp / 1e6
       }
       // The MAIN thread's clock, which is the composite's only clock.
-      ingestFrame(kind, value, performance.now() + clockDeltaMs)
+      ingestFrame(kind, value, nowOnMainClock())
     }
   })()
 }
@@ -1318,8 +1324,11 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   W = msg.width
   H = msg.height
   FPS = msg.fps
-  // P9: frames this worker reads itself are stamped on the MAIN thread's clock.
-  clockDeltaMs = msg.mainTimeOrigin === undefined ? 0 : performance.timeOrigin - msg.mainTimeOrigin
+  // P9: frames this worker reads itself are stamped on the MAIN thread's clock,
+  // and this is the first sample of the offset that does it — on the
+  // worker-processor rung nothing else may ever carry one (a take with no audio
+  // sends this worker no `atMs` at all).
+  if (msg.mainNowMs !== undefined) noteOrigin(msg.mainNowMs)
   videoBitrate = msg.videoBitrate
   followSource = msg.followSource === true
   burstEnabled = msg.burst !== false
@@ -1540,7 +1549,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   // second. Cheap by construction — it repaints the same latest frames.
   keepAliveTimer = setInterval(() => {
     if (stopped || fatal || startedAtMs === null) return
-    const nowMain = performance.now() - performanceOriginOffset
+    const nowMain = nowOnMainClock()
     // Against the last frame that actually REACHED the encoder — see
     // lastEncodeOkMs. Reading lastEncodedMs here meant a busy encoder silently
     // suppressed the keep-alive it exists to trigger.
@@ -1563,15 +1572,18 @@ async function start(msg: CompositorStartMsg): Promise<void> {
  * worker's own performance.now() at that moment is the (constant) offset
  * between the two time origins.
  */
-let performanceOriginOffset = 0
-let originSamples = 0
+const mainRealm = new RealmOffset()
 
 function noteOrigin(mainMs: number): void {
-  const delta = performance.now() - mainMs
-  // Min-filter: message delivery can only make the worker's reading LATE
-  // relative to the main thread's stamp, never early.
-  if (originSamples === 0 || delta < performanceOriginOffset) performanceOriginOffset = delta
-  originSamples++
+  // The estimator, its direction and the reason it is not `timeOrigin`
+  // arithmetic all live in core/realmClock.ts — this is one call, not a second
+  // implementation.
+  mainRealm.note(mainMs)
+}
+
+/** This worker's own now(), on the main thread's clock. */
+function nowOnMainClock(): number {
+  return mainRealm.fromLocal()
 }
 
 async function stop(): Promise<CompositorStats> {

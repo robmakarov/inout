@@ -65,23 +65,24 @@ export interface AudioTapBatch {
   tapGapUs: number
   tapMaxGapUs: number
   /**
-   * WHEN THIS BATCH ARRIVED, ON A CLOCK THE MAIN THREAD CAN READ — and it is
-   * the reason moving the reader does not move the sound.
+   * WHEN THIS BATCH ARRIVED, ON THIS WORKER'S OWN `performance.now()` — and it
+   * is the reason moving the reader does not move the sound.
    *
    * The anchor dates sample 0 from when batches ARRIVE (measuredAudio.ts), so a
    * reader one thread away would place every take later by the cost of a
-   * postMessage: measured at +14 ms (anchor 88.3 → 102.1 ms) before this field
+   * postMessage: measured at +14 ms (anchor 88.3 -> 102.1 ms) before this field
    * existed, on a seam X14a has already shown is 10.8-17.7 ms late. A min-filter
    * strips jitter, never a constant, so it could not have absorbed it.
    *
-   * `performance.timeOrigin` differs per realm and `performance.now()` is
-   * relative to it, so the sum is the one quantity both threads agree on; the
-   * main thread subtracts its OWN origin to get the arrival in its own frame.
-   * The stamp is taken at the flush, which is the moment the batch is complete
-   * — earlier than the old stamp, and it no longer includes the main thread's
-   * own lateness.
+   * IT USED TO BE SENT AS `performance.timeOrigin + performance.now()`, on the
+   * premise that the sum is a clock both realms agree on. It is not, and the
+   * bill was Robert's 46-minute take opening as 553 minutes with the sound 8 h
+   * 27 min after the picture — see core/realmClock.ts for the measurement and
+   * the mechanism. So the stamp is now this realm's own reading and NOTHING
+   * ELSE; the main thread converts it with an offset it measures from these
+   * very messages (RealmOffset), which is a constant no sleep can move.
    */
-  stampMs: number
+  workerNowMs: number
 }
 
 export interface AudioTapEnded {
@@ -141,7 +142,7 @@ async function pump(gen: number, readable: ReadableStream<AudioData>, rate: numb
         planar,
         tapGapUs: gapUs,
         tapMaxGapUs: maxGapUs,
-        stampMs: performance.timeOrigin + performance.now(),
+        workerNowMs: performance.now(),
       },
       [planar.buffer],
     )

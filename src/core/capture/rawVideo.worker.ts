@@ -25,9 +25,11 @@
  * compositor's do. Transferring the whole MediaStreamTrackProcessor readable
  * into the worker was the obvious alternative and is rejected on purpose: the
  * arrival stamp a channel's startOffsetMs is built from would then be taken on
- * the WORKER's clock, and a worker's performance.timeOrigin is not guaranteed to
- * be the document's. Every sync number this project owns was expensive; none of
- * them is worth a clock calibration nobody asked for.
+ * the WORKER's clock, and a worker's clock is not the document's — nor is the
+ * difference recoverable from `performance.timeOrigin`, which is wall clock
+ * against a `now()` that stops when the machine sleeps (core/realmClock.ts).
+ * Every sync number this project owns was expensive; none of them is worth a
+ * clock calibration nobody asked for.
  */
 import type { PressureSignals } from '../pressure'
 import {
@@ -37,6 +39,7 @@ import {
   type PressureCounters,
 } from './pressureSampler'
 import { evenDown } from '@core/frame'
+import { RealmOffset } from '@core/realmClock'
 import { AVC_CODEC_CANDIDATES } from './avcCodecs'
 import {
   EncodedPacket,
@@ -320,17 +323,19 @@ let keepAliveTimer: ReturnType<typeof setInterval> | null = null
  * this worker's reading late, never early — the same construction the
  * compositor uses.
  */
-let originOffset = 0
-let originSamples = 0
+const mainRealm = new RealmOffset()
 
 function noteOrigin(mainMs: number): void {
-  const delta = performance.now() - mainMs
-  if (originSamples === 0 || delta < originOffset) originOffset = delta
-  originSamples++
+  // The estimator and its direction live in core/realmClock.ts. This filter was
+  // written here first (X6) and is now shared by every realm seam in the
+  // engine, because the one place that did NOT have it — the audio tap, which
+  // converted through `performance.timeOrigin` instead — shipped a 46-minute
+  // take as 553 minutes.
+  mainRealm.note(mainMs)
 }
 
 function nowOnMainClock(): number {
-  return performance.now() - originOffset
+  return mainRealm.fromLocal()
 }
 
 const stats: RawVideoStats = {

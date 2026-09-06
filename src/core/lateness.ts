@@ -40,6 +40,7 @@
  * Nothing here renders, and nothing here can change a capture decision.
  */
 import type { LatenessOwner, LatenessSummary, LatenessWindow } from './types'
+import { RealmOffset } from './realmClock'
 
 /** One frame at 60 fps. "More than one frame late" is the defect line G7 was
  *  written around; the band a card FAILS on is the Phase-1 claim (30 ms). */
@@ -357,7 +358,9 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
   const periodMs = latenessPeriodMs(opts.periodMs ?? DEFAULT_PERIOD_MS)
   const tally = new LatenessTally(periodMs)
   const t0 = performance.now()
-  const origin = performance.timeOrigin
+  /** The beat worker's clock minus this thread's, measured from the beats. It
+   *  replaces `performance.timeOrigin` arithmetic — core/realmClock.ts. */
+  const beatRealm = new RealmOffset()
   let stopped = false
   let result: LatenessSummary | null = null
   let source: 'worker-beat' | 'timer' = 'worker-beat'
@@ -415,7 +418,8 @@ export function startLateness(opts: StartOptions = {}): LatenessRun {
     // a starved worker must never be charged to the main thread, or a busy
     // machine reads as an unresponsive page. What is left is this thread's own
     // queueing delay, which is what a person calls a stall.
-    tally.push(now - t0, origin + now - due)
+    beatRealm.note(due, now)
+    tally.push(now - t0, now - beatRealm.toLocal(due))
     if (timed) tally.noteCost(performance.now() - now)
   }
 
