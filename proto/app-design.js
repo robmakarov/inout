@@ -667,14 +667,7 @@
          close you are standing to it — so it sits off the right edge in its own
          rail, exactly as the Frame strip sits off the picture, and the tools row
          is left saying only what the take is made of. */
-      `<span class="tlx__zoomwrap">` +
-      `<span class="tlx__zoom">` +
-      `<span class="tlx__zoomlabel">Zoom</span>` +
-      `<span class="tlx__zoomin">` +
-      `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button>` +
-      `<b class="tlx__len">${clock(secs)}</b>` +
-      `<button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
-      `</span></span></span>` +
+
       `<div class="tlx__body">` +
       /* THE NAMES DO NOT SCROLL. They were inside the box that widens with the
          zoom, so the first thing zooming in did was carry the lane names off
@@ -753,7 +746,7 @@
     }
     tl.querySelector('.tlx__ruler').innerHTML = html
     /* and the span between the zoom buttons is what you can SEE of it */
-    const len = tl.querySelector('.tlx__len')
+    const len = (tl.__dock || tl).querySelector('.tlx__len')
     if (len) len.textContent = clock(total / zoom)
   }
 
@@ -918,6 +911,23 @@
     const skip = (h) => {
       for (const c of cuts()) if (h > c.a && h < c.b) return c.b
       return h
+    }
+    /* the zoom buttons stand in the dock now — the rail is a floating panel and
+       floating panels belong to the layer that positions them — so the strip
+       offers the move rather than owning the press */
+    tl.zoomBy = (dir) => {
+      const now = num('--zoom') || 1
+      const next = Math.min(8, Math.max(1, dir > 0 ? now * 1.6 : now / 1.6))
+      set('--zoom', next.toFixed(3))
+      ruler(tl)
+      /* THE LAYOUT HAS TO HAPPEN BEFORE THE SCROLL. Setting scrollLeft in the
+         same breath as the width change writes it against the OLD width and the
+         browser clamps it to zero — which is why zooming looked like it did
+         nothing but add frames: it always snapped back to the start. */
+      void inner.offsetWidth
+      const w = inner.getBoundingClientRect().width
+      view.scrollLeft = Math.max(0, xOf(num('--head')) * w - view.clientWidth / 2)
+      tl.classList.toggle('is-zoomed', next > 1.001)
     }
     tl.skip = skip
     tl.speedAt = (h) => { const c = clipAt(h); return c ? c[2] : 1 }
@@ -1249,23 +1259,6 @@
         row.classList.toggle('is-off', !on)
         const lane = tl.querySelector(`.tlx__lane[data-i="${row.dataset.i}"]`)
         if (lane) lane.classList.toggle('is-off', !on)
-        e.stopPropagation()
-        return
-      }
-      const z = e.target.closest('.tlx__z')
-      if (z) {
-        const now = num('--zoom') || 1
-        const next = Math.min(8, Math.max(1, z.dataset.z === '+' ? now * 1.6 : now / 1.6))
-        set('--zoom', next.toFixed(3))
-        ruler(tl)
-        /* THE LAYOUT HAS TO HAPPEN BEFORE THE SCROLL. Setting scrollLeft in the
-           same breath as the width change writes it against the OLD width and
-           the browser clamps it to zero — which is why zooming looked like it
-           did nothing but add frames: it always snapped back to the start. */
-        void inner.offsetWidth
-        const w = inner.getBoundingClientRect().width
-        view.scrollLeft = Math.max(0, xOf(num('--head')) * w - view.clientWidth / 2)
-        tl.classList.toggle('is-zoomed', next > 1.001)
         e.stopPropagation()
         return
       }
@@ -1616,6 +1609,28 @@
        "under the play window" is a number and not a hope. The control bar still
        hands over — its own row is out while a take plays — it simply has no
        tenant any more. */
+    /* THE ZOOM RAIL IS A FLOATING PANEL LIKE THE OTHERS, so it hangs off the
+       dock and not off the drawer (Robert, 2026-09-08: "must be no delay before
+       floating panel appearing"). Inside the drawer it had to wait for the
+       drawer to stop clipping — the clip is what reveals the timeline — and that
+       wait was the delay. Out here nothing clips it, so it leaves with
+       everything else on the same clock. */
+    const zw = document.createElement('span')
+    zw.className = 'tlx__zoomwrap'
+    zw.innerHTML =
+      `<span class="tlx__zoom">` +
+      `<span class="tlx__zoomlabel">Zoom</span>` +
+      `<span class="tlx__zoomin">` +
+      `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button>` +
+      `<b class="tlx__len">0:00</b>` +
+      `<button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
+      `</span></span>`
+    zw.addEventListener('click', (e) => {
+      const b = e.target.closest('.tlx__z')
+      e.stopPropagation()
+      if (b && dock.__tl && dock.__tl.zoomBy) dock.__tl.zoomBy(b.dataset.z === '+' ? 1 : -1)
+    })
+    dock.appendChild(zw)
     cap.appendChild(dock)
     if (bar) bar.classList.add('is-watch')
     /* THE CLOCK IS BUILT WITH THE PLAYER, NOT WITH THE EDITOR (Robert,
@@ -1660,8 +1675,7 @@
     const open = dock.querySelector('.wdock__edit')
     if (open) {
       open.style.height = '0px'
-      open.classList.remove('is-open', 'is-done')
-      clearTimeout(open.__clip)
+      open.classList.remove('is-open')
       if (open.__stop) open.__stop()
       const btn = dock.querySelector('.wedit')
       if (btn) btn.setAttribute('aria-pressed', 'false')
@@ -1672,6 +1686,11 @@
       if (rail) {
         rail.classList.remove('is-in')
         setTimeout(() => rail.remove(), 440)
+      }
+      const zwOut = dock.querySelector('.tlx__zoomwrap')
+      if (zwOut) {
+        zwOut.classList.remove('is-in')
+        zwOut.style.height = '0px'
       }
       zoomTo(1)
       if (WATCH.box && WATCH.playAt) {
@@ -1728,6 +1747,18 @@
       want = Math.min(playH + DOCK_GAP + blockH, Math.round(capH * 0.55))
       target = playerBox(root, WATCH.ratio, want, true)
     }
+    /* WHERE THE STRIP WILL BE, measured in the rehearsal where everything is
+       already at its finished size: the rail is not inside the drawer any more,
+       so it has to be told the box it belongs beside. */
+    const zw = dock.querySelector('.tlx__zoomwrap')
+    const bodyEl = tlEl.querySelector('.tlx__body')
+    if (zw && bodyEl) {
+      const dr = dock.getBoundingClientRect()
+      const br = bodyEl.getBoundingClientRect()
+      zw.style.top = Math.round(br.top - dr.top) + 'px'
+      zw.style.setProperty('--zh', Math.round(br.height) + 'px')
+      zw.style.height = '0px'
+    }
     /* a timeline taller than the frame will give it is clipped, not shrunk:
        the drawer already has one honest height and it is this one */
     blockH = Math.min(blockH, want - playH - DOCK_GAP)
@@ -1747,12 +1778,7 @@
        the drawer it is asked again where its own parts go */
     if (tlEl.paintCuts) tlEl.paintCuts()
     ruler(tlEl)
-    /* THE CLIP IS FOR THE TRAVEL, NOT FOR THE REST OF TIME. The drawer has to
-       hide what is sliding through it, and then it has to stop: the zoom rail
-       stands OUTSIDE the strip's right edge, and a box that keeps clipping cuts
-       it off for good. */
-    clearTimeout(block.__clip)
-    block.__clip = setTimeout(() => block.classList.add('is-done'), 460)
+
     const btn = dock.querySelector('.wedit')
     if (btn) btn.setAttribute('aria-pressed', 'true')
     if (WATCH.box && target) {
@@ -1763,6 +1789,10 @@
     }
     const rails = root.querySelector('.wrails')
     if (rails) rails.classList.add('is-in')
+    if (zw) {
+      zw.style.height = zw.style.getPropertyValue('--zh')
+      zw.classList.add('is-in')
+    }
   }
 
   /* THE EDITOR FOLDS AWAY FIRST, THEN THE PICTURE GOES HOME (Robert,
@@ -1797,13 +1827,17 @@
     const block = dock && dock.querySelector('.wdock__edit')
     if (block) {
       block.style.height = '0px'
-      block.classList.remove('is-open', 'is-done')
-      clearTimeout(block.__clip)
+      block.classList.remove('is-open')
       if (block.__stop) block.__stop()
     }
     /* the rails leave with the editor, on the first of the two moves */
     const rails = root.querySelector('.wrails')
     if (rails) rails.classList.remove('is-in')
+    const zwc = root.querySelector('.tlx__zoomwrap')
+    if (zwc) {
+      zwc.classList.remove('is-in')
+      zwc.style.height = '0px'
+    }
     zoomTo(1)
     clearTimeout(WATCH.timer)
     WATCH.timer = setTimeout(() => watchGoHome(root, card, box), block ? 300 : 0)

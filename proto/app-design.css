@@ -1225,9 +1225,6 @@
   overflow: hidden;
   transition: height var(--dz-slide) var(--dz-ease);
 }
-/* and once it has finished travelling it stops clipping, or the zoom rail that
-   stands off the strip's right edge is cut off by the box that opened it */
-.app-proto .wdock__edit.is-done { overflow: visible; }
 .app-proto .wdock__editin { display: block; }
 
 /* THE TWO RAILS, WHERE THE APP KEEPS THEM (Robert, 2026-09-08: "show back
@@ -1248,8 +1245,15 @@
     opacity var(--dz-slide) var(--dz-ease);
 }
 .app-proto .wrails > * { pointer-events: auto; }
-.app-proto .wrails .frame-bar { transform: translateX(-14px); }
-.app-proto .wrails .player__zoom { transform: translateX(14px); }
+/* AND THE PICTURE'S TWO COME OUT FROM UNDER THE PICTURE (Robert, 2026-09-08:
+   "bg setting and zoom for play comes without animation, i said same for all
+   same panel"). They used to slide 14px and fade, which is a fade with a twitch
+   in it. Each starts its whole width plus the gap inside the picture's box —
+   and the picture is opaque and above them — so what you see is the panel being
+   drawn out from behind its edge, which is what the bar under it does and what
+   the zoom rail beside the strip does. One arrival, three panels. */
+.app-proto .wrails .frame-bar { transform: translateX(calc(-100% - 10px)); }
+.app-proto .wrails .player__zoom { transform: translateX(calc(100% + 10px)); }
 .app-proto .wrails .frame-bar,
 .app-proto .wrails .player__zoom { transition: transform var(--dz-slide) var(--dz-ease); }
 .app-proto .wrails.is-in { opacity: 1; }
@@ -1436,31 +1440,37 @@
 }
 /* THE ZOOM RAIL, OFF THE STRIP'S RIGHT EDGE (Robert, 2026-09-08: "move timeline
    zoom control vertical floating to the right outside of timeline like bg
-   settings to screen", then "too high, must be as timeline itself and by it,
-   it must come with animation from under timeline"). Same rail as the Frame
-   strip beside the picture, and the same height as the thing it belongs to: it
-   stands the full height of the strip, against its right edge.
+   settings to screen", then "must be as timeline itself and by it", then "zoom
+   goes beyond above timeline itself", then "must be no delay before floating
+   panel appearing").
 
-   AND IT COMES OUT FROM UNDER IT. The wrap is a window that begins exactly at
-   the strip's edge and clips what is left of it, so the rail travels out from
-   behind the timeline rather than appearing beside it — the same arrival the
-   editor itself makes from under the picture. */
-.app-proto .tlx { position: relative; }
+   It is the strip's own height and no more — the ruler's top to the last lane's
+   bottom, measured, not the whole tool with its row of buttons — and it lives in
+   the DOCK, beside the picture's rails, because that is where floating panels
+   live. Inside the drawer it had to wait for the drawer to stop clipping, and
+   that wait was the delay; out here nothing clips it and it leaves on the same
+   clock as the picture, the bar and the strip.
+
+   The wrap is the window it comes out of: it begins at the strip's right edge,
+   opens downward with the strip, and hides what is left of the rail behind that
+   edge — so the rail travels out from under the timeline, which is the arrival
+   every other panel in this frame makes. */
 .app-proto .tlx__zoomwrap {
   position: absolute;
-  top: 0;
-  bottom: 0;
   left: 100%;
+  top: 0;
   width: 74px;
+  height: 0;
   overflow: hidden;
   pointer-events: none;
+  transition: height var(--dz-slide) var(--dz-ease);
 }
 .app-proto .tlx__zoom {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: 10px;
   width: 58px;
+  height: var(--zh, 120px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1474,10 +1484,7 @@
   opacity: 0;
   transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
 }
-/* the drawer says when it has finished travelling; the rail leaves after it */
-.app-proto .wdock__edit.is-done .tlx__zoom { transform: none; opacity: 1; }
-/* on the editor screen there is no drawer to wait for — it is simply there */
-.app-proto .editor .tlx__zoom { transform: none; opacity: 1; }
+.app-proto .tlx__zoomwrap.is-in .tlx__zoom { transform: none; opacity: 1; }
 .app-proto .tlx__zoomlabel {
   font-family: var(--dz);
   font-weight: 600;
