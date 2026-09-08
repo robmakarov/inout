@@ -272,26 +272,38 @@
      and then --take-w, the one token the head, the feed and the control bar
      already share, is set to that width. So the app widens around the video
      instead of the video sitting in a column that was sized for a list. */
-  const WATCH = { root: null, card: null, box: null, from: null, at: null, playAt: null, playW: '', ratio: 16 / 9, timer: 0 }
-  /* WHERE THE PICTURE GOES, GIVEN THE FRAME AS IT IS NOW. Close under the bar
-     it belongs to (the head names the take it is showing) and clear of the one
-     it does not (the control bar is the app's own furniture and wants the
-     room). Asked again whenever the frame changes under it — pressing Edit
-     grows the bar, and the answer is a different box, not a guess. */
-  function playerBox(root, ratio) {
+  const WATCH = { root: null, card: null, box: null, from: null, at: null, playAt: null, playW: '', ratio: 16 / 9, timer: 0, zoom: 1, anchor: [0.5, 0.5] }
+  /* THE PLAY BAR BELONGS TO THE PLAY WINDOW, SO IT HANGS OFF ITS BOTTOM EDGE
+     (Robert, 2026-09-08: "make play panel bar under play window"). It used to
+     stand in the control bar's own slot on the floor of the frame, which put
+     sixty pixels of nothing between the picture and the controls that drive it
+     — a bar belonging to the app rather than to the take. Picture and bar are
+     one panel now: same width, ten pixels apart, and the pair is what gets
+     centred. */
+  const DOCK_GAP = 10
+  /* WHERE THE PICTURE GOES, GIVEN THE FRAME AS IT IS NOW, AND HOW TALL ITS BAR
+     IS. Close under the bar it belongs to (the head names the take it is
+     showing) and standing on the floor of the frame — the control bar's row is
+     out while a take plays, so its band is room the picture may as well have.
+     Asked again whenever the frame changes under it — pressing Edit grows the
+     dock, and the answer is a different box, not a guess. */
+  function playerBox(root, ratio, dockH, railed) {
     const cap = root.querySelector('.capture')
     const takes = root.querySelector('.takes')
     const headEl = takes && takes.querySelector('.takes__head')
-    const bar = root.querySelector('.controlbar')
     if (!cap || !headEl) return null
     const capR = cap.getBoundingClientRect()
     const headR = headEl.getBoundingClientRect()
-    const barTop = bar ? bar.getBoundingClientRect().top : capR.bottom
     const padTop = 8
     const padBottom = 30
-    const padSide = 14
+    /* while it is being edited the picture keeps a rail's width free on both
+       sides, the way .editor__player reserves --rail in the app: the Frame
+       strip and the zoom pill stand THERE, and a picture that grew into them
+       would put a control over the frame it is there to judge */
+    const padSide = railed ? 92 : 14
     const top = headR.bottom + padTop
-    const room = Math.max(120, barTop - padBottom - top)
+    const under = dockH ? dockH + DOCK_GAP : 0
+    const room = Math.max(120, capR.bottom - padBottom - top - under)
     let h = room
     let w = h * ratio
     const maxW = capR.width - 2 * padSide
@@ -343,6 +355,25 @@
     if (dur) box.appendChild(dur.cloneNode(true))
     cap.appendChild(box)
     WATCH.box = box
+    WATCH.zoom = 1
+    WATCH.anchor = [0.5, 0.5]
+    /* the wheel is the app's own gesture on the stage, and it only answers when
+       the rails are out: a picture that silently magnified with no readout
+       beside it would be a state with nothing to say what it is */
+    box.addEventListener(
+      'wheel',
+      (e) => {
+        if (!WATCH.root || !WATCH.root.querySelector('.wrails')) return
+        e.preventDefault()
+        const r = box.getBoundingClientRect()
+        zoomTo(
+          (WATCH.zoom || 1) * Math.exp(-e.deltaY * 0.0015),
+          (e.clientX - r.left) / Math.max(1, r.width),
+          (e.clientY - r.top) / Math.max(1, r.height),
+        )
+      },
+      { passive: false },
+    )
     /* THE SLOT IT CAME OUT OF, KEPT. It is also where it goes home to: the
        layout behind the player never changes, so the rect measured here is
        still true when it comes back — and measuring it again on the way out
@@ -354,7 +385,11 @@
     void box.offsetWidth
     box.classList.add('is-open')
     WATCH.ratio = ratio
-    WATCH.at = playerBox(root, ratio)
+    /* the bar is built before the box is sized, because it is what the box has
+       to leave room for — the play row is one row and its height never changes,
+       so one measurement answers it */
+    const dock = watchDock(root)
+    WATCH.at = playerBox(root, ratio, dock ? Math.round(dock.getBoundingClientRect().height) : 0)
     boxAt(box, ...WATCH.at)
     /* the frame the picture plays in, kept: shutting the drawer puts it back
        rather than measuring a second time for an answer already known */
@@ -368,7 +403,15 @@
        everything narrows with it. The floor is only there so the head's own row
        has somewhere to stand; nothing normal reaches it. */
     root.style.setProperty('--take-w', WATCH.playW)
-    watchDock(root)
+    /* and the bar takes its place under the picture with the clock stopped, so
+       the only thing it does on screen is come out from under it */
+    if (dock) {
+      dock.style.transition = 'none'
+      placeDock(root)
+      void dock.offsetWidth
+      dock.style.transition = ''
+      dock.classList.add('is-in')
+    }
   }
 
   /* THE HEAD IS THE PLAYER'S BAR WHILE IT PLAYS (Robert, 2026-09-06: "top bar
@@ -829,10 +872,91 @@
     tl.stopPlay = stop
   }
 
+  /* the picture's own position, plus the gap: one place decides where the bar
+     is, and it is the box the picture is in */
+  function placeDock(root) {
+    const dock = root.querySelector('.watchdock')
+    if (!dock || !WATCH.at) return
+    const [x, y, w, h] = WATCH.at
+    dock.style.left = Math.round(x) + 'px'
+    dock.style.top = Math.round(y + h + DOCK_GAP) + 'px'
+    dock.style.width = Math.round(w) + 'px'
+    /* the rails hug the same box, so they travel on the same numbers */
+    const rails = root.querySelector('.wrails')
+    if (rails) {
+      rails.style.left = Math.round(x) + 'px'
+      rails.style.top = Math.round(y) + 'px'
+      rails.style.width = Math.round(w) + 'px'
+      rails.style.height = Math.round(h) + 'px'
+    }
+  }
+
+  /* ---------- the rails, beside the picture, while it is being edited -------
+     Robert, 2026-09-08: "show back ground and zoom panels on left and right
+     from play window like it is in app now while editing."
+
+     They are the app's own two rails, on the app's own sides: the zoom readout
+     left of the picture, the Frame strip right of it — the arrangement the
+     editor screen already has ("move zoom and frame setting outside of screen,
+     next to it", Player.tsx). Nothing about them is re-drawn: the Frame strip is
+     LIFTED out of the editor capture, so its swatches, its inset steps and its
+     Shadow switch are the ones the app ships, and the app's own stylesheet puts
+     both of them where they go — this box is simply the stage they measure
+     themselves against, matched to the picture and moved with it. */
+  function watchRails(root) {
+    const cap = root.querySelector('.capture')
+    if (!cap) return null
+    let rails = cap.querySelector('.wrails')
+    if (rails) return rails
+    rails = document.createElement('div')
+    rails.className = 'wrails'
+    const ed = editorDoc()
+    const fb = ed && ed.querySelector('.frame-bar')
+    if (fb) rails.appendChild(fb.cloneNode(true))
+    /* THE ZOOM PANEL IS A READOUT OF A REAL ZOOM, or it is a decal. The app
+       wheel-zooms the stage and this pill says by how much and puts it back; the
+       picture answers the wheel here for the same reason, so the control on the
+       left of the frame has something true to say. */
+    const z = document.createElement('button')
+    z.type = 'button'
+    z.className = 'player__zoom'
+    z.title = 'Reset zoom'
+    z.innerHTML = `<span class="wzoom__n">1×</span>${dic('close')}`
+    z.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      zoomTo(1)
+    })
+    rails.appendChild(z)
+    cap.appendChild(rails)
+    return rails
+  }
+
+  function zoomTo(z, ax, ay) {
+    const box = WATCH.box
+    if (!box) return
+    const was = WATCH.zoom || 1
+    const next = Math.min(6, Math.max(1, z))
+    /* the anchor is taken where the zoom STARTS and kept for the way in and
+       out: moving it under a picture that is already magnified slides the frame
+       sideways, which is a pan nobody asked for */
+    if (was <= 1.001 && ax != null) WATCH.anchor = [ax, ay]
+    WATCH.zoom = next
+    const img = box.querySelector('img')
+    if (img) {
+      const a = WATCH.anchor || [0.5, 0.5]
+      img.style.transformOrigin = (a[0] * 100).toFixed(2) + '% ' + (a[1] * 100).toFixed(2) + '%'
+      img.style.transform = next > 1.001 ? `scale(${next.toFixed(3)})` : ''
+    }
+    const out = WATCH.root && WATCH.root.querySelector('.wzoom__n')
+    if (out) out.textContent = (Math.round(next * 10) / 10).toFixed(next > 1.05 ? 1 : 0) + '×'
+  }
+
   function watchDock(root) {
+    const cap = root.querySelector('.capture')
     const bar = root.querySelector('.controlbar')
-    if (!bar) return null
-    let dock = bar.querySelector('.watchdock')
+    if (!cap) return null
+    let dock = cap.querySelector('.watchdock')
     if (dock) return dock
     dock = document.createElement('div')
     dock.className = 'watchdock'
@@ -862,8 +986,13 @@
     })
     play.appendChild(edit)
     dock.appendChild(play)
-    bar.appendChild(dock)
-    bar.classList.add('is-watch')
+    /* IN THE FRAME, NOT IN THE CONTROL BAR. It hangs off the picture and the
+       picture is positioned in .capture, so this is the one parent in which
+       "under the play window" is a number and not a hope. The control bar still
+       hands over — its own row is out while a take plays — it simply has no
+       tenant any more. */
+    cap.appendChild(dock)
+    if (bar) bar.classList.add('is-watch')
     return dock
   }
 
@@ -876,15 +1005,14 @@
      to the picture's new width at the same time, and a box that moves down
      while its edges move in reads as a corner, not a drawer.
 
-     AND THE MOVE IS REHEARSED FIRST. The bar grows, the frame re-centres and
-     the room over it changes; asking for that room mid-transition reads a
-     number the layout is only passing through. So the finished state is set up
-     with the clock stopped, measured, put back, and only then started for real
-     — the picture, the bar, the width and the drawer all on one curve. */
+     AND THE MOVE IS REHEARSED FIRST. The dock grows, the picture gives up the
+     height and the frame re-centres; asking for that room mid-transition reads
+     a number the layout is only passing through. So the finished state is set
+     up with the clock stopped, measured, put back, and only then started for
+     real — the picture, the bar, the width and the drawer all on one curve. */
   function watchEdit(root) {
-    const bar = root.querySelector('.controlbar')
     const dock = watchDock(root)
-    if (!bar || !dock) return
+    if (!dock) return
     /* THE BUTTON IS A SWITCH (Robert, 2026-09-06). Pressed again it shuts the
        drawer the same way closing the player does — fold, and the picture takes
        back the room it lent. The block is thrown away rather than parked at
@@ -895,14 +1023,22 @@
       open.style.height = '0px'
       open.classList.remove('is-open')
       if (open.__stop) open.__stop()
-      bar.classList.remove('is-edit')
-      bar.style.setProperty('--dock-h', '0px')
       const btn = dock.querySelector('.wedit')
       if (btn) btn.setAttribute('aria-pressed', 'false')
+      /* the rails belong to the editor, so they go back behind the picture with
+         it — and the zoom goes back to 1× with them, because the readout that
+         says how far in you are is leaving */
+      const rail = root.querySelector('.wrails')
+      if (rail) {
+        rail.classList.remove('is-in')
+        setTimeout(() => rail.remove(), 440)
+      }
+      zoomTo(1)
       if (WATCH.box && WATCH.playAt) {
         WATCH.at = WATCH.playAt
         boxAt(WATCH.box, ...WATCH.playAt)
         root.style.setProperty('--take-w', WATCH.playW)
+        placeDock(root)
       }
       setTimeout(() => open.remove(), 440)
       return
@@ -923,42 +1059,45 @@
     const cap = root.querySelector('.capture')
     const capH = cap ? cap.getBoundingClientRect().height : 660
     const wasW = root.style.getPropertyValue('--take-w')
+    const dockW0 = dock.style.width
 
     root.classList.add('dz-nofx')
-    bar.classList.add('is-edit')
-    bar.style.setProperty('--dock-h', '0px')
+    /* the rails are built inside the rehearsal, so they take the picture's
+       CURRENT box with the clock stopped and then travel to the new one with it
+       rather than appearing where it is going to be */
+    watchRails(root)
+    placeDock(root)
     block.style.height = 'auto'
-    void bar.offsetHeight
-    /* SUMMED, NOT scrollHeight: the dock centres what it holds, and a centred
-       flex box overflows in BOTH directions while scrollHeight counts only the
-       half that hangs below — it read 152 for content standing 223 tall. */
-    const kids = [...dock.children]
-    const GAP = 10
-    const natural =
-      24 + GAP * Math.max(0, kids.length - 1) + kids.reduce((n, c) => n + c.getBoundingClientRect().height, 0)
-    const want = Math.round(Math.min(natural, capH * 0.52))
-    const blockH = Math.round(block.getBoundingClientRect().height)
-    bar.style.setProperty('--dock-h', want + 'px')
-    void bar.offsetHeight
-    const target = playerBox(root, WATCH.ratio)
+    void dock.offsetHeight
+    const playRow = dock.querySelector('.wdock__play')
+    const playH = playRow ? Math.round(playRow.getBoundingClientRect().height) : 34
+    /* THE TIMELINE'S HEIGHT IS A FUNCTION OF ITS WIDTH — its bar wraps — and
+       its width is the picture's, which is a function of the dock's height. So
+       it is measured twice: once where it stands, then again at the width the
+       answer puts it in, which is the frame it will actually land in. */
+    let blockH = Math.round(block.getBoundingClientRect().height)
+    let want = Math.min(playH + DOCK_GAP + blockH, Math.round(capH * 0.55))
+    let target = playerBox(root, WATCH.ratio, want, true)
+    if (target) {
+      dock.style.width = Math.round(target[2]) + 'px'
+      void dock.offsetHeight
+      blockH = Math.round(block.getBoundingClientRect().height)
+      want = Math.min(playH + DOCK_GAP + blockH, Math.round(capH * 0.55))
+      target = playerBox(root, WATCH.ratio, want, true)
+    }
+    /* a timeline taller than the frame will give it is clipped, not shrunk:
+       the drawer already has one honest height and it is this one */
+    blockH = Math.min(blockH, want - playH - DOCK_GAP)
     const willW = target ? Math.max(420, Math.round(target[2])) + 'px' : wasW
-    /* the timeline is stretched IN THE FRAME IT WILL LAND IN — fitted to the
-       width it has now it would overhang by the difference */
-    root.style.setProperty('--take-w', willW)
-    void bar.offsetHeight
-    root.style.setProperty('--take-w', wasW)
-    bar.classList.remove('is-edit')
-    bar.style.setProperty('--dock-h', '0px')
+    dock.style.width = dockW0
     block.style.height = '0px'
-    void bar.offsetHeight
+    void dock.offsetHeight
     root.classList.remove('dz-nofx')
     /* the rehearsal left the clock stopped: this reflow commits the starting
        frame with it running again, or the whole move happens inside one task
        and is never drawn */
-    void bar.offsetHeight
+    void dock.offsetHeight
 
-    bar.classList.add('is-edit')
-    bar.style.setProperty('--dock-h', want + 'px')
     block.style.height = blockH + 'px'
     block.classList.add('is-open')
     const btn = dock.querySelector('.wedit')
@@ -967,7 +1106,10 @@
       WATCH.at = target
       boxAt(WATCH.box, ...target)
       root.style.setProperty('--take-w', willW)
+      placeDock(root)
     }
+    const rails = root.querySelector('.wrails')
+    if (rails) rails.classList.add('is-in')
   }
 
   /* THE EDITOR FOLDS AWAY FIRST, THEN THE PICTURE GOES HOME (Robert,
@@ -981,15 +1123,17 @@
     const { root, card, box } = WATCH
     if (!card || !box) return
     WATCH.card = null
-    const cbar = root.querySelector('.controlbar')
-    const block = cbar && cbar.querySelector('.wdock__edit')
+    const dock = root.querySelector('.watchdock')
+    const block = dock && dock.querySelector('.wdock__edit')
     if (block) {
       block.style.height = '0px'
       block.classList.remove('is-open')
       if (block.__stop) block.__stop()
-      cbar.classList.remove('is-edit')
-      cbar.style.setProperty('--dock-h', '0px')
     }
+    /* the rails leave with the editor, on the first of the two moves */
+    const rails = root.querySelector('.wrails')
+    if (rails) rails.classList.remove('is-in')
+    zoomTo(1)
     clearTimeout(WATCH.timer)
     WATCH.timer = setTimeout(() => watchGoHome(root, card, box), block ? 300 : 0)
   }
@@ -999,10 +1143,11 @@
     if (takes) takes.classList.remove('is-watch')
     root.style.removeProperty('--take-w')
     const cbar = root.querySelector('.controlbar')
-    if (cbar) {
-      cbar.classList.remove('is-watch', 'is-edit')
-      cbar.style.removeProperty('--dock-h')
-    }
+    if (cbar) cbar.classList.remove('is-watch')
+    /* the bar goes back under the picture it belongs to, and the picture goes
+       home after it — in that order, so nothing is ever seen standing alone */
+    const dock = root.querySelector('.watchdock')
+    if (dock) dock.classList.remove('is-in')
     box.classList.add('is-closing')
     /* home is the slot it came out of, remembered from the way in. A card the
        list no longer holds — a tab changed under it — has no slot to go home
@@ -1018,6 +1163,8 @@
       if (bar) bar.remove()
       const dock = root.querySelector('.watchdock')
       if (dock) dock.remove()
+      const rails = root.querySelector('.wrails')
+      if (rails) rails.remove()
       WATCH.box = null
       WATCH.from = null
       WATCH.at = null
@@ -1057,7 +1204,7 @@
           watchClose()
           return
         }
-        if (e.target.closest('.watchbox, .watchbar, .watchdock')) return
+        if (e.target.closest('.watchbox, .watchbar, .watchdock, .wrails')) return
         watchClose()
       },
       true,
@@ -1211,7 +1358,9 @@
     if (!dir && !moves) return
     if (dir) {
       takes.style.setProperty('--slide-from', dir > 0 ? '100%' : '-100%')
-      takes.classList.add('is-from', 'is-clip')
+      /* is-swap puts the height on the slide's own curve, so the feed lands
+         once instead of arriving and then settling — see the stylesheet */
+      takes.classList.add('is-from', 'is-clip', 'is-swap')
       takes.appendChild(ghost)
       void list.offsetHeight
     }
@@ -1223,7 +1372,7 @@
     clearTimeout(HTIMER.get(list))
     HTIMER.set(list, setTimeout(() => {
       list.style.height = ''
-      takes.classList.remove('is-clip')
+      takes.classList.remove('is-clip', 'is-swap')
       for (const old of takes.querySelectorAll('.listghost')) old.remove()
     }, 460))
   }
@@ -1809,6 +1958,10 @@
            feed can never be reached with the wheel at all. */
         const list = e.target.closest && e.target.closest('.takes__list')
         if (list && list.scrollHeight > list.clientHeight + 2) return
+        /* AND A WHEEL ON THE PICTURE BEING EDITED IS A ZOOM, for the same
+           reason: the rail on its left is a readout of that zoom, so the
+           gesture belongs to the take and not to the screen it sits on */
+        if (e.target.closest && e.target.closest('.watchbox') && root.querySelector('.wrails')) return
         const dx = norm(e.deltaX, e.deltaMode)
         const dy = norm(e.deltaY, e.deltaMode)
         if (!dx && !dy) return

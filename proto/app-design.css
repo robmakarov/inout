@@ -205,6 +205,17 @@
   height: auto;
   margin: 0;
 }
+/* ONE MOVEMENT, ONE CURVE (Robert, 2026-09-08: "when device/cloud tab switches
+   cards feed makes extra movement after it came, slightly goes up"). The two
+   halves of a tab swap were on different curves: the slide on a decelerate, 83%
+   of the way across by 190 ms, and the HEIGHT on the ease-in-out — which had
+   moved 10 px of its 208 by then and spent the next 300 ms carrying the whole
+   feed up. So the cards arrived, and then the feed set off again. A tab swap is
+   one movement in two directions and it now rides one curve; the ease-in-out
+   stays for a search or a filter, where the height starts and stops in place
+   and nothing slides. */
+.app-proto .takes.is-swap > .takes__list,
+.app-proto .takes.is-swap > .cloud-empty { transition-timing-function: var(--dz-enter); }
 /* and nothing leans out of the column while it travels */
 .app-proto .takes.is-clip { overflow: hidden; }
 /* THE FEED THAT LEAVES, held over the list so it cannot move anything. It
@@ -535,6 +546,15 @@
    padding under the head is inside the head, so it stacked with whatever the
    app's own column gap already was and the two ends came out 8 and 24. */
 .app-proto .takes__head { display: block; padding: 0; }
+/* AND THE FEED NEVER EATS IT (Robert, 2026-09-08: "cloud tab covers part of top
+   bar, that is wrong"). `.takes` is the app's flex column and a flex item
+   shrinks before it overflows, so a tall feed — the Cloud tab's cards carry a
+   Send/Copy link row the Device tab's do not — took the height out of the HEAD.
+   The app's head is one line and never noticed; this one is two rows and clips
+   (it has to, for the player's row to swap in), so the storage line was cut off
+   and the feed looked like it had ridden up over the bar. The bar is furniture:
+   it keeps its height and the list, which scrolls, gives up the room. */
+.app-proto .takes__head { flex: none; }
 /* --feed-gap is the gap you SEE, so each side subtracts what its own neighbour
    already contributes: the storage note's line box adds 2 px above, and the app
    puts 4 px between the capture body and the control bar below. Measured, not
@@ -1134,23 +1154,30 @@
    replaced with timeline and other shit for editing."
 
    Inputs and a record button are what you need BEFORE a take; there is a
-   finished one on the screen. So the bar's own row drops out of the way and the
-   take's row comes down from ABOVE it — from the picture it belongs to, where
-   the head's row came up from below. The bar keeps its height while it is a
-   player, and grows to the timeline's when Edit is pressed. */
+   finished one on the screen. So the bar's own row drops out of the way —
+   and the take's row is not put in its place but under the PICTURE (Robert,
+   2026-09-08: "make play panel bar under play window"), because that is what it
+   drives. The control bar's band is then free, and the picture takes it: a
+   player that fills the frame it is given, with its own bar hanging off the
+   bottom edge at exactly its width. */
 .app-proto .controlbar { position: relative; }
 .app-proto .controlbar > * {
   transition: opacity var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease);
 }
-.app-proto .controlbar.is-watch > *:not(.watchdock) {
+.app-proto .controlbar.is-watch > * {
   opacity: 0;
   transform: translateY(16px);
   pointer-events: none;
 }
+/* THE BAR IS POSITIONED IN THE FRAME, LIKE THE PICTURE, and placed from the
+   picture's own box — one number decides where both are, so they cannot drift
+   apart while the box travels. */
 .app-proto .watchdock {
   position: absolute;
-  inset: 0;
-  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
+  z-index: 30;
+  transition: left var(--dz-slide) var(--dz-ease), top var(--dz-slide) var(--dz-ease),
+    width var(--dz-slide) var(--dz-ease), transform var(--dz-slide) var(--dz-ease),
+    opacity var(--dz-slide) var(--dz-ease);
   /* ALWAYS A COLUMN, even when it holds one row. As a row it sized the play row
      to its content and the transport collapsed to 189 of the 520 it is given in
      the editor; stretched, the scrubber has the width it is supposed to have,
@@ -1158,13 +1185,15 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
   gap: 10px;
-  transform: translateY(-100%);
+  /* IT COMES OUT FROM UNDER THE PLAY WINDOW, which is now literally true: it
+     starts its own height plus the gap higher, which is behind the picture, and
+     the picture is opaque and above it. */
+  transform: translateY(calc(-100% - 10px));
   opacity: 0;
   pointer-events: none;
 }
-.app-proto .controlbar.is-watch .watchdock { transform: none; opacity: 1; pointer-events: auto; }
+.app-proto .watchdock.is-in { transform: none; opacity: 1; pointer-events: auto; }
 /* SO DOES THE EDIT BAR (Robert, 2026-09-06: "make edit bar appear with
    animation too"). The dock's content is replaced, not the dock, so the swap
    sets it back above the bar with the clock stopped and then lets it come down
@@ -1191,14 +1220,56 @@
   transition: transform var(--dz-slide) var(--dz-ease);
 }
 .app-proto .wdock__edit.is-open .wdock__editin { transform: none; }
-/* and when the timeline is in it, the bar is as tall as the timeline needs */
-.app-proto .controlbar { transition: max-width var(--dz-slide) var(--dz-ease), min-height var(--dz-slide) var(--dz-ease); }
-.app-proto .controlbar.is-edit { min-height: var(--dock-h, 200px); }
-.app-proto .controlbar.is-edit .watchdock { padding: 12px 0; }
+
+/* THE TWO RAILS, WHERE THE APP KEEPS THEM (Robert, 2026-09-08: "show back
+   ground and zoom panels on left and right from play window like it is in app
+   now while editing"). This box is not a panel — it is a stand-in for the
+   app's stage, matched to the picture to the pixel and moved with it, so the
+   app's own rules (`.frame-bar { left: 100% }`, `.player__zoom { right: 100% }`,
+   both `top: 0`, both 10px clear) put the real controls exactly where the
+   editor screen puts them. Under the picture in the stack, so on the way in
+   they come out from behind its edges rather than across its face. */
+.app-proto .wrails {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  transition: left var(--dz-slide) var(--dz-ease), top var(--dz-slide) var(--dz-ease),
+    width var(--dz-slide) var(--dz-ease), height var(--dz-slide) var(--dz-ease),
+    opacity var(--dz-slide) var(--dz-ease);
+}
+.app-proto .wrails > * { pointer-events: auto; }
+.app-proto .wrails .frame-bar { transform: translateX(-14px); }
+.app-proto .wrails .player__zoom { transform: translateX(14px); }
+.app-proto .wrails .frame-bar,
+.app-proto .wrails .player__zoom { transition: transform var(--dz-slide) var(--dz-ease); }
+.app-proto .wrails.is-in { opacity: 1; }
+.app-proto .wrails.is-in .frame-bar,
+.app-proto .wrails.is-in .player__zoom { transform: none; }
+/* the pill wears the frame's own corner and the head's own type, like every
+   other control in this proposal — the app's pill is a round one */
+.app-proto .wrails .player__zoom {
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+  gap: 5px;
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.app-proto .wrails .player__zoom svg { width: 11px; height: 11px; }
+/* THE STRIP IS NOT CLIPPED TO THE PICTURE. In the app the stage is the tall
+   thing on the screen and `max-height: 100%` never bites; here the picture has
+   given half its height to the timeline, so that rule put Shadow behind a
+   scrollbar. Beside the picture there is nothing but frame, so it may use it —
+   what it must not do is stand ON the picture, and it does not. */
+.app-proto .wrails .frame-bar { max-height: none; overflow: visible; }
+/* and the picture answers the wheel, so the readout has something true to say */
+.app-proto .watchbox img { transition: transform var(--dz-fast) var(--dz-ease); }
 /* AND THE TIMELINE KEEPS ITS OWN HEIGHT. As a flex column child it shrank to
    whatever the bar happened to be, which then measured as the height the bar
    should grow to — a rehearsal that reads its own starting point. */
-.app-proto .controlbar.is-edit .watchdock > * { flex: none; }
+.app-proto .watchdock > * { flex: none; }
 /* the app's own transport, at the width it has in the editor */
 .app-proto .watchdock .transport { flex: 0 1 520px; }
 .app-proto .wdock__edit .tl,
