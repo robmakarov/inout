@@ -513,6 +513,33 @@ if (!opts.rebuild) {
   log(`capture cached — next design change rebuilds with --rebuild, no recording`)
 }
 
+/* ---------- rewrite 0: what the app no longer has ----------
+   The CACHE keeps the capture exactly as the browser gave it — that is the
+   whole point of it. The PAGES must not, when the product has since deleted
+   something the capture froze: `ships.html` is the control the proposal is
+   judged against, and a control showing a screen that no longer exists is a
+   lie in the one file whose only job is to be true.
+   ONE ENTRY so far: U4's switch pill, bottom-left of the capture screen,
+   deleted by Robert 2026-09-08 ("must not be in app this shit") while this
+   cache was recorded before it. `switchLineAbsent.test.ts` forbids it coming
+   back, so this rule is a no-op the moment the next real capture runs.
+   It REPLACES a `.app-proto .swline { display: none }` in the proto's own
+   stylesheet, which hid the same pill while the app still drew it: hiding a
+   node the product has deleted leaves it in the frozen DOM for the next reader
+   to find, and this takes it out of the page instead. */
+const GONE_FROM_THE_APP = [{ block: 'swline', why: 'U4 switch pill, deleted 2026-09-08' }]
+for (const { block } of GONE_FROM_THE_APP) {
+  const node = new RegExp(`<div class="${block}[^"]*">.*?</div>`, 'g')
+  for (const id of Object.keys(shots)) {
+    if (typeof shots[id] === 'string') shots[id] = shots[id].replace(node, '')
+  }
+  // The stylesheet is one rule per line here; a selector naming the block goes.
+  css = css
+    .split('\n')
+    .filter((line) => !line.slice(0, line.indexOf('{') + 1 || undefined).includes(block))
+    .join('\n')
+}
+
 const got = STATES.filter((s) => shots[s.id])
 if (!got.length) {
   console.error('proto-app: nothing captured')
@@ -791,13 +818,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   --app-h: /*FRAME_H*/px;
 }
 .app-proto img { display: block; }
-/* THE "1 changed" PILL IS THE HARNESS'S OWN FOOTPRINT, NOT THE APP'S. The app
-   draws it because the capture ran with ?synthetic=1, which is one switch off
-   its default — true of this capture and of no user's session. Hidden in both
-   tabs, like the install prompt the capture dismisses, so a screenshot of the
-   proto is a screenshot of the product. */
-.app-proto .swline { display: none !important; }
-
 /* THE TAKE LIST SCROLLS INSIDE THE FRAME. The proto's frame is a fixed size, so
    a list long enough to be worth testing would otherwise run off the bottom of
    it with no way to reach the end. This is the proto's own affordance, in both

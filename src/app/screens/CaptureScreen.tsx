@@ -58,7 +58,6 @@ import { ChannelChips } from '@app/components/ChannelChips'
 import { QualitySlider } from '@app/components/QualitySlider'
 import { TakesList } from '@app/components/TakesList'
 import { testPanelEnabled } from '@app/lib/testPanel'
-import { SwitchLine } from '@app/components/SwitchLine'
 import { lazy, Suspense } from 'react'
 
 /* Lazily loaded so it costs the first-paint chunk nothing for everyone who is
@@ -1032,11 +1031,10 @@ export function CaptureScreen() {
         </div>
       )}
       </div>
-      {/* U4 part 1: what is turned on, always on screen and never only behind
-          a `/?test` link — the switch that follows someone into ordinary use is
-          exactly the one no link will show them. Hidden while a take is running,
-          where nothing but the take belongs. */}
-      {!session && <SwitchLine />}
+      {/* U4 part 1 IS DELETED — Robert 2026-09-08, on a screenshot of the pill:
+          "must not be in app this shit". The switch state now lives only in the
+          `/?test` panel's own title line; the capture screen carries nothing
+          about switches at all. `switchLineAbsent.test.ts` keeps it that way. */}
       {!session && testPanelEnabled() && (
         <Suspense fallback={null}>
           <TestPanel />
