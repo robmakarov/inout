@@ -15,7 +15,7 @@
     {
       "name": "off — today’s render",
       "on": false,
-      "ms": 7992,
+      "ms": 12319,
       "bytes": 371549,
       "frames": 360,
       "refusal": null
@@ -23,7 +23,7 @@
     {
       "name": "off again — the same render twice",
       "on": false,
-      "ms": 1167,
+      "ms": 1308,
       "bytes": 371549,
       "frames": 360,
       "refusal": null
@@ -31,7 +31,7 @@
     {
       "name": "on — same as last frame",
       "on": true,
-      "ms": 627,
+      "ms": 644,
       "bytes": 262109,
       "frames": 360,
       "slots": 360,
@@ -73,7 +73,7 @@
     "packets: 360 off vs 360 on — the file keeps its picture count and its rate",
     "PIXELS DIFFER at frame 11 (99474306 bytes over the file)",
     "173 of 360 slots written instead of encoded (48.1 %), 2597 bytes; 180 found identical",
-    "render 7992 ms off → 627 ms on (12.75x) · file 371549 → 262109 bytes (0.705x)",
+    "render 12319 ms off → 644 ms on (19.13x) · file 371549 → 262109 bytes (0.705x)",
     "THE CONTROL IS EXACT: today's render run twice gives the same 360 frames byte for byte, so any difference above is this engine's",
     "frames that repeat the frame before them EXACTLY: 173 with the engine on, 0 with it off, out of 360 — the source held 180 of its pictures for two ticks"
   ],
