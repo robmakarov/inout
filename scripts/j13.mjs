@@ -15,10 +15,11 @@
  *   A  the file keeps its picture count, its rate and its length
  *   B  every copied picture decodes BIT-EXACTLY equal to the frame before it —
  *      counted, and the count must equal the number of pictures written
- *   C  no copied slot hid a real movement: at each one, TODAY's file moves by
- *      no more than encoder noise. Real movement measures ~193 levels on this
- *      fixture and noise ~3, so the floor sits at 16 and the worst seen is
- *      printed beside it.
+ *   C  no copied slot hid a real movement. The floor is MEASURED, not guessed:
+ *      in today's own file a slot whose source is unchanged moves a median of
+ *      4 and a worst of 48, while a genuinely new picture moves at least 193 —
+ *      so the floor sits at 96, in the middle of a 145-level gap, and the run
+ *      also proves the floor is not above everything the file contains.
  *
  * No PSNR anywhere: every comparison is exact bytes, and C reports a maximum
  * rather than an average so one moved pixel cannot hide in a mean.
@@ -146,45 +147,74 @@ if (files.off && files.on) {
         `before them, against ${written} written by the render`,
     )
 
-    // C — WHAT TODAY'S FILE DOES AT THOSE SAME SLOTS, and it is a MEASUREMENT
-    // rather than a gate on this engine. A copied slot is a slot whose source
-    // sample did not change, so nothing there can be hidden: the picture is the
-    // one the take held. What this number says is how far TODAY's render moves
-    // at a slot where nothing moved — the difference it invents by re-encoding
-    // the same picture again. Reported, never asserted: a floor here would be a
-    // gate on the OLD render's noise, and failing it would be failing the
-    // control rather than the change.
+    // C — NO COPIED SLOT HID A MOVEMENT, and it is a GATE again.
+    //
+    // It was demoted to a measurement on the reasoning that a floor here would
+    // gate the OLD render's noise and fail the control rather than the change.
+    // The measurement answers that: in today's own file the two populations are
+    // cleanly separated, and nothing lands between them.
+    //
+    //   slots whose source picture is identical   median 4, worst 48
+    //   slots that are a genuinely new picture    min 193, median 202
+    //
+    // So a floor at 96 — the middle of a 145-level gap — cannot be tripped by
+    // the old render's noise (worst 48) and cannot be survived by a real
+    // picture change (min 193). What it tests is the ENGINE's own claim: that
+    // every slot it copied was a slot whose source did not change. That claim
+    // is currently held "by construction", which is the one thing a gate exists
+    // to stop anybody saying — a provenance bug that marked a moving slot would
+    // still copy it bit-exactly, so GATE B would pass and only this can fail.
+    //
+    // And it proves it can fail, in the same run: if no UNcopied slot clears the
+    // floor, the floor is above everything the file contains and the gate is
+    // vacuous, which is itself a failure (note 17 — a gate that cannot fail is
+    // not a gate).
+    const FLOOR = 96
     let worst = 0
     let worstAt = -1
+    let movedUncopied = 0
+    let quietestReal = Infinity
     await eachFrame(files.off, fa.width, fa.height, (n, frame, prev) => {
-      if (!prev || !copied.has(n)) return
+      if (!prev) return
       let m = 0
       for (let i = 0; i < frame.length; i++) {
         const d = Math.abs(frame[i] - prev[i])
         if (d > m) m = d
       }
-      if (m > worst) {
-        worst = m
-        worstAt = n
+      if (copied.has(n)) {
+        if (m > worst) {
+          worst = m
+          worstAt = n
+        }
+      } else {
+        if (m >= FLOOR) movedUncopied++
+        if (m < quietestReal) quietestReal = m
       }
     })
+    const noMovementHidden = worst < FLOOR
+    const discriminates = movedUncopied > 0
+    const gateC = noMovementHidden && discriminates
     console.log(
-      `\nC (measurement, not a gate) — at the slots this engine copies, the source did not change, and ` +
-        `TODAY's file moves by up to ${worst} levels there (frame ${worstAt}). That is the difference ` +
-        `today's render invents; this engine's is zero at those slots by construction.`,
+      `\nGATE C — ${gateC ? 'PASS' : 'FAIL'}: no copied slot hid a movement. Worst copied slot moves ` +
+        `${worst} levels (frame ${worstAt}) against a floor of ${FLOOR}` +
+        (discriminates
+          ? `; ${movedUncopied} uncopied slots clear that floor, so it is known to be able to fail`
+          : `; NO uncopied slot clears the floor, so the floor is above everything in this file and the gate is vacuous`),
     )
 
     outside = {
       ran: true,
-      pass: shapeSame && countMatches,
+      pass: shapeSame && countMatches && gateC,
       shapeSame,
       copiedFrames: copied.size,
       written,
       worstMovementAtCopiedSlot: worst,
       worstAt,
-      todaysInventedMovementAtUnchangedSlots: worst,
+      floor: FLOOR,
+      uncopiedSlotsClearingFloor: movedUncopied,
+      quietestUncopiedSlot: quietestReal === Infinity ? null : quietestReal,
       frames: { off: fa.nb_read_frames, on: fb.nb_read_frames },
-      note: `A ${shapeSame} · B ${copied.size}/${written} · today's own movement at unchanged slots ${worst}`,
+      note: `A ${shapeSame} · B ${copied.size}/${written} · C worst ${worst} < ${FLOOR}, ${movedUncopied} uncopied slots above it`,
     }
   } else {
     console.log('\nffmpeg is not installed here; the outside-Chrome gates did not run')
