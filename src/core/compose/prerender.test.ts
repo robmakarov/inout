@@ -118,7 +118,10 @@ const FLAG_CASES: [string, () => void][] = [
   ['loudness', () => setLoudnessMode('r128')],
   ['audioTracks', () => setAudioTrackModeOverride('separate')],
   ['noiseGate', () => setNoiseGateOverride(true)],
-  ['sameAsLast', () => setSameAsLastOverride(true)],
+  // ON is the default since 2026-09-08 (no switch, Robert's ruling), so the
+  // state that differs from it — and that a cached file must not be served
+  // across — is OFF.
+  ['sameAsLast', () => setSameAsLastOverride(false)],
 ]
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording
