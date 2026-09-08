@@ -15,7 +15,7 @@
     {
       "name": "off — today’s render",
       "on": false,
-      "ms": 13375,
+      "ms": 10403,
       "bytes": 1266622,
       "frames": 1200,
       "refusal": null
@@ -23,7 +23,7 @@
     {
       "name": "off again — the same render twice",
       "on": false,
-      "ms": 3771,
+      "ms": 3660,
       "bytes": 1266622,
       "frames": 1200,
       "refusal": null
@@ -31,14 +31,14 @@
     {
       "name": "on — same as last frame",
       "on": true,
-      "ms": 1837,
-      "bytes": 846333,
+      "ms": 1854,
+      "bytes": 846117,
       "frames": 1200,
       "slots": 1200,
       "marked": 600,
       "duplicates": 600,
-      "written": 588,
-      "writtenBytes": 8827,
+      "written": 589,
+      "writtenBytes": 8842,
       "refusal": null
     }
   ],
@@ -46,7 +46,7 @@
     "comparedFrames": 1200,
     "identical": false,
     "firstDifferentFrame": 11,
-    "differingBytes": 412467717,
+    "differingBytes": 413001612,
     "frameCountsMatch": true,
     "durationsMatchMs": 0
   },
@@ -57,33 +57,33 @@
   },
   "repeats": {
     "off": 0,
-    "on": 588,
+    "on": 589,
     "frames": 1200
   },
   "provenance": {
     "slotsOffered": 1200,
     "slotsMarked": 600,
     "duplicatesFound": 600,
-    "picturesWritten": 588,
-    "encoderCallsSaved": 588,
+    "picturesWritten": 589,
+    "encoderCallsSaved": 589,
     "shown": true,
     "why": "every written picture is a slot whose every contributing channel handed back the same source sample as the slot before it, and whose pose, viewport and background did not move"
   },
   "verdict": [
     "packets: 1200 off vs 1200 on — the file keeps its picture count and its rate",
-    "PIXELS DIFFER at frame 11 (412467717 bytes over the file)",
-    "588 of 1200 slots written instead of encoded (49.0 %), 8827 bytes; 600 found identical",
-    "render 13375 ms off → 1837 ms on (7.28x) · file 1266622 → 846333 bytes (0.668x)",
+    "PIXELS DIFFER at frame 11 (413001612 bytes over the file)",
+    "589 of 1200 slots written instead of encoded (49.1 %), 8842 bytes; 600 found identical",
+    "render 10403 ms off → 1854 ms on (5.61x) · file 1266622 → 846117 bytes (0.668x)",
     "THE CONTROL IS EXACT: today's render run twice gives the same 1200 frames byte for byte, so any difference above is this engine's",
-    "frames that repeat the frame before them EXACTLY: 588 with the engine on, 0 with it off, out of 1200 — the source held 600 of its pictures for two ticks"
+    "frames that repeat the frame before them EXACTLY: 589 with the engine on, 0 with it off, out of 1200 — the source held 600 of its pictures for two ticks"
   ],
   "pass": true,
   "outsideChrome": {
     "ran": true,
     "pass": true,
     "shapeSame": true,
-    "copiedFrames": 588,
-    "written": 588,
+    "copiedFrames": 589,
+    "written": 589,
     "worstMovementAtCopiedSlot": 58,
     "worstAt": 309,
     "floor": 96,
@@ -93,7 +93,7 @@
       "off": "1200",
       "on": "1200"
     },
-    "note": "A true · B 588/588 · C worst 58 < 96, 599 uncopied slots above it"
+    "note": "A true · B 589/589 · C worst 58 < 96, 599 uncopied slots above it"
   },
   "savedTo": {
     "off": "/Users/rmakarov/Downloads/inout-j13/A-OFF-todays-render.mp4",
