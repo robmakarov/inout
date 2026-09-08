@@ -25,7 +25,7 @@
 import { blobStore } from '@core/store'
 import type { CompositorMsg, CompositorReply, CompositorStats } from './compositor.worker'
 import type { CameraPose, CompositeRecording, FrameIntakeKind, TakeGlue } from '../types'
-import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
+import { LIVENESS_SAMPLE_MS, SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import {
   DELIVERY_FLOOR_RATIO,
@@ -116,7 +116,7 @@ class InoutCompositeTap extends AudioWorkletProcessor {
     this.frames = 0
     this.channels = 2
     this.sawLive = false
-    this.silentTicks = 0
+    this.silentFrames = 0
     this.batchFrames = 1024
     this.batchStartTime = 0
   }
@@ -126,9 +126,17 @@ class InoutCompositeTap extends AudioWorkletProcessor {
     if (!live && !this.sawLive) {
       // Nothing yet (or no audio in this take at all): still tick so the
       // liveness detector keeps watching the video sources.
-      this.silentTicks++
-      if (this.silentTicks >= 6) {
-        this.silentTicks = 0
+      //
+      // COUNTED IN FRAMES, NOT IN QUANTA, because the interval is what matters
+      // and the quantum is not the same time everywhere. Every 6 quanta was
+      // 62.5 Hz here, which cost 1.44-2.32 ms/s of main thread on the DEFAULT
+      // take — measured, and over G7's 1 ms/s budget — to drive a detector
+      // whose shortest decision is SOURCE_STALL_MS, three whole seconds. See
+      // LIVENESS_SAMPLE_MS in sourceLiveness.ts: the rate is the detector's
+      // now, not the audio graph's.
+      this.silentFrames += 128
+      if (this.silentFrames >= sampleRate * ${LIVENESS_SAMPLE_MS / 1000}) {
+        this.silentFrames = 0
         this.port.postMessage({ tick: true })
       }
       return true
@@ -784,8 +792,15 @@ export async function startLiveCompositeV2(
   >()
   let lastFpsLog = startedAt
 
+  let lastLivenessMs = -1
   const sampleLiveness = (): void => {
     const now = performance.now()
+    // The tap still posts a BATCH every 1024 frames when audio is connected —
+    // that is the audio timeline's cadence and it is not ours to change. The
+    // detector's cadence is LIVENESS_SAMPLE_MS, so it is applied here rather
+    // than at the source, and the audio path above is left byte for byte alone.
+    if (lastLivenessMs >= 0 && now - lastLivenessMs < LIVENESS_SAMPLE_MS) return
+    lastLivenessMs = now
     for (const [kind, s] of liveness) {
       // P9: on the rung where the worker holds the track, the worker is also
       // the only thing that can count frames — take its beat as this source's

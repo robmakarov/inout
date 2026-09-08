@@ -52,6 +52,24 @@ export const SOURCE_STALL_MS = 3000
  */
 export const SOURCE_NEVER_DELIVERED_MS = 5000
 
+/**
+ * HOW OFTEN THIS DETECTOR IS ASKED — its number, not the audio graph's.
+ *
+ * The composite's caller used to sample at whatever its tap happened to post:
+ * 62.5 Hz with no audio connected (every 6 render quanta) and ~47 Hz with audio
+ * (every 1024-frame batch). Measured 2026-09-08 on the DEFAULT take, where that
+ * tap carries no audio at all and exists only for this: 1838-1892 ticks in 30 s
+ * costing 1.44 / 2.32 / 2.11 ms/s of main thread — three of three over G7's
+ * 1 ms/s budget, and more main thread than X11's whole target ever cost.
+ *
+ * Nothing needed that rate. The two decisions below are 3000 ms and 5000 ms, so
+ * 100 ms leaves THIRTY samples inside the shortest window this class can call,
+ * and a source the browser declares healthy again is noticed within a tenth of
+ * a second. What a person sees — the frozen warning, and its clearing — is
+ * unchanged, and livenessRate.test.ts holds that margin rather than trusting it.
+ */
+export const LIVENESS_SAMPLE_MS = 100
+
 export type LivenessEvent = 'stalled' | 'resumed' | 'dead'
 
 export class SourceLiveness {

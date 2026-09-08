@@ -1956,3 +1956,43 @@ KEPT: the instrument, because the claim has to stay checkable — src/core/captu
 default moved, no behaviour a user can see or hear changed. GATES: typecheck green · 1515 tests green
 (5 new) · `npm run oracle` PASS v2 (sync 35.5/52.1 ms, made=main-processor/webgpu) · PASS v1
 (sync 39.1/53.0 ms) · `npm run exp -- armcancel` green.
+
+## THE FROZEN-SCREEN CHECK RUNS AT ITS OWN RATE NOW (2026-09-08)
+
+Robert, asked in plain words whether to make it cheaper: "Yes, make it cheaper". This is the thing
+X11's measurement found instead of X11 — the composite's AudioWorklet carries no audio on the default
+take and existed only to drive `sampleLiveness()`, at 62.5 Hz.
+
+NOTHING NEEDED THAT RATE. SourceLiveness makes two decisions, 3000 ms and 5000 ms. `LIVENESS_SAMPLE_MS
+= 100` now lives with the detector rather than with the audio graph, and it is applied in two places
+because there are two cadences: the tap's silent tick is counted in FRAMES against the context's own
+sample rate (so the interval is 100 ms wherever it runs, not 6 quanta), and the audio-connected path
+is thinned in `sampleLiveness` itself — the batch cadence is the audio timeline's and is not ours to
+touch, so the PCM path is left byte for byte alone.
+
+MEASURED, PAIRED, SAME MACHINE, SAME HOUR, 45 s takes on the default `?glue=paint` (scripts/x11-mix.mjs):
+
+    old rate    2832 / 2833 ticks    2.183 / 2.464 ms/s of main thread
+    new rate     447 /  443 ticks    0.934 / 1.054 ms/s
+
+6.4× fewer wakeups and a bit under half the main-thread time — from 2.2-2.5× over G7's 1 ms/s budget
+to about at it. No overlap between the arms. Both arms ran with another of Robert's projects loading
+the machine, so the absolute numbers are inflated; the RATIO is what the pairing buys.
+
+WHAT A PERSON SEES IS UNCHANGED, and livenessRate.test.ts holds that rather than asserting it: the
+same detector driven at both cadences over the same scenarios reaches the SAME verdicts within one
+sample — freeze called, warning cleared, and H4's never-delivered camera still called dead on time.
+The direction is not always the obvious one: the freeze fires 8 ms EARLIER now (5000 ms against 5008),
+because 3000 ms after the freeze fell between two 16 ms ticks and the old grid had to wait.
+
+GATES: typecheck green · 1521 tests green (6 new) · `npm run exp -- armcancel` green · `npm run
+oracle` PASS on the engine this touches — v2, sync 53.8/70.0 ms, spur -58.9 dB, made=main-processor/
+webgpu.
+
+NOT CERTIFIED TODAY, AND NAMED RATHER THAN CARRIED QUIETLY: the v1 cell. It failed three times on
+`export throughput 0.66× / 0.77× / 0.68× < 1× realtime` while Robert's ConvertKit `ckprobe` held the
+machine at load 25 and 86 % CPU. That is not this change — v1 executes no line of it — and the proof
+is a CONTROL rather than the argument: the same cell with the change REVERTED, minutes later, read
+**export 0.62×** and did not pass either. v1's throughput number sits on its bar on this machine (it
+read 1.1× when quiet at 17:18) and is unreadable above ~35 % foreign load. Re-run `npm run oracle --
+--engine=v1` on a quiet machine to close it.

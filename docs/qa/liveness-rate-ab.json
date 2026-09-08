@@ -1,0 +1,93 @@
+{
+  "what": "the composite frozen-screen check: 62.5 Hz vs LIVENESS_SAMPLE_MS=100, paired A/B",
+  "measured": "2026-09-08, same machine same hour, 45 s takes, default ?glue=paint, headed Chrome 152, built bundle, synthetic 1280x720@30 + camera + mic + system-audio",
+  "caveat": "another of Robert ConvertKit ckprobe held the machine at load 25 through both arms — absolute ms inflated, the ratio is what the pairing buys",
+  "before": [
+    {
+      "glue": "paint",
+      "blockMs": 0,
+      "wallMs": 45759,
+      "mix": {
+        "batches": 0,
+        "ticks": 2832,
+        "handlerMs": 99.19999754428864,
+        "handlerMsPerSec": 2.1828439364304475,
+        "lagP50": 0,
+        "lagP95": 0,
+        "lagMax": 0,
+        "lagMean": 0,
+        "paddedFrames": 0,
+        "trimmedFrames": 0,
+        "sampleRate": 0,
+        "wallMs": 45445.30000001192
+      },
+      "cardVerdict": "green",
+      "cardLateness": "worst second at 16.0s: 11.5 ms late, 13.3 ms over 4 samples · p50 0.6 · p95 1.6 · max 11.5 ms at 16.6s · 0 of 181 samples over one frame (16.7 ms) · sampled every 250 ms by worker-beat, document hidden 0.0% of 45.0s"
+    },
+    {
+      "glue": "paint",
+      "blockMs": 0,
+      "wallMs": 45583,
+      "mix": {
+        "batches": 0,
+        "ticks": 2833,
+        "handlerMs": 111.9999948143959,
+        "handlerMsPerSec": 2.464295108469412,
+        "lagP50": 0,
+        "lagP95": 0,
+        "lagMax": 0,
+        "lagMean": 0,
+        "paddedFrames": 0,
+        "trimmedFrames": 0,
+        "sampleRate": 0,
+        "wallMs": 45449.10000002384
+      },
+      "cardVerdict": "green",
+      "cardLateness": "worst second at 25.0s: 27.9 ms late, 29.4 ms over 4 samples · p50 0.5 · p95 1.7 · max 27.9 ms at 25.1s · 1 of 181 samples over one frame (16.7 ms) · sampled every 250 ms by worker-beat, document hidden 0.0% of 45.0s"
+    }
+  ],
+  "after": [
+    {
+      "glue": "paint",
+      "blockMs": 0,
+      "wallMs": 45666,
+      "mix": {
+        "batches": 0,
+        "ticks": 447,
+        "handlerMs": 42.49999952316284,
+        "handlerMsPerSec": 0.934037183980825,
+        "lagP50": 0,
+        "lagP95": 0,
+        "lagMax": 0,
+        "lagMean": 0,
+        "paddedFrames": 0,
+        "trimmedFrames": 0,
+        "sampleRate": 0,
+        "wallMs": 45501.39999997616
+      },
+      "cardVerdict": "green",
+      "cardLateness": "worst second at 29.0s: 7.4 ms late, 8.3 ms over 4 samples · p50 0.5 · p95 1 · max 7.4 ms at 29.6s · 0 of 181 samples over one frame (16.7 ms) · sampled every 250 ms by worker-beat, document hidden 0.0% of 45.0s"
+    },
+    {
+      "glue": "paint",
+      "blockMs": 0,
+      "wallMs": 45253,
+      "mix": {
+        "batches": 0,
+        "ticks": 443,
+        "handlerMs": 47.60000044107437,
+        "handlerMsPerSec": 1.0544877856886405,
+        "lagP50": 0,
+        "lagP95": 0,
+        "lagMax": 0,
+        "lagMean": 0,
+        "paddedFrames": 0,
+        "trimmedFrames": 0,
+        "sampleRate": 0,
+        "wallMs": 45140.39999997616
+      },
+      "cardVerdict": "red",
+      "cardLateness": "worst second at 31.0s: 72 ms late, 74.3 ms over 4 samples · p50 0.5 · p95 1.5 · max 72 ms at 32.0s · 1 of 179 samples over one frame (16.7 ms) · sampled every 250 ms by worker-beat, document hidden 0.0% of 44.5s"
+    }
+  ]
+}
