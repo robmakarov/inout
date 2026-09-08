@@ -1607,12 +1607,73 @@
   background: var(--accent);
 }
 /* a cut is a mark on the take, not a thing in the way of the pointer */
-.app-proto .tlx__cutline {
+/* ---------- what a split leaves behind, and how it is held -----------------
+   Robert, 2026-09-08: "i cant drag grabbers in split space". The cut used to be
+   a hairline with `pointer-events: none` on it — a mark, not a control. It is a
+   boundary now: the span it opens is drawn as taken out of the take, and each
+   side of it is a grip in the same clothes as the ends of the take, because it
+   is the same gesture on a different edge. */
+.app-proto .tlx__cuts {
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+/* THE GAP IS THE PART THAT WILL NOT BE IN THE FILE, so it is drawn the way the
+   trimmed ends are drawn — the same ground, showing through the lanes it is
+   taking out — rather than as a new kind of box. */
+.app-proto .tlx__gap {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
-  background: var(--bg);
-  box-shadow: 0 0 0 1px rgba(245, 245, 247, 0.35);
-  pointer-events: none;
+  background: rgba(6, 6, 10, 0.72);
+  box-shadow: inset 1px 0 0 rgba(245, 245, 247, 0.22), inset -1px 0 0 rgba(245, 245, 247, 0.22);
 }
+/* a fresh cut has no width, so it still has to be visible: one hairline where
+   the two edges stand on the same pixel */
+.app-proto .tlx__gap.is-tightgap {
+  background: none;
+  box-shadow: 0 0 0 1px rgba(245, 245, 247, 0.35);
+  width: 1px !important;
+}
+/* the grips: the take's own bracket at cut scale, and each one carries the same
+   wide invisible edge the ends carry — a 7px target beside another 7px target
+   is the game of pixels this whole fix is about */
+.app-proto .tlx__gape {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: var(--surface-3);
+  cursor: ew-resize;
+  pointer-events: auto;
+  transition: background var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__gape::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+}
+.app-proto .tlx__gape::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 12px;
+  margin: -6px 0 0 -1px;
+  background: var(--text);
+  opacity: 0.55;
+}
+.app-proto .tlx__gape--l { left: 0; margin-left: -7px; border-radius: 7px 0 0 7px; }
+.app-proto .tlx__gape--r { right: 0; margin-right: -7px; border-radius: 0 7px 7px 0; }
+/* while the two are one, the handle straddles the boundary — which is also
+   where it stays while you pull the cut open from it */
+.app-proto .tlx__gape--mid { left: 50%; margin-left: -4px; border-radius: 7px; }
+.app-proto .tlx__gape:hover,
+.app-proto .tlx__gape.is-held { background: var(--text-faint); }

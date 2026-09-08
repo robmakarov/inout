@@ -640,6 +640,9 @@
       `<div class="tlx__view"><div class="tlx__inner">` +
       `<div class="tlx__ruler"></div><div class="tlx__lanes"></div>` +
       `<div class="tlx__dim tlx__dim--l"></div><div class="tlx__dim tlx__dim--r"></div>` +
+      /* the cuts sit over the lanes and under the ends: what a split takes out
+         is part of the take, and what the trims take out is not */
+      `<div class="tlx__cuts"></div>` +
       `<div class="tlx__trim tlx__trim--l" data-t="a"><i></i></div>` +
       `<div class="tlx__trim tlx__trim--r" data-t="b"><i></i></div>` +
       `<div class="tlx__head"></div>` +
@@ -719,13 +722,114 @@
       if (time) time.innerHTML = `${clock(t)} <span class="transport__time-sep">/</span> ${clock(secs)}`
       const fill = dock && dock.querySelector('.scrubber__fill')
       if (fill) fill.style.width = (num('--head') * 100).toFixed(2) + '%'
+      paintSplit()
+    }
+    /* AND THE BUTTON SAYS WHETHER THERE IS A CUT TO MAKE, the way the app's
+       does — a press that quietly does nothing is the same defect as a handle
+       that cannot be grabbed. It answers to BOTH movers: the playhead walking
+       onto a cut, and a cut being dragged off the playhead. */
+    const paintSplit = () => {
+      const cutBtn = tl.querySelector('.tlx__cut')
+      if (!cutBtn) return
+      const ok = splittable(num('--head'))
+      cutBtn.disabled = !ok
+      cutBtn.title = ok ? 'Split at the playhead' : 'Move the playhead inside a clip to split'
     }
     tl.paint = paint
 
+    /* ---------- A SPLIT IS A THING YOU CAN TAKE HOLD OF ---------------------
+       Robert, 2026-09-08: "i cant drag grabbers in split space". Split drew a
+       hairline on the lanes and that was the whole of it — a mark, with nothing
+       to grab and nothing to open. A cut in the app is a BOUNDARY between two
+       clips, and pulling it opens a piece of the take out of the middle; the
+       proto has to answer the same press or the timeline is a picture again.
+
+       The gesture is the one the app already arrived at over three reports
+       (Timeline.tsx: "when i split record i cant drag left part but right part
+       grabber dont moves", "cant grab normally grabers after split", "still
+       cant drag right grabber after split, barely moves"). Its three lessons,
+       kept here:
+         · a fresh split has BOTH edges on one pixel, so while they are together
+           it is ONE handle — the boundary stays where it was pressed and the
+           cut opens on whichever side you pull towards, which is reversible;
+         · once there is a gap wide enough to hold two, each edge is its own
+           handle and trims its own side;
+         · every handle carries a wide invisible edge, because a 7px target next
+           to another 7px target is a game of pixels. */
+    const TIGHT = 0.03 /* narrower than this and the two edges are one handle */
+    const cuts = () => (tl.__cuts = tl.__cuts || [])
+    /* a cut can only be made inside what is kept, and not on a cut already
+       there — the same two conditions the app's Split button reads */
+    const splittable = (h) =>
+      h > num('--a') + 0.005 &&
+      h < num('--b') - 0.005 &&
+      !cuts().some((c) => h >= c.a - 0.004 && h <= c.b + 0.004)
+    /* THE HANDLE UNDER THE POINTER IS NOT REBUILT WHILE IT IS BEING HELD. The
+       app lost a drag to exactly this — the node carrying the gesture was
+       replaced on the first move and took its listeners with it. Here the
+       listeners are on the view and the capture is too, so a rebuild would
+       survive; it would still throw away the held state 60 times a second. So
+       the boxes are MOVED, and only a change of shape (a cut appearing, or its
+       two edges parting) writes new ones. */
+    const shapeOf = (list) => list.map((c) => (c.b - c.a < TIGHT ? '1' : '2')).join(',')
+    const paintCuts = () => {
+      const layer = tl.querySelector('.tlx__cuts')
+      if (!layer) return
+      const list = cuts()
+      const shape = shapeOf(list)
+      if (layer.dataset.shape !== shape) {
+        layer.dataset.shape = shape
+        layer.innerHTML = list
+          .map((c, i) => {
+            const one = c.b - c.a < TIGHT
+            return (
+              `<div class="tlx__gap${one ? ' is-tightgap' : ''}">` +
+              (one
+                ? `<i class="tlx__gape tlx__gape--mid" data-c="${i}" data-e="mid" title="Drag to open the cut — double-click to undo the split"></i>`
+                : `<i class="tlx__gape tlx__gape--l" data-c="${i}" data-e="a" title="Drag to move this side of the cut"></i>` +
+                  `<i class="tlx__gape tlx__gape--r" data-c="${i}" data-e="b" title="Drag to move this side of the cut"></i>`) +
+              `</div>`
+            )
+          })
+          .join('')
+        /* a drag that opened the cut keeps its grip: the one handle has just
+           become two, and the one you are holding is the one you pulled */
+        if (drag && drag.cut != null) {
+          const held = layer.querySelector(`.tlx__gape[data-c="${drag.cut}"][data-e="${drag.edge}"]`) ||
+            layer.querySelector(`.tlx__gape[data-c="${drag.cut}"]`)
+          if (held) held.classList.add('is-held')
+        }
+      }
+      const boxes = layer.children
+      list.forEach((c, i) => {
+        const el = boxes[i]
+        if (!el) return
+        el.style.left = (c.a * 100).toFixed(3) + '%'
+        el.style.width = (Math.max(0, c.b - c.a) * 100).toFixed(3) + '%'
+      })
+      paintSplit()
+    }
+    tl.paintCuts = paintCuts
+    /* what a cut edge may not cross: the take's own ends and its neighbours */
+    const room = (i) => {
+      const list = cuts()
+      const lo = i > 0 ? list[i - 1].b : num('--a')
+      const hi = i < list.length - 1 ? list[i + 1].a : num('--b')
+      return [lo, hi]
+    }
+
     let drag = null
     inner.addEventListener('pointerdown', (e) => {
+      const gape = e.target.closest('.tlx__gape')
       const trim = e.target.closest('.tlx__trim')
-      drag = trim ? trim.dataset.t : 'head'
+      if (gape) {
+        const i = +gape.dataset.c
+        const c = cuts()[i]
+        /* the boundary is captured at the press, not read per frame: it is the
+           edge the user took hold of, and every move is measured against it */
+        drag = { cut: i, edge: gape.dataset.e, at: gape.dataset.e === 'b' ? c.b : c.a }
+        gape.classList.add('is-held')
+      } else drag = trim ? trim.dataset.t : 'head'
       if (trim) trim.classList.add('is-held')
       try {
         inner.setPointerCapture(e.pointerId)
@@ -739,6 +843,26 @@
     const move = (e) => {
       if (!drag) return
       const p = atX(e)
+      if (drag && drag.cut != null) {
+        const c = cuts()[drag.cut]
+        if (!c) return
+        const [lo, hi] = room(drag.cut)
+        const q = Math.min(hi, Math.max(lo, p))
+        if (drag.edge === 'mid') {
+          /* one handle, both ways: the side you pull towards is the side that
+             opens, and pulling back through the boundary closes it again */
+          if (q < drag.at) {
+            c.a = q
+            c.b = drag.at
+          } else {
+            c.a = drag.at
+            c.b = q
+          }
+        } else if (drag.edge === 'a') c.a = Math.min(q, c.b)
+        else c.b = Math.max(q, c.a)
+        paintCuts()
+        return
+      }
       if (drag === 'a') set('--a', Math.min(p, num('--b') - 0.02))
       else if (drag === 'b') set('--b', Math.max(p, num('--a') + 0.02))
       else set('--head', Math.min(Math.max(p, num('--a')), num('--b')))
@@ -746,8 +870,19 @@
     }
     const drop = () => {
       drag = null
-      for (const t of tl.querySelectorAll('.tlx__trim')) t.classList.remove('is-held')
+      for (const t of tl.querySelectorAll('.tlx__trim, .tlx__gape')) t.classList.remove('is-held')
     }
+    /* AND THE WAY BACK OUT IS THE SAME PRESS TWICE, the double-click this proto
+       already uses on its corner grip. A split you cannot undo is a decision the
+       proto makes for you. */
+    inner.addEventListener('dblclick', (e) => {
+      const gape = e.target.closest('.tlx__gape')
+      if (!gape) return
+      cuts().splice(+gape.dataset.c, 1)
+      paintCuts()
+      e.preventDefault()
+      e.stopPropagation()
+    })
     inner.addEventListener('pointermove', move)
     inner.addEventListener('pointerup', drop)
     inner.addEventListener('pointercancel', drop)
@@ -810,10 +945,16 @@
         return
       }
       if (e.target.closest('.tlx__cut')) {
-        const cut = document.createElement('i')
-        cut.className = 'tlx__cutline'
-        cut.style.left = (num('--head') * 100).toFixed(3) + '%'
-        tl.querySelector('.tlx__lanes').appendChild(cut)
+        /* the cut is made where the playhead stands, and it starts as a
+           boundary with no width — a bare split removes nothing */
+        const h = num('--head')
+        if (splittable(h)) {
+          const list = cuts()
+          list.push({ a: h, b: h })
+          list.sort((x, y) => x.a - y.a)
+          paintCuts()
+          paint()
+        }
         e.stopPropagation()
       }
     })
