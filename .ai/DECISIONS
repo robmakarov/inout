@@ -1829,3 +1829,22 @@ it buys a cheap encode and pays for it twice over in draw), and every encoder-co
 cannot resolve them). What survived was the one lever that takes nothing away from him. The lesson is
 the order: measure his OWN take first — the 43.1 % came off his file and it is what made B worth
 building, when B's own text said "zero for Robert's own headline case".
+
+session 2026-09-08 — robert (29): **"must not be in app this shit."** THE U4 STATE LINE IS DELETED,
+and the deletion is the whole ruling. He sent one screenshot — the amber pill reading `1 changed`, on
+black, nothing else — and asked what it was. It was U4 part 1, built four days earlier on his own
+robert (23) ("something turned on and something not, how to stop this shit"): always mounted bottom-left
+of the capture screen, "default" or "N changed", tap for the list and one Reset. Asked whether the
+warning should survive for the case it was BUILT for — a switch stuck in his browser since an old link,
+changing how takes record with nothing on screen saying so — he chose DELETED OUTRIGHT over both
+narrower readings (silent-when-clean, or behind `/?test`). So the cost is named and it is his: a sticky
+switch is now invisible in ordinary use, and the only place that can say so is a `/?test` link.
+`SwitchLine.tsx`, its CSS block and its mount are gone; `switchLineAbsent.test.ts` gates the absence of
+all three plus any future component that reads `changedSwitches()` into the capture tree. NOTHING THAT
+TESTING NEEDS WAS LOST: the panel's own title line still reads "Test settings · N changed" and its
+"Reset everything (N set)" still clears storage and strips the URL, and the editor's settings badge
+(his, 2026-08-30) is untouched. THE LESSON FOR WHOEVER READS THIS BEFORE BUILDING SOMETHING THAT SITS ON
+THE CAPTURE SCREEN: U4 part 1 was a true thing said in the wrong place. The capture screen is where he
+records, and a testing instrument that lives there permanently is chrome on the product no matter how
+right its content is — the panel behind `/?test` was always the right home for it, and TASKS said so
+the day it landed ("his to keep or to send back behind `/?test`").
