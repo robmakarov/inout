@@ -1902,3 +1902,57 @@ STILL OWED, and named rather than quietly carried: `sizeProbe` knows nothing abo
 so the size estimate now over-predicts by about the size win (~30 % on the fixture) on every take this
 engine serves. And the numbers above are a synthetic fixture whose duplicate structure is exactly
 50 %; his own take is 43.1 %, and it has not been run through this end to end.
+
+## X11 — THE MIX IT WOULD MOVE DOES NOT RUN ON A SHIPPED TAKE (2026-09-08)
+
+Robert: "go x11". Taken, and its own gates put the before-numbers first — "main-thread capture cost
+quoted with G7's lateness before and after", "the ~430 ms PCM port lag re-measured after". Taking them
+retired the task instead of starting it, and every sentence below is a reading rather than an argument
+(docs/qa/x11-mix-premise.json; two runs, headed Chrome 152, built bundle, synthetic 1280x720@30 +
+camera + mic + system-audio, qstep=high, 30 s takes).
+
+THE MIX IS NOT CONNECTED. liveCompositeV2 reads `hasAudio = inputs.audio.length > 0 && record`, and
+J6's default is `?glue=paint` — the composite paints and does not encode, so nothing is joined to its
+tap: no MediaStreamSource, no 0.7 gain bus, no DynamicsCompressor. Three takes on the default:
+
+    glue=paint    batches 0     ticks 1838 / 1892 / 1881    take carries no composite at all
+
+The heavy half of X11 was to re-implement that limiter as plain DSP inside the compositor worker with
+its tuned behaviour preserved bit for bit. On a take anyone records there is nothing there to
+re-implement. This is J6's doing (robert (27), 2026-09-04) and the row was never updated for it.
+
+THE ~430 ms PORT LAG IS ALREADY SPENT. It was an ANCHOR defect — a batch wall-clocked when the main
+thread received it rather than when its first sample was taken — and liveCompositeV2 fixes it by
+carrying `contextTime` per batch and deriving the wall time through `wallForContextTime()`. On
+`?glue=record`, the rung that still carries the mix:
+
+    glue=record   batches 1422 / 1421   main thread 3.63 / 3.23 ms/s
+                  lag p50 94 / 15 ms    p95 95 / 16 ms    max 166 / 51 ms
+
+X11a's gate asked for exactly this number and none was ever reported. It is reported now.
+
+AND THE ONE THING WORTH DOUBTING IS DEFENDED. `recvMs` is taken on the main thread and it is what
+compositor.worker.ts hands WallClockHold, so a stalling thread could make the hold splice silence into
+audio that lost nothing — the standing suspect behind B13's `paddedMs` of 0/0/91/366 ms across
+identical takes. Dosed at 93 % main-thread duty (b12's blocker, 1500/100 ms):
+
+    glue=record block=1500   lag p50 377 ms  p95 511  max 1613 ms   →   hold padded 0, trimmed 0
+
+The persistence window holds under a stamp 1.6 s late, which is what its header claims and what nobody
+had measured. Card RED on that cell for `lateness`, i.e. the blocker itself, as in B12 and A2.
+
+EVERY OTHER MIX IS ALREADY OFF THE MAIN THREAD, which is what retires the title: the export's
+certified mixer is plain DSP inside compose/export.worker.ts (in-thread only as the no-Worker
+fallback), and the raw channels' PCM reader moved with X11a. → X11 is AWAITING ROBERT the way A2 is:
+retire it, or keep it as work on `?glue=record`.
+
+WHAT THE MEASUREMENT FOUND INSTEAD, and it is his call because it is a capture change: on the DEFAULT
+path the composite's AudioWorklet carries no audio and exists only to tick a liveness clock at
+~62.5 Hz, and that costs **1.44 / 2.32 / 2.11 ms/s of main thread** — three of three over G7's 1 ms/s
+budget, and more than the mix this task was written to move ever cost. Nothing was done about it.
+
+KEPT: the instrument, because the claim has to stay checkable — src/core/capture/mixCost.ts,
+`__inoutMixCost()`, the composite's own console line, scripts/x11-mix.mjs. It decides nothing, no
+default moved, no behaviour a user can see or hear changed. GATES: typecheck green · 1515 tests green
+(5 new) · `npm run oracle` PASS v2 (sync 35.5/52.1 ms, made=main-processor/webgpu) · PASS v1
+(sync 39.1/53.0 ms) · `npm run exp -- armcancel` green.

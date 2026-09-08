@@ -100,6 +100,17 @@ createRoot(document.getElementById('root')!).render(
    */
   g.__inoutDoor = async () => (await import('@core/door')).readDoorLog()
   /**
+   * X11 — WHAT THE COMPOSITE'S AUDIO COST THE MAIN THREAD, for the take that
+   * just stopped. The argument for the number is in capture/mixCost.ts; the
+   * short version is that the mix graph is already on the audio thread and the
+   * main thread's whole share is one port handler, so the task's speed half has
+   * to be priced before its heavy half is built.
+   *
+   *   await __inoutMixCost()
+   */
+  g.__inoutMixCost = async () =>
+    (await import('@core/capture/mixCost')).lastCompositeMixCost()
+  /**
    * G7 — THE EDITOR'S OWN CARD. The editor samples its first 15 seconds of
    * main-thread lateness on mount (EditorScreen) and keeps the summary; this
    * grades it against the same band the take's card uses, so "no editor stall

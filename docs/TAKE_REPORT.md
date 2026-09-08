@@ -11,6 +11,7 @@ await __inoutTakeLog()               // the verdict LINE of every take, includin
 await __inoutReport(recordingObject) // grades a pasted object without storing it — re-grade a historical black box quoted in a task or docblock
 await __inoutEditorReport()          // G7: the editor's own first 15 s, graded against the same band
 await __inoutLateness(5000)          // G7: sample THIS thread for 5 s wherever you are standing
+await __inoutMixCost()               // X11: what the composite's audio cost the main thread, last take
 ```
 - `__inoutTakeLog()` is the fleet: a ring of the last 60 takes in `localStorage['inout.takeReport.v1']`, written as each take stops, so it outlives the recordings (`core/report/takeJournal.ts`). Everything else is recomputed from IndexedDB — a card is never stale.
 

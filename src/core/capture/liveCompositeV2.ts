@@ -58,6 +58,7 @@ import {
   trackProcessorCtor,
 } from './frameIntake'
 import { startElementSampler, type ElementSamplerHandle } from './frameIntakeElement'
+import { createMixCostMeter } from './mixCost'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -911,19 +912,39 @@ export async function startLiveCompositeV2(
     worker.postMessage({ cmd: 'audio', ...batch } satisfies CompositorMsg, [batch.planar.buffer])
   }
 
+  /**
+   * X11's before-number. The meter itself is in mixCost.ts and so is the
+   * argument for it; here it only has to not disturb what it measures.
+   */
+  const mixCost = createMixCostMeter()
+
+  const onTapMessage = (
+    ev: MessageEvent<{ tick?: boolean; frames?: number; channels?: number; planar?: Float32Array; contextTime?: number }>,
+    /**
+     * Taken FIRST, and now taken one frame earlier still — in the wrapper below,
+     * before this call. It is the same stamp with the same meaning: this take's
+     * only witness that is independent of the audio clock, read before the
+     * handler does any real work.
+     */
+    recvMs: number,
+  ): number | null => {
+    if (torndown) return null
+    sampleLiveness()
+    const { frames, channels, planar, contextTime } = ev.data
+    if (!frames || !channels || !planar || contextTime === undefined) return null
+    const atMs = wallForContextTime(contextTime)
+    const batch = { planar, frames, channels, atMs, recvMs }
+    if (workerReady) sendAudio(batch)
+    else queuedAudio.push(batch)
+    return recvMs - atMs
+  }
+
   tap.port.onmessage = (
     ev: MessageEvent<{ tick?: boolean; frames?: number; channels?: number; planar?: Float32Array; contextTime?: number }>,
   ) => {
-    if (torndown) return
-    // Taken FIRST: this stamp is the take's only witness that is independent of
-    // the audio clock, and the handler below does real work.
     const recvMs = performance.now()
-    sampleLiveness()
-    const { frames, channels, planar, contextTime } = ev.data
-    if (!frames || !channels || !planar || contextTime === undefined) return
-    const batch = { planar, frames, channels, atMs: wallForContextTime(contextTime), recvMs }
-    if (workerReady) sendAudio(batch)
-    else queuedAudio.push(batch)
+    const lag = onTapMessage(ev, recvMs)
+    mixCost.note(performance.now() - recvMs, lag)
   }
 
   const startReply = await call({
@@ -1181,6 +1202,11 @@ export async function startLiveCompositeV2(
         } finally {
           worker.terminate()
         }
+        // Even here the port runs: with nothing connected to the tap it ticks,
+        // and the ticks are main-thread time like any other. Finishing the
+        // meter on this path too keeps the reader from ever answering with a
+        // previous take's numbers.
+        mixCost.finish({ wallMs, paddedFrames: 0, trimmedFrames: 0, sampleRate: 0 })
         console.info(
           `[capture] composite painted ${painted} frames and encoded none (J6, ?glue=record puts the ` +
             `second encoder and its file back)`,
@@ -1207,6 +1233,12 @@ export async function startLiveCompositeV2(
         return null
       }
       latestStats = stats
+      const mix = mixCost.finish({
+        wallMs,
+        paddedFrames: stats.audioPaddedFrames,
+        trimmedFrames: stats.audioTrimmedFrames,
+        sampleRate: hasAudio ? audioCtx.sampleRate : 0,
+      })
       const seconds = Math.max(0.001, stats.durationMs / 1000)
       // O11a: where the bits went, counted rather than guessed.
       console.info(
@@ -1225,6 +1257,16 @@ export async function startLiveCompositeV2(
               `(${stats.previewMs.toFixed(0)} ms total)`
             : ''),
       )
+      // X11 — the mix's own bill, on the same line as everything else the take
+      // counted rather than guessed. `lag` is the stamp WallClockHold reads.
+      if (mix.batches > 0) {
+        console.info(
+          `[capture] composite mix — main thread ${mix.handlerMs.toFixed(1)} ms over ` +
+            `${(mix.wallMs / 1000).toFixed(1)} s = ${mix.handlerMsPerSec.toFixed(3)} ms/s ` +
+            `(budget 1); lag p50 ${mix.lagP50} ms p95 ${mix.lagP95} ms max ${mix.lagMax.toFixed(0)} ms ` +
+            `over ${mix.batches} batches; hold padded ${mix.paddedFrames} trimmed ${mix.trimmedFrames} frames`,
+        )
+      }
       const composite: CompositeRecording = {
         blobKey,
         engine: 'v2',

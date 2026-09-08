@@ -1,0 +1,262 @@
+{
+  "task": "X11 — is the mix X11 would move still the mix a take runs?",
+  "measured": "2026-09-08, worktree task/x11, built bundle on localhost, headed Chrome 152, synthetic 1280x720@30 + camera + mic + system-audio, qstep=high, 30 s takes",
+  "instrument": "src/core/capture/mixCost.ts, __inoutMixCost(), scripts/x11-mix.mjs",
+  "runs": [
+    {
+      "run": 1,
+      "base": "http://localhost:49741",
+      "cells": [
+        {
+          "glue": "paint",
+          "blockMs": 0,
+          "dutyMeasured": 0,
+          "wallMs": 30708,
+          "mix": {
+            "batches": 0,
+            "ticks": 1838,
+            "handlerMs": 43.80000281333923,
+            "handlerMsPerSec": 1.4400979402426761,
+            "lagP50": 0,
+            "lagP95": 0,
+            "lagMax": 0,
+            "lagMean": 0,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 0,
+            "wallMs": 30414.600000023842
+          },
+          "cardVerdict": "green",
+          "composite": null,
+          "audioChannels": [
+            {
+              "kind": "system-audio",
+              "durationMs": 29595,
+              "paddedMs": 125,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 125
+            },
+            {
+              "kind": "mic",
+              "durationMs": 29595,
+              "paddedMs": 125,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 125
+            }
+          ],
+          "takeId": "rec_90teb7wm4xtt"
+        },
+        {
+          "glue": "record",
+          "blockMs": 0,
+          "dutyMeasured": 0,
+          "wallMs": 31034,
+          "mix": {
+            "batches": 1422,
+            "ticks": 0,
+            "handlerMs": 111.299997985363,
+            "handlerMsPerSec": 3.6250174406438327,
+            "lagP50": 94,
+            "lagP95": 95,
+            "lagMax": 165.83333333333394,
+            "lagMean": 94.8205579127915,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 48000,
+            "wallMs": 30703.30000001192
+          },
+          "cardVerdict": "green",
+          "composite": {
+            "engine": "v2",
+            "intake": "main-processor"
+          },
+          "audioChannels": [
+            {
+              "kind": "mic",
+              "durationMs": 30270,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 80
+            },
+            {
+              "kind": "system-audio",
+              "durationMs": 30280,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 80
+            }
+          ],
+          "takeId": "rec_8ros4jq5z8ym"
+        },
+        {
+          "glue": "record",
+          "blockMs": 1500,
+          "dutyMeasured": 0.932,
+          "wallMs": 31541,
+          "mix": {
+            "batches": 1465,
+            "ticks": 0,
+            "handlerMs": 62.399999380111694,
+            "handlerMsPerSec": 1.9869510611414345,
+            "lagP50": 377,
+            "lagP95": 511,
+            "lagMax": 1612.6333332856484,
+            "lagMean": 534.6244823431264,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 48000,
+            "wallMs": 31404.900000035763
+          },
+          "cardVerdict": "red",
+          "composite": {
+            "engine": "v2",
+            "intake": "main-processor"
+          },
+          "audioChannels": [
+            {
+              "kind": "mic",
+              "durationMs": 31343,
+              "paddedMs": 123,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 68
+            },
+            {
+              "kind": "system-audio",
+              "durationMs": 31343,
+              "paddedMs": 123,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 68
+            }
+          ],
+          "takeId": "rec_984jdhbjb4d1"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "base": "http://localhost:50052",
+      "cells": [
+        {
+          "glue": "paint",
+          "blockMs": 0,
+          "dutyMeasured": 0,
+          "wallMs": 30790,
+          "mix": {
+            "batches": 0,
+            "ticks": 1892,
+            "handlerMs": 70.50000649690628,
+            "handlerMsPerSec": 2.3166786552390213,
+            "lagP50": 0,
+            "lagP95": 0,
+            "lagMax": 0,
+            "lagMean": 0,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 0,
+            "wallMs": 30431.5
+          },
+          "cardVerdict": "green",
+          "composite": null,
+          "audioChannels": [
+            {
+              "kind": "system-audio",
+              "durationMs": 30210,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 16
+            },
+            {
+              "kind": "mic",
+              "durationMs": 30210,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 16
+            }
+          ],
+          "takeId": "rec_pgskxy3pwzcy"
+        },
+        {
+          "glue": "paint",
+          "blockMs": 0,
+          "dutyMeasured": 0,
+          "wallMs": 30888,
+          "mix": {
+            "batches": 0,
+            "ticks": 1881,
+            "handlerMs": 63.99999535083771,
+            "handlerMsPerSec": 2.109593222631756,
+            "lagP50": 0,
+            "lagP95": 0,
+            "lagMax": 0,
+            "lagMean": 0,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 0,
+            "wallMs": 30337.599999964237
+          },
+          "cardVerdict": "green",
+          "composite": null,
+          "audioChannels": [
+            {
+              "kind": "system-audio",
+              "durationMs": 30040,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 5
+            },
+            {
+              "kind": "mic",
+              "durationMs": 30050,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 5
+            }
+          ],
+          "takeId": "rec_eai11yoibbrj"
+        },
+        {
+          "glue": "record",
+          "blockMs": 0,
+          "dutyMeasured": 0,
+          "wallMs": 30656,
+          "mix": {
+            "batches": 1421,
+            "ticks": 0,
+            "handlerMs": 98.10000032186508,
+            "handlerMsPerSec": 3.227207242689491,
+            "lagP50": 15,
+            "lagP95": 16,
+            "lagMax": 51.23333336909673,
+            "lagMean": 15.34679805372483,
+            "paddedFrames": 0,
+            "trimmedFrames": 0,
+            "sampleRate": 48000,
+            "wallMs": 30397.80000001192
+          },
+          "cardVerdict": "green",
+          "composite": {
+            "engine": "v2",
+            "intake": "main-processor"
+          },
+          "audioChannels": [
+            {
+              "kind": "mic",
+              "durationMs": 30260,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 4
+            },
+            {
+              "kind": "system-audio",
+              "durationMs": 30260,
+              "paddedMs": 0,
+              "trimmedMs": 0,
+              "tapMaxGapMs": 4
+            }
+          ],
+          "takeId": "rec_0d1z6eqvd0dk"
+        }
+      ]
+    }
+  ]
+}
