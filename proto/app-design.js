@@ -655,19 +655,24 @@
     tl.style.setProperty('--b', 1)
     tl.dataset.secs = secs
 
-    const SPEEDS = ['1×', '1.25×', '1.5×', '2×', '3×']
     tl.innerHTML =
       `<div class="tlx__bar">` +
       `<button type="button" class="wbtn tlx__cut" title="Split at the playhead">${ic('scissors')}<span>Split</span></button>` +
       `<button type="button" class="wbtn tlx__tight" title="Take the silences out">${ic('waves')}<span>Tighten</span></button>` +
-      `<span class="tlx__speeds">${SPEEDS.map(
-        (v, i) => `<button type="button" class="wbtn tlx__sp" aria-pressed="${i === 0}">${v}</button>`,
-      ).join('')}</span>` +
       `<span class="tlx__rate" title="This take's own size over its own length">${rate(size, secs)}</span>` +
-      `<span class="tlx__zoom"><button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
-      `<b class="tlx__len">${clock(secs)}</b>` +
-      `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button></span>` +
       `</div>` +
+      /* THE ZOOM STANDS OUTSIDE THE STRIP (Robert, 2026-09-08: "move timeline
+         zoom control vertical floating to the right outside of timeline like bg
+         settings to screen"). It is not a thing you do to the take, it is how
+         close you are standing to it — so it sits off the right edge in its own
+         rail, exactly as the Frame strip sits off the picture, and the tools row
+         is left saying only what the take is made of. */
+      `<span class="tlx__zoom">` +
+      `<span class="tlx__zoomlabel">Zoom</span>` +
+      `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button>` +
+      `<b class="tlx__len">${clock(secs)}</b>` +
+      `<button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
+      `</span>` +
       `<div class="tlx__body">` +
       /* THE NAMES DO NOT SCROLL. They were inside the box that widens with the
          zoom, so the first thing zooming in did was carry the lane names off
@@ -780,12 +785,14 @@
       if (fill) fill.style.width = ((os > 0 ? t / os : 0) * 100).toFixed(2) + '%'
       place()
       paintSplit()
-      /* and the speed row lights the speed of the clip you are standing in */
+      /* AND THE RAIL BESIDE THE BAR IS THE SPEED OF THE CLIP YOU ARE IN. One
+         control, not two (Robert, 2026-09-08: "if play speed is moved why the
+         fuck you keep it in edit? one for play and edit must be") — the row of
+         speeds under the picture is gone, and this is the same question asked
+         in the same place whether the editor is open or shut. */
       const cl = clipAt(num('--head'))
-      const v = cl ? cl[2] : 1
-      for (const b of tl.querySelectorAll('.tlx__sp')) {
-        b.setAttribute('aria-pressed', String(Math.abs((parseFloat(b.textContent) || 1) - v) < 0.001))
-      }
+      const rail = dock && dock.querySelector('.wrate')
+      if (rail && rail.showRate) rail.showRate(cl ? cl[2] : 1)
     }
     /* AND THE BUTTON SAYS WHETHER THERE IS A CUT TO MAKE, the way the app's
        does — a press that quietly does nothing is the same defect as a handle
@@ -912,6 +919,17 @@
     }
     tl.skip = skip
     tl.speedAt = (h) => { const c = clipAt(h); return c ? c[2] : 1 }
+    /* what the rail in the play row writes: the speed of the clip the playhead
+       stands in, which is the app's own rule for it ("2× — this clip only") */
+    tl.setSpeed = (v) => {
+      const c = clipAt(num('--head'))
+      if (!c) return
+      tl.__sp = tl.__sp || {}
+      tl.__sp[speedKey(c[3])] = v
+      paintLanes()
+      ruler(tl)
+      paint()
+    }
     tl.srcAtOut = srcAtOut
     tl.outAt = outAt
     tl.outSecs = outSecs
@@ -1232,22 +1250,6 @@
         e.stopPropagation()
         return
       }
-      const sp = e.target.closest('.tlx__sp')
-      if (sp) {
-        /* the clip under the playhead is the one it acts on — the app's own
-           rule, and the reason the row lights up differently as you scrub */
-        const cl = clipAt(num('--head'))
-        if (cl) {
-          tl.__sp = tl.__sp || {}
-          tl.__sp[speedKey(cl[3])] = parseFloat(sp.textContent) || 1
-        }
-        for (const b of tl.querySelectorAll('.tlx__sp')) b.setAttribute('aria-pressed', String(b === sp))
-        paintLanes()
-        ruler(tl)
-        paint()
-        e.stopPropagation()
-        return
-      }
       const z = e.target.closest('.tlx__z')
       if (z) {
         const now = num('--zoom') || 1
@@ -1336,10 +1338,9 @@
       /* AND PLAY SKIPS WHAT IS NOT IN THE FILM. A cut is material taken out, so
          the clock jumps it — a playhead that crawls through a hole is playing
          something the export will not contain. */
-      /* two multipliers and they are different facts: what the CLIP runs at in
-         the finished film, and how fast you are watching it right now */
-      const rate = dock.__rate || 1
-      let h = num('--head') + (dt / secs) * (tl.speedAt ? tl.speedAt(num('--head')) : 1) * rate
+      /* ONE multiplier, because there is one speed: the clip's. The rail beside
+         the bar sets it and the take plays at it. */
+      let h = num('--head') + (dt / secs) * (tl.speedAt ? tl.speedAt(num('--head')) : 1)
       if (tl.skip) h = tl.skip(h)
       const b = num('--b') || 1
       if (h >= b) {
@@ -1382,14 +1383,20 @@
      way to watching something: half speed for catching a detail, normal, and two
      ways to get through it faster. The editor's five are a different question —
      what the FILE runs at, per clip — and they stay where they are. */
-  const RATES = [0.5, 1, 1.5, 2]
-  const RATE_AT = 1
+  const RATES = [1, 1.25, 1.5, 2, 3]
+  const RATE_AT = 0
   function wireRate(el, dock) {
-    const set = (i) => {
-      const n = Math.max(0, Math.min(RATES.length - 1, i))
+    /* what it LOOKS like is one job and what it WRITES is another: the paint
+       comes back from the timeline as the playhead moves between clips */
+    el.showRate = (v) => {
+      const n = Math.max(0, RATES.findIndex((r) => Math.abs(r - v) < 0.001))
       el.style.setProperty('--at', ((n * 100) / RATES.length).toFixed(3) + '%')
       for (const b of el.querySelectorAll('.wrate__label')) b.classList.toggle('is-on', +b.dataset.i === n)
-      dock.__rate = RATES[n]
+    }
+    const set = (i) => {
+      const n = Math.max(0, Math.min(RATES.length - 1, i))
+      el.showRate(RATES[n])
+      if (dock.__tl && dock.__tl.setSpeed) dock.__tl.setSpeed(RATES[n])
     }
     const at = (e) => {
       const r = el.getBoundingClientRect()
@@ -1423,7 +1430,6 @@
       if (lab) set(+lab.dataset.i)
       e.stopPropagation()
     })
-    dock.__rate = RATES[RATE_AT]
   }
 
   /* the picture's own position, plus the gap: one place decides where the bar
@@ -1566,11 +1572,11 @@
       const scrub = c.querySelector('.scrubber')
       const rate = document.createElement('span')
       rate.className = 'wrate'
-      rate.title = 'Play speed — how fast you watch it; the take itself is unchanged'
+      rate.title = 'Speed of the clip the playhead is in — it plays at it and it exports at it'
       rate.innerHTML =
         `<span class="wrate__rail"></span><i class="wrate__thumb"></i>` +
         `<span class="wrate__labels">${RATES.map(
-          (v, i) => `<button type="button" class="wrate__label${i === RATE_AT ? ' is-on' : ''}" data-i="${i}">${v}×</button>`,
+          (v, i) => `<button type="button" class="wrate__label${i === RATE_AT ? ' is-on' : ''}" data-i="${i}">${v}<i>×</i></button>`,
         ).join('')}</span>`
       rate.style.setProperty('--seg', (100 / RATES.length).toFixed(3) + '%')
       rate.style.setProperty('--at', ((RATE_AT * 100) / RATES.length).toFixed(3) + '%')
@@ -1652,7 +1658,8 @@
     const open = dock.querySelector('.wdock__edit')
     if (open) {
       open.style.height = '0px'
-      open.classList.remove('is-open')
+      open.classList.remove('is-open', 'is-done')
+      clearTimeout(open.__clip)
       if (open.__stop) open.__stop()
       const btn = dock.querySelector('.wedit')
       if (btn) btn.setAttribute('aria-pressed', 'false')
@@ -1738,6 +1745,12 @@
        the drawer it is asked again where its own parts go */
     if (tlEl.paintCuts) tlEl.paintCuts()
     ruler(tlEl)
+    /* THE CLIP IS FOR THE TRAVEL, NOT FOR THE REST OF TIME. The drawer has to
+       hide what is sliding through it, and then it has to stop: the zoom rail
+       stands OUTSIDE the strip's right edge, and a box that keeps clipping cuts
+       it off for good. */
+    clearTimeout(block.__clip)
+    block.__clip = setTimeout(() => block.classList.add('is-done'), 460)
     const btn = dock.querySelector('.wedit')
     if (btn) btn.setAttribute('aria-pressed', 'true')
     if (WATCH.box && target) {
@@ -1782,7 +1795,8 @@
     const block = dock && dock.querySelector('.wdock__edit')
     if (block) {
       block.style.height = '0px'
-      block.classList.remove('is-open')
+      block.classList.remove('is-open', 'is-done')
+      clearTimeout(block.__clip)
       if (block.__stop) block.__stop()
     }
     /* the rails leave with the editor, on the first of the two moves */

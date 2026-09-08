@@ -1040,9 +1040,13 @@
    The head asks its own width and drops the labels when they no longer fit; the
    glyphs and their tooltips still say what each one is. */
 .app-proto .takes__head { container-type: inline-size; }
+/* SCOPED TO THE HEAD, and it has to be: the dock is a container too now, so an
+   unscoped @container rule was answering the DOCK's width for every button
+   inside it — Split and Tighten lost their words the moment the play row got
+   one of its own. */
 @container (max-width: 575px) {
-  .app-proto .wbtn span { display: none; }
-  .app-proto .wbtn { padding: 0 8px; }
+  .app-proto .takes__head .wbtn span { display: none; }
+  .app-proto .takes__head .wbtn { padding: 0 8px; }
 }
 /* the take's own facts, in the card's order and the card's clothes, under the
    name they belong to */
@@ -1221,6 +1225,9 @@
   overflow: hidden;
   transition: height var(--dz-slide) var(--dz-ease);
 }
+/* and once it has finished travelling it stops clipping, or the zoom rail that
+   stands off the strip's right edge is cut off by the box that opened it */
+.app-proto .wdock__edit.is-done { overflow: visible; }
 .app-proto .wdock__editin { display: block; }
 
 /* THE TWO RAILS, WHERE THE APP KEEPS THEM (Robert, 2026-09-08: "show back
@@ -1427,8 +1434,37 @@
   color: var(--text-faint);
   padding: 0 2px;
 }
-.app-proto .tlx__zoom { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.app-proto .tlx__z { padding: 0; width: var(--dz-h); justify-content: center; font-size: 15px; }
+/* THE ZOOM RAIL, OFF THE STRIP'S RIGHT EDGE (Robert, 2026-09-08: "move timeline
+   zoom control vertical floating to the right outside of timeline like bg
+   settings to screen"). Same rail as the Frame strip beside the picture — same
+   box, same corner, same Barlow caps label on top — because it is the same kind
+   of thing: not an edit, a way of looking. */
+.app-proto .tlx { position: relative; }
+.app-proto .tlx__zoom {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 8px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+}
+.app-proto .tlx__zoomlabel {
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-dim);
+}
+.app-proto .tlx__z { padding: 0; width: 100%; height: 22px; justify-content: center; font-size: 15px; }
 .app-proto .tlx__len {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1805,7 +1841,7 @@
 .app-proto .wrate {
   position: relative;
   flex: none;
-  width: 132px;
+  width: 175px;
   height: var(--dz-h);
   border-radius: 9px;
   background: var(--surface-2);
@@ -1860,3 +1896,83 @@
   border-color: color-mix(in srgb, var(--accent) 82%, #fff);
   color: var(--text);
 }
+
+/* ---------- 15. the accent, and the two round buttons in the play row -------
+   Robert, 2026-09-08: "accent color sucks, fix it". The app's own accent is the
+   system blue, and this frame is his black/grey/NEON one (proto/neon.html, his
+   rules of 2026-09-04: "black, grey and neon — no hue in any surface"). So the
+   proposal stops borrowing that blue: the accent is the neon proto's own green,
+   the one it already uses for a primary and for a chip that is on, and every
+   place that reads --accent — the playhead, an on chip, a picked take, the room
+   bar, the account mark, Download — turns with it in one move. Type on a filled
+   neon is near-black, as it is there, because white on that green is unreadable.
+   THIS IS THE ONE HUE THE PROPOSAL INTRODUCES, and it replaces one rather than
+   adding to it. */
+.app-proto {
+  --accent: #00ff88;
+  --accent-soft: rgba(0, 255, 136, 0.16);
+  --accent-ink: #04180e;
+}
+.app-proto .wbtn.wdl { color: var(--accent-ink); }
+.app-proto .wbtn.wdl:hover:not(:disabled) { color: var(--accent-ink); }
+.app-proto .wbtn.wdl svg { color: var(--accent-ink); }
+
+/* AND THE TWO ROUND ONES ARE THE ONLY ROUND THINGS LEFT (Robert: "resume record
+   button looks like shit, make better and consistent"). The resume-record
+   button was a bare red dot with no edge at all — not a control, a smudge —
+   sitting beside a 38px grey circle in a row where everything else is a 30px
+   box with a 7px corner and a 1px edge. Both are that box now: record keeps the
+   red it must have, play keeps the filled ground that says which one you press
+   most, and neither grows under the pointer (no scaling, his rule). */
+.app-proto .transport__rec,
+.app-proto .transport__play {
+  width: var(--dz-h);
+  height: var(--dz-h);
+  border-radius: 7px;
+  transform: none;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease),
+    background var(--dz-fast) var(--dz-ease);
+}
+.app-proto .transport__rec {
+  border: 1px solid var(--surface-3);
+  background: transparent;
+  color: var(--record);
+}
+.app-proto .transport__rec svg { width: 13px; height: 13px; }
+.app-proto .transport__rec:hover {
+  background: transparent;
+  border-color: var(--record);
+  transform: none;
+}
+.app-proto .transport__play {
+  width: 38px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.app-proto .transport__play:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--text-faint);
+  transform: none;
+}
+.app-proto .transport__play svg { width: 15px; height: 15px; }
+
+/* THE ROW KEEPS EVERY CONTROL AND SPENDS THE WORDS FIRST. With the editor open
+   the bar is the picture's width and the picture has given half its height to
+   the timeline, so the row is 475 px holding a transport, a speed rail and two
+   buttons — and the one thing that was quietly losing that argument was the
+   progress bar, squeezed to nothing by flex. The head already answers this the
+   same way (it drops its labels at 575): the buttons keep their glyphs, the rail
+   tightens, and the bar keeps a floor it cannot be pushed under. */
+.app-proto .watchdock { container-type: inline-size; }
+.app-proto .watchdock .scrubber { min-width: 64px; }
+@container (max-width: 660px) {
+  .app-proto .wdock__play .wbtn span { display: none; }
+  .app-proto .wdock__play .wbtn { padding: 0 8px; }
+  .app-proto .wrate { width: 138px; }
+  .app-proto .wrate__label { font-size: 9px; }
+  /* the times drop their × before they start touching each other: 1.25 and 1.5
+     still read as speeds in a rail whose every other stop is one */
+  .app-proto .wrate__label i { display: none; }
+}
+.app-proto .wrate__label i { font-style: normal; }
