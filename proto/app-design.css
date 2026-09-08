@@ -1201,25 +1201,27 @@
 /* THE PLAY ROW IS ONE ROW AND IT STAYS. The transport keeps the width the
    editor gives it and the Edit button sits beside it. */
 .app-proto .wdock__play { display: flex; align-items: center; justify-content: center; gap: 14px; }
-/* AND THE EDITOR COMES DOWN FROM UNDER IT (Robert, 2026-09-06: "edit bar must
-   come straight from under play window", "i said coming from above"). Two parts
-   doing one movement: the space opens by height, CLIPPED, and the editor itself
-   travels down through it from a full height above. So it is a thing arriving
-   from behind the play bar rather than a box being inflated — and it is still
-   straight down, which the plain slide was not: the bar narrows to the
-   picture's new width on the same clock, and a box that travels down while its
-   edges travel in reads as a corner. */
+/* AND THE EDITOR COMES OUT FROM UNDER THE PLAY WINDOW AS IT RISES (Robert,
+   2026-09-06: "edit bar must come straight from under play window", "i said
+   coming from above"; 2026-09-08: "timeline appears instantly on place, doesnt
+   slides from under play window as to goes up").
+
+   The space opens by height, CLIPPED, and the timeline is pinned to the TOP of
+   that space — which is the underside of the play bar — so it is drawn up out
+   from under the picture as the picture shrinks and the bar climbs to meet it.
+
+   IT USED TO CARRY ITS OWN TRAVEL AND THAT IS WHAT KILLED IT. The block was
+   also sliding down a full height inside the clip, which was right when the bar
+   stood still on the floor of the frame: the bar now RISES 224 px on the same
+   clock, and the two cancelled — 176 px down against 224 px up left the
+   timeline's pixels moving 48 px in 450 ms, which is a thing appearing where it
+   already is. One mover, not two: the bar. */
 .app-proto .wdock__edit {
   height: 0;
   overflow: hidden;
   transition: height var(--dz-slide) var(--dz-ease);
 }
-.app-proto .wdock__editin {
-  display: block;
-  transform: translateY(-100%);
-  transition: transform var(--dz-slide) var(--dz-ease);
-}
-.app-proto .wdock__edit.is-open .wdock__editin { transform: none; }
+.app-proto .wdock__editin { display: block; }
 
 /* THE TWO RAILS, WHERE THE APP KEEPS THEM (Robert, 2026-09-08: "show back
    ground and zoom panels on left and right from play window like it is in app
@@ -1246,18 +1248,6 @@
 .app-proto .wrails.is-in { opacity: 1; }
 .app-proto .wrails.is-in .frame-bar,
 .app-proto .wrails.is-in .player__zoom { transform: none; }
-/* the pill wears the frame's own corner and the head's own type, like every
-   other control in this proposal — the app's pill is a round one */
-.app-proto .wrails .player__zoom {
-  border-radius: 7px;
-  border: 1px solid var(--surface-3);
-  background: var(--surface);
-  gap: 5px;
-  padding: 5px 8px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.app-proto .wrails .player__zoom svg { width: 11px; height: 11px; }
 /* THE STRIP IS NOT CLIPPED TO THE PICTURE. In the app the stage is the tall
    thing on the screen and `max-height: 100%` never bites; here the picture has
    given half its height to the timeline, so that rule put Shadow behind a
@@ -1266,6 +1256,125 @@
 .app-proto .wrails .frame-bar { max-height: none; overflow: visible; }
 /* and the picture answers the wheel, so the readout has something true to say */
 .app-proto .watchbox img { transition: transform var(--dz-fast) var(--dz-ease); }
+
+/* ---------- 13. and the two rails wear what everything else wears ----------
+   Robert, 2026-09-08: "redo this bg and zoom you just copied consistent with
+   other ui". Lifted straight out of the app they were the app's own clothes in
+   a frame that has stopped wearing them: round swatches with a blue ring, a
+   filled grey step with no edge, a pill with a full radius — beside a head, a
+   timeline and a play bar that are all 1px-bordered, 7px-cornered, transparent
+   until you press them. So the STRUCTURE stays the app's (these are its own
+   nodes, its own class names, and app-sim drives them through those names) and
+   only the clothes change, which is what this whole layer is.
+
+   ONE SCALE FOR A RAIL: 24, not the head's 30. Five controls stacked in a
+   column beside a picture is a different job from four in a row across the top
+   of the frame, and at 30 the strip stood taller than the take. */
+.app-proto .frame-bar {
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+  padding: 8px 7px;
+  gap: 5px;
+}
+/* the label is the head's label: Barlow, caps, the same 0.08em */
+.app-proto .frame-bar__label {
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.app-proto .frame-bar__rule { background: var(--surface-2); margin: 2px 0; }
+/* THE COLOURS ARE A PALETTE, NOT A QUEUE. Five of them stacked one under
+   another is most of a rail's height spent on the shortest question it asks —
+   and beside a picture that has given half its own height to the timeline, the
+   strip then stood taller than the take. Three across is the same five
+   swatches, 40 px instead of 110. */
+.app-proto .frame-bar__swatches {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  gap: 5px;
+  justify-content: center;
+}
+/* A COLOUR IS STILL A SQUARE HERE. The app's swatches are circles because they
+   are the only round things on that screen; in this frame every control turns
+   the same 7px corner, and a colour has no reason to be the exception. */
+.app-proto .frame-bar__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  transition: border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .frame-bar__swatch--none { background: transparent; color: var(--dz-tertiary); }
+.app-proto .frame-bar__swatch:hover:not(:disabled) { border-color: var(--text-faint); }
+/* and the chosen one is marked the way every switch in this frame is marked —
+   by its edge coming up, not by a coloured ring around it */
+.app-proto .frame-bar__swatch--on {
+  box-shadow: none;
+  transform: none;
+  border-color: var(--text);
+}
+/* the steps are the head's button at rail scale: transparent, edged, Barlow
+   caps — the same control as Split, Tighten and the speeds under the picture */
+.app-proto .frame-bar__step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .frame-bar__step:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+.app-proto .frame-bar__step--on {
+  background: transparent;
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+/* nothing in this proposal dims by opacity — a disabled control keeps its shape
+   and loses its contrast, the same two tokens the head's buttons use */
+.app-proto .frame-bar__step:disabled {
+  opacity: 1;
+  color: var(--dz-tertiary);
+  border-color: var(--surface-2);
+}
+/* THE ZOOM READS AS A NUMBER, so it is set as one — the timeline's own figures,
+   mono and tabular, in the same edged box as everything else. */
+.app-proto .player__zoom {
+  height: 24px;
+  padding: 0 7px;
+  gap: 5px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .player__zoom:hover {
+  background: var(--surface);
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+.app-proto .player__zoom svg { width: 11px; height: 11px; }
 /* AND THE TIMELINE KEEPS ITS OWN HEIGHT. As a flex column child it shrank to
    whatever the bar happened to be, which then measured as the height the bar
    should grow to — a rehearsal that reads its own starting point. */
