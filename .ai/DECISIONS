@@ -1848,3 +1848,15 @@ THE CAPTURE SCREEN: U4 part 1 was a true thing said in the wrong place. The capt
 records, and a testing instrument that lives there permanently is chrome on the product no matter how
 right its content is — the panel behind `/?test` was always the right home for it, and TASKS said so
 the day it landed ("his to keep or to send back behind `/?test`").
+
+robert (33) 2026-09-08 — J13's GATE, RULED. Told that the engine is exact where it copies but that its file
+differs from today's by up to 4 levels of ENCODER NOISE on frames whose content never changed — because
+today's render re-encodes a picture identical to the one before it, and lossy encoding does not repeat
+itself — he chose "ship it — exactness is to the SOURCE" over holding it behind a switch, seeing the two
+files first, or killing it. So the gate is no longer "the same bytes as today", which no implementation of
+this idea can ever meet; it is: the file keeps its count, rate and length · every copied picture decodes
+bit-exactly equal to the one before it · no copied slot hid a movement · proven outside Chrome, exact
+bytes, never PSNR. The numbers behind the ruling: same source picture encoded twice differs by 3 levels,
+two genuinely different pictures by 193, a copied picture by 0.
+AND THE GATE IMMEDIATELY EARNED ITS KEEP by failing: 568 exact copies against 589 written. J13 is NOT on
+main. Nothing about this ruling licenses landing it red.
