@@ -67,6 +67,58 @@ describe('the switch count only goes down', () => {
     expect(said.join(' ')).toMatch(/only goes down/)
   })
 
+  /**
+   * THE ONE WAY THROUGH, and it is his and nobody else's. Before 2026-09-08 the
+   * gate's own header promised this exception and the code did not have it, so
+   * the only way to land a decision Robert had actually made was to push blind
+   * past the gate. Now the ruling rides in the commit message, where the
+   * history keeps it.
+   */
+  describe('a raise Robert ruled', () => {
+    const raise = (by = 1) =>
+      countIn(
+        withRows(REAL, ['newknob']).replace(
+          /SWITCH_CEILING = \d+/,
+          `SWITCH_CEILING = ${real.ceiling + by}`,
+        ),
+      )!
+    const ruling = (from: number, to: number) =>
+      `bump\n\nSWITCH_CEILING ${from} -> ${to}: robert 2026-09-08 "raise the ceiling to ${to}"\n`
+
+    it('passes when the commit carries his words and the exact numbers', () => {
+      expect(verdict(raise(), real, ruling(real.ceiling, real.ceiling + 1))).toEqual([])
+    })
+
+    it('is REFUSED when the ruling names other numbers — it cannot be copied forward', () => {
+      expect(verdict(raise(), real, ruling(real.ceiling + 5, real.ceiling + 6)).join(' ')).toMatch(
+        /only goes down/,
+      )
+    })
+
+    it('is REFUSED when the message only talks about it', () => {
+      const said = verdict(raise(), real, 'robert said raise the ceiling to 50, honest')
+      expect(said.join(' ')).toMatch(/only goes down/)
+    })
+
+    it('authorises the row it was raised for and no more', () => {
+      // His one word moves the ceiling by one; a registry that then carries two
+      // extra rows is over the new ceiling and is refused on that.
+      const two = countIn(
+        withRows(REAL, ['newknob', 'anotherknob']).replace(
+          /SWITCH_CEILING = \d+/,
+          `SWITCH_CEILING = ${real.ceiling + 1}`,
+        ),
+      )!
+      expect(verdict(two, real, ruling(real.ceiling, real.ceiling + 1)).join(' ')).toMatch(
+        /against a ceiling of/,
+      )
+    })
+
+    it('still refuses the raise itself when nothing authorises it', () => {
+      expect(verdict(raise(), real, '').join(' ')).toMatch(/only goes down/)
+    })
+  })
+
   it('REFUSES a registry that is already over its own ceiling', () => {
     const over = REAL.replace(/SWITCH_CEILING = \d+/, 'SWITCH_CEILING = 3')
     expect(verdict(countIn(over)!, null).join(' ')).toMatch(/ceiling of 3/)

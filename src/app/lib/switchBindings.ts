@@ -36,6 +36,7 @@ import { chunkedRenderEnabled } from '@core/compose/chunkedFlag'
 import { constantQualityQp } from '@core/compose/constantQuality'
 import { fullColourEnabled } from '@core/compose/fullColour'
 import { noiseGateEnabled } from '@core/compose/gateFlag'
+import { sameAsLastEnabled } from '@core/compose/sameAsLastFlag'
 import { keyframeIntervalSec } from '@core/compose/keyframeInterval'
 import { loudnessMode } from '@core/compose/loudnessMode'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
@@ -91,6 +92,7 @@ export const SWITCH_READERS: Readonly<Record<string, () => string>> = {
   prerender: () => onOff(prerenderEnabled()),
   smartcut: () => onOff(smartCutEnabled()),
   colour: () => (fullColourEnabled() ? 'all' : '420'),
+  sameaslast: () => onOff(sameAsLastEnabled()),
   cq: () => String(constantQualityQp() ?? 'off'),
   gop: () => String(keyframeIntervalSec()),
 }

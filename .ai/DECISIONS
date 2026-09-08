@@ -1829,3 +1829,43 @@ it buys a cheap encode and pays for it twice over in draw), and every encoder-co
 cannot resolve them). What survived was the one lever that takes nothing away from him. The lesson is
 the order: measure his OWN take first — the 43.1 % came off his file and it is what made B worth
 building, when B's own text said "zero for Robert's own headline case".
+
+## J13 — SAME AS LAST FRAME SHIPS ON, AND IT GETS THE FIFTIETH SWITCH (2026-09-08)
+
+TWO RULINGS IN ONE EXCHANGE, both his, both put to him because a session cannot make either.
+
+(1) THE DEFAULT. The engine was built by two sessions at once (11 were live on this project that
+afternoon, one worktree) and shipped ON by the first of them, citing a ruling — "ship it — exactness
+is to the SOURCE" — that the second session had no record of. It was put back to him rather than
+trusted. Robert: **keep it on**. So every export that takes the render path now writes the format's
+own "identical to the previous picture" for a slot whose picture is identical to the one before it,
+and the bytes of that file are not the bytes the old render made.
+
+WHAT THE RULING RESTS ON, because it is not "trust the engine". Today's render was measured twice and
+is byte-identical to itself, so the difference is attributable. Against it: at the slots this engine
+copies — slots whose SOURCE SAMPLE did not change — the old render moves by up to **58 levels of 255**
+and produces **zero** frames that repeat their predecessor exactly; this one produces 173 of 173, each
+bit-exact in Chrome and in ffmpeg. The old file is the one that invents a difference the take never
+had. The price: byte-identity with the old file is impossible (the encoder is handed half as many
+frames), max 69 levels on 5.0 % of bytes. The gain: 0.705x the file and 1.86x the render on a warm
+control, and 43.1 % fewer encoder calls on his own 90.4-minute take.
+
+(2) THE SWITCH. It shipped with NO knob — no row, no parameter — because a `?sameaslast=` row would
+have been the fiftieth switch and U4's rule is that the count only goes down. Asked whether to raise
+the ceiling or retire one of the ten `answered` rows, Robert: **"raise the ceiling to 50"**. So it has
+its `/?test` row and `?sameaslast=off` is the way back to the old render.
+
+AND THE GATE LEARNED HIS EXCEPTION. `scripts/switch-gate.mjs` refused EVERY raise, including one he
+had just authorised — its own header promised "the ceiling moves in a commit that says his name" and
+the code had no path for it, so the only way to land his decision was to push blind past the gate.
+A raise now passes only when a commit in the push carries the ruling on a line of its own:
+
+    SWITCH_CEILING 49 -> 50: robert 2026-09-08 "raise the ceiling to 50"
+
+with the real numbers (so it cannot be copied into a later raise) and his words (so the history says
+why). The count above the ceiling is still refused, and so is a raise with nothing behind it.
+
+STILL OWED, and named rather than quietly carried: `sizeProbe` knows nothing about a 14-byte picture,
+so the size estimate now over-predicts by about the size win (~30 % on the fixture) on every take this
+engine serves. And the numbers above are a synthetic fixture whose duplicate structure is exactly
+50 %; his own take is 43.1 %, and it has not been run through this end to end.

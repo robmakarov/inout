@@ -471,6 +471,16 @@ export const SWITCHES: readonly SwitchSpec[] = [
     hint: '420 is today, and it is what to send other people. `all` keeps every colour and a sharp text edge (99.3 % against 77.8 %) — but the file it makes DOES NOT OPEN IN SAFARI, ON AN IPHONE OR ON AN IPAD: measured 2026-09-05, they show a black rectangle, and Safari claims it can play it right up until it cannot. Use `all` for a file you will watch in Chrome yourself.',
   },
   {
+    id: 'sameaslast',
+    verdict: 'fallback',
+    storageKey: 'inout.compose.sameaslast',
+    kind: 'toggle',
+    fallback: 'on',
+    group: 'Export',
+    label: 'Stop making the same picture twice',
+    hint: 'Leave on. The export stops re-making the frames that are identical to the frame before them — same picture, same length, same smoothness, smaller file, faster export. Off is how it rendered before 2026-09-08; turn it off if an exported file ever looks wrong and say what you saw.',
+  },
+  {
     id: 'cq',
     verdict: 'harness',
     storageKey: 'inout.export.cq',
@@ -646,7 +656,15 @@ export const DYNAMIC_READS: ReadonlyMap<string, string> = new Map([
  * the pushed commit's parent and refuses the push if it rose. Adding a switch
  * means retiring one, or Robert saying so.
  */
-export const SWITCH_CEILING = 49
+/**
+ * THE CEILING WENT UP ONCE, AND ONLY ON HIS WORD. Robert 2026-09-08, asked
+ * whether J13 could have the fiftieth switch or should trade one of the ten
+ * `answered` rows for it: "raise the ceiling to 50". The rule it bends is his
+ * own (U4 part 4, the count only goes down) and it is bent exactly this far —
+ * `scripts/switch-gate.mjs` still refuses every raise whose commit does not
+ * carry his ruling, and refuses every count above this line.
+ */
+export const SWITCH_CEILING = 50
 
 export function switchById(id: string): SwitchSpec | undefined {
   return SWITCHES.find((s) => s.id === id)
