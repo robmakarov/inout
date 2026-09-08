@@ -54,6 +54,7 @@ import {
   skipPictureRefusal,
   splitAvcC,
   type AvcPps,
+  type AvcReference,
   type AvcSliceHeader,
   type AvcSps,
 } from './avcSkipPicture'
@@ -125,6 +126,14 @@ export class SameAsLastPlan {
   /** Output slot of the last key packet: every POC in a GOP is relative to it. */
   private idrSlot = 0
   private lastRealFrameNum = 0
+  /**
+   * HOW THE PICTURE A SKIP WOULD COPY IS HELD. Not an optimisation: this
+   * encoder marks its P pictures long-term, so the default reference list does
+   * not begin with the most recent picture and a skip slice has to name what it
+   * copies. Null = the last real picture did not say, and nothing may be
+   * written until one does.
+   */
+  private lastRealReference: AvcReference | null = null
   /**
    * The last P slice's quantizer and deblocking settings. A P slice and not
    * just "the last slice", because a key frame is an I slice and carries
@@ -346,6 +355,7 @@ export class SameAsLastPlan {
       this.realsSinceIdr++
       this.lastRealFrameNum = header.frame_num
       if (header.tail) this.lastPTail = header.tail
+      if (header.marking) this.lastRealReference = header.marking
     }
     if (!changed) return packet
     let length = 0
@@ -364,7 +374,8 @@ export class SameAsLastPlan {
     const sps = this.sps
     const pps = this.pps
     const tail = this.lastPTail
-    if (!sps || !pps || !tail || this.pocStep === null) return null
+    const reference = this.lastRealReference
+    if (!sps || !pps || !tail || !reference || this.pocStep === null) return null
     const nal = buildSkipSlice(
       sps,
       pps,
@@ -378,6 +389,7 @@ export class SameAsLastPlan {
         disable_deblocking_filter_idc: tail.disable_deblocking_filter_idc,
       },
       ((entry.slot - this.idrSlot) * this.pocStep) % maxPicOrderCntLsb(sps),
+      reference,
     )
     const data = avccWrap(nal)
     this.stats.written++

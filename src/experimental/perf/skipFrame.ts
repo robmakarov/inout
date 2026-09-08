@@ -189,6 +189,7 @@ export async function runSkipFrame(opts: { width?: number; height?: number; fram
       disable_deblocking_filter_idc: hAt.tail?.disable_deblocking_filter_idc ?? 0,
     },
     injectedPoc,
+    hAt.marking ?? { kind: 'short', picNum: hAt.frame_num },
   )
   const skipChunk = new Uint8Array(4 + skipNal.length)
   new DataView(skipChunk.buffer).setUint32(0, skipNal.length)

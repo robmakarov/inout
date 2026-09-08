@@ -53,6 +53,33 @@ describe('the stream this machine actually emits', () => {
   })
 })
 
+describe('how this encoder holds its pictures — the defect that cost a run', () => {
+  it('marks its own P pictures long-term, which is why a skip slice cannot trust the default list', () => {
+    const p = parseSliceHeader(firstNal(FIXTURE_PACKETS[1].data), sps, pps)!
+    expect(p.marking).not.toBeNull()
+    // If this ever comes back short-term, the encoder changed and the reason
+    // for `ref_pic_list_modification` in the skip slice changed with it — the
+    // slice stays correct either way, because it NAMES what it copies.
+    expect(p.marking!.kind).toBe('long')
+  })
+
+  it('names a long-term picture by its own number', () => {
+    const ref = { kind: 'long' as const, picNum: 1 }
+    const nal = buildSkipSlice(sps, pps, { frame_num: 3, slice_qp_delta: 0, disable_deblocking_filter_idc: 0 }, 7, ref)
+    const r = new BitReader(BitReader.unescape(nal.subarray(1)))
+    r.ue() // first_mb_in_slice
+    r.ue() // slice_type
+    r.ue() // pic_parameter_set_id
+    r.u(sps.log2_max_frame_num_minus4 + 4)
+    r.u(sps.log2_max_pic_order_cnt_lsb_minus4 + 4)
+    r.flag() // num_ref_idx_active_override_flag
+    expect(r.flag()).toBe(true) // ref_pic_list_modification_flag_l0
+    expect(r.ue()).toBe(2) // pick by long-term picture number
+    expect(r.ue()).toBe(1) // and that number is the one it was given
+    expect(r.ue()).toBe(3)
+  })
+})
+
 describe('what the engine refuses', () => {
   it('refuses CABAC by name rather than writing a slice it cannot write', () => {
     expect(skipPictureRefusal(sps, { ...pps, entropy_coding_mode_flag: true })).toMatch(/CABAC/)
@@ -122,10 +149,16 @@ describe('renumbering a picture in place', () => {
 
 describe('the picture that means "identical to the one before it"', () => {
   const mbs = (sps.pic_width_in_mbs_minus1 + 1) * (sps.pic_height_in_map_units_minus1 + 1)
-  const nal = buildSkipSlice(sps, pps, { frame_num: 4, slice_qp_delta: 3, disable_deblocking_filter_idc: 0 }, 9)
+  const nal = buildSkipSlice(
+    sps,
+    pps,
+    { frame_num: 4, slice_qp_delta: 3, disable_deblocking_filter_idc: 0 },
+    9,
+    { kind: 'short', picNum: 3 },
+  )
 
   it('is a non-reference P slice, and small', () => {
-    expect(nal.length).toBeLessThanOrEqual(16)
+    expect(nal.length).toBeLessThanOrEqual(18)
     expect((nal[0] >> 5) & 3).toBe(0) // nal_ref_idc — out of the DPB
     expect(nal[0] & 0x1f).toBe(1) // non-IDR slice
     const h = parseSliceHeader(nal, sps, pps)!
@@ -144,7 +177,10 @@ describe('the picture that means "identical to the one before it"', () => {
     r.u(sps.log2_max_frame_num_minus4 + 4)
     r.u(sps.log2_max_pic_order_cnt_lsb_minus4 + 4)
     r.flag() // num_ref_idx_active_override_flag
-    r.flag() // ref_pic_list_modification_flag_l0
+    expect(r.flag()).toBe(true) // ref_pic_list_modification_flag_l0 — it NAMES its reference
+    expect(r.ue()).toBe(0) // modification_of_pic_nums_idc: subtract from CurrPicNum
+    expect(r.ue()).toBe(0) // abs_diff_pic_num_minus1: the picture one before it
+    expect(r.ue()).toBe(3) // and that is the whole modification
     r.se() // slice_qp_delta
     if (pps.deblocking_filter_control_present_flag) {
       const idc = r.ue()

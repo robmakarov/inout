@@ -82,10 +82,11 @@ describe('the ordering machine', () => {
     // ONE PICTURE PER SLOT, numbered in slot order — the gap the injected
     // pictures needed was made by moving the real one up, not by luck.
     expect(out.map((p) => headerOf(p).pic_order_cnt_lsb)).toEqual([0, 1, 2, 3, 4])
-    // 13 bytes each: four of length prefix and nine of picture. Nine and not
-    // the task's fourteen because this fixture is 640x384 — 960 macroblocks,
-    // so `mb_skip_run` is a shorter ue(v) than the 14400 of a 1440p take.
-    expect(plan.stats).toEqual({ slots: 5, marked: 2, duplicates: 2, written: 2, bytes: 26, refusal: null })
+    // 15 bytes each: four of length prefix and eleven of picture. Eleven and
+    // not the task's fourteen because this fixture is 640x384 — 960
+    // macroblocks, so `mb_skip_run` is a shorter ue(v) than the 14400 of a
+    // 1440p take; two of the eleven are the reference it names.
+    expect(plan.stats).toEqual({ slots: 5, marked: 2, duplicates: 2, written: 2, bytes: 30, refusal: null })
   })
 
   it('writes pictures that are non-reference and carry the next reference frame_num', () => {
@@ -104,7 +105,7 @@ describe('the ordering machine', () => {
     const written = out.slice(2)
     expect(written).toHaveLength(2)
     for (const p of written) {
-      expect(p.data.length).toBe(13) // four bytes of length, nine of picture
+      expect(p.data.length).toBe(15) // four bytes of length, eleven of picture
       const [{ start }] = avccNals(p.data)
       expect((p.data[start] >> 5) & 3).toBe(0) // nal_ref_idc: never a reference
       // The previous reference picture had frame_num 1, so every non-reference

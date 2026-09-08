@@ -150,6 +150,17 @@ export interface AvcPps {
   redundant_pic_cnt_present_flag: boolean
 }
 
+/**
+ * HOW A DECODED PICTURE IS HELD, and therefore how another picture NAMES it.
+ *
+ * A reference is short-term (named by its PicNum, which is its frame_num here)
+ * or long-term (named by its LongTermPicNum, which is the `long_term_frame_idx`
+ * it marked itself with). This product's encoder uses BOTH — measured, not
+ * assumed: every P picture it emits carries `memory_management_control_operation
+ * 6`, marking ITSELF long-term.
+ */
+export type AvcReference = { kind: 'short'; picNum: number } | { kind: 'long'; picNum: number }
+
 export interface AvcSliceHeader {
   first_mb_in_slice: number
   /** slice_type % 5: 0 = P, 1 = B, 2 = I. */
@@ -172,6 +183,13 @@ export interface AvcSliceHeader {
    * picture is copied from. Null means "not read", never "zero".
    */
   tail: { slice_qp_delta: number; disable_deblocking_filter_idc: number } | null
+  /**
+   * How THIS picture will be held once it is decoded — what a later picture
+   * has to say to point at it. Read out of `dec_ref_pic_marking`, so it is the
+   * encoder's own decision and never a guess. Null for a non-reference picture
+   * (nothing can point at one) and when the marking did not parse.
+   */
+  marking: AvcReference | null
 }
 
 /** Profiles whose SPS carries the chroma_format_idc block. */
@@ -299,7 +317,7 @@ export function parseSliceHeader(nal: Uint8Array, sps: AvcSps, pps: AvcPps): Avc
   const nalRefIdc = (nal[0] >> 5) & 3
   const isIdr = nalType === 5
   const r = new BitReader(BitReader.unescape(nal.subarray(1)))
-  const h = { nalRefIdc, isIdr, tail: null } as AvcSliceHeader
+  const h = { nalRefIdc, isIdr, tail: null, marking: null } as AvcSliceHeader
   h.first_mb_in_slice = r.ue()
   const sliceTypeRaw = r.ue()
   h.sliceType = sliceTypeRaw % 5
@@ -312,8 +330,17 @@ export function parseSliceHeader(nal: Uint8Array, sps: AvcSps, pps: AvcPps): Avc
   h.pocBitOffset = r.bitPos
   h.pic_order_cnt_lsb = r.u(sps.log2_max_pic_order_cnt_lsb_minus4 + 4)
   // ── the prefix ends here, and everything above is what renumbering uses ──
-  if (h.sliceType !== 0) return h // an I slice is never copied from
   if (pps.redundant_pic_cnt_present_flag) return h
+  if (h.sliceType !== 0) {
+    // An I slice is never COPIED FROM, but a picture may still be copied from
+    // it — the first duplicate slot after a key frame points straight at it —
+    // so its marking is read even though its quantizer is not.
+    if (isIdr && nalRefIdc !== 0) {
+      r.flag() // no_output_of_prior_pics_flag
+      h.marking = r.flag() ? { kind: 'long', picNum: 0 } : { kind: 'short', picNum: h.frame_num }
+    }
+    return h
+  }
   if (r.flag()) r.ue() // num_ref_idx_active_override_flag
   if (r.flag()) {
     // ref_pic_list_modification, l0 — walk it to its terminator
@@ -324,15 +351,25 @@ export function parseSliceHeader(nal: Uint8Array, sps: AvcSps, pps: AvcPps): Avc
     }
   }
   // weighted_pred_flag is refused by skipPictureRefusal, so no pred_weight_table.
-  if (nalRefIdc !== 0 && r.flag()) {
-    // adaptive_ref_pic_marking_mode_flag — the memory-management ops
-    for (let guard = 0; guard < 64; guard++) {
-      const op = r.ue()
-      if (op === 0) break
-      if (op === 1 || op === 3) r.ue() // difference_of_pic_nums_minus1
-      if (op === 2) r.ue() // long_term_pic_num
-      if (op === 3 || op === 6) r.ue() // long_term_frame_idx
-      if (op === 4) r.ue() // max_long_term_frame_idx_plus1
+  if (nalRefIdc !== 0) {
+    // dec_ref_pic_marking — where the picture says how it will be held.
+    h.marking = { kind: 'short', picNum: h.frame_num }
+    if (r.flag()) {
+      // adaptive_ref_pic_marking_mode_flag — the memory-management ops
+      for (let guard = 0; guard < 64; guard++) {
+        const op = r.ue()
+        if (op === 0) break
+        if (op === 1 || op === 3) r.ue() // difference_of_pic_nums_minus1
+        if (op === 2) r.ue() // long_term_pic_num
+        if (op === 3) r.ue() // long_term_frame_idx (for the picture named above)
+        if (op === 4) r.ue() // max_long_term_frame_idx_plus1
+        if (op === 6) {
+          // THE CURRENT PICTURE MARKS ITSELF LONG-TERM. This is the one that
+          // matters here: a long-term picture is not named by its frame_num
+          // and does not sort with the short-term ones.
+          h.marking = { kind: 'long', picNum: r.ue() }
+        }
+      }
     }
   }
   // entropy_coding_mode_flag is refused above, so no cabac_init_idc.
@@ -348,17 +385,29 @@ export function parseSliceHeader(nal: Uint8Array, sps: AvcSps, pps: AvcPps): Avc
 }
 
 /**
- * The picture itself. `after` is the slice header of the picture that FOLLOWS
- * it in the encoder's own stream — a non-reference picture carries the
- * frame_num of the next reference picture, which is exactly the value that
- * packet already holds, so nothing about the encoder's numbering has to be
- * reconstructed.
+ * The picture itself.
+ *
+ * IT NAMES THE PICTURE IT COPIES, and that is not belt-and-braces — it is the
+ * defect this cost a run to find. The default reference list puts short-term
+ * pictures first (descending PicNum) and long-term ones after them (ascending
+ * LongTermPicNum), and THIS PRODUCT'S ENCODER MARKS EVERY P PICTURE LONG-TERM
+ * (`memory_management_control_operation 6`, measured in its own bitstream). So
+ * after a key frame the default index 0 is the KEY FRAME, not the picture
+ * immediately before — and a skip slice that trusts the default copies a
+ * picture from further back. Measured 2026-09-08: three duplicate slots after
+ * every key frame decoded as the key frame's picture, in ffmpeg and in Chrome
+ * alike, until this modification was written.
+ *
+ * So the slice carries a `ref_pic_list_modification` that puts the intended
+ * picture at index 0 by name, whichever way it is held.
  */
 export function buildSkipSlice(
   sps: AvcSps,
   pps: AvcPps,
   after: { frame_num: number; slice_qp_delta: number; disable_deblocking_filter_idc: number },
   picOrderCntLsb: number,
+  /** The picture this one is a copy of, as that picture said it would be held. */
+  reference: AvcReference,
 ): Uint8Array {
   const w = new BitWriter()
   w.ue(0) // first_mb_in_slice
@@ -367,7 +416,18 @@ export function buildSkipSlice(
   w.u(sps.log2_max_frame_num_minus4 + 4, after.frame_num)
   w.u(sps.log2_max_pic_order_cnt_lsb_minus4 + 4, picOrderCntLsb)
   w.flag(false) // num_ref_idx_active_override_flag — take the PPS default
-  w.flag(false) // ref_pic_list_modification_flag_l0 — reference 0 is the previous picture
+  // ref_pic_list_modification_flag_l0: the picture is NAMED, never inferred.
+  w.flag(true)
+  if (reference.kind === 'long') {
+    w.ue(2) // modification_of_pic_nums_idc: pick by long-term picture number
+    w.ue(reference.picNum) // long_term_pic_num
+  } else {
+    w.ue(0) // modification_of_pic_nums_idc: subtract from the current PicNum
+    // abs_diff_pic_num_minus1 — this picture's own number, minus the target's.
+    const diff = after.frame_num - reference.picNum
+    w.ue(Math.max(0, diff - 1))
+  }
+  w.ue(3) // modification_of_pic_nums_idc: that is the whole modification
   // weighted_pred_flag is refused; nal_ref_idc is 0 so there is no dec_ref_pic_marking.
   w.se(after.slice_qp_delta)
   if (pps.deblocking_filter_control_present_flag) {

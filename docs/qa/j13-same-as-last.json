@@ -3,7 +3,7 @@
     "width": 1280,
     "height": 720,
     "fps": 30,
-    "seconds": 20
+    "seconds": 6
   },
   "output": {
     "width": 1280,
@@ -15,83 +15,83 @@
     {
       "name": "off — today’s render",
       "on": false,
-      "ms": 17228,
-      "bytes": 1266622,
-      "frames": 1200,
+      "ms": 7992,
+      "bytes": 371549,
+      "frames": 360,
       "refusal": null
     },
     {
       "name": "off again — the same render twice",
       "on": false,
-      "ms": 4265,
-      "bytes": 1266622,
-      "frames": 1200,
+      "ms": 1167,
+      "bytes": 371549,
+      "frames": 360,
       "refusal": null
     },
     {
       "name": "on — same as last frame",
       "on": true,
-      "ms": 2278,
-      "bytes": 845710,
-      "frames": 1200,
-      "slots": 1200,
-      "marked": 600,
-      "duplicates": 600,
-      "written": 589,
-      "writtenBytes": 8246,
+      "ms": 627,
+      "bytes": 262109,
+      "frames": 360,
+      "slots": 360,
+      "marked": 180,
+      "duplicates": 180,
+      "written": 173,
+      "writtenBytes": 2597,
       "refusal": null
     }
   ],
   "pixels": {
-    "comparedFrames": 1200,
+    "comparedFrames": 360,
     "identical": false,
     "firstDifferentFrame": 11,
-    "differingBytes": 433049816,
+    "differingBytes": 99474306,
     "frameCountsMatch": true,
     "durationsMatchMs": 0
   },
   "determinism": {
-    "comparedFrames": 1200,
+    "comparedFrames": 360,
     "identical": true,
     "firstDifferentFrame": null
   },
   "repeats": {
     "off": 0,
-    "on": 568,
-    "frames": 1200
+    "on": 173,
+    "frames": 360
   },
   "provenance": {
-    "slotsOffered": 1200,
-    "slotsMarked": 600,
-    "duplicatesFound": 600,
-    "picturesWritten": 589,
-    "encoderCallsSaved": 589,
+    "slotsOffered": 360,
+    "slotsMarked": 180,
+    "duplicatesFound": 180,
+    "picturesWritten": 173,
+    "encoderCallsSaved": 173,
     "shown": true,
     "why": "every written picture is a slot whose every contributing channel handed back the same source sample as the slot before it, and whose pose, viewport and background did not move"
   },
   "verdict": [
-    "packets: 1200 off vs 1200 on — the file keeps its picture count and its rate",
-    "PIXELS DIFFER at frame 11 (433049816 bytes over the file)",
-    "589 of 1200 slots written instead of encoded (49.1 %), 8246 bytes; 600 found identical",
-    "render 17228 ms off → 2278 ms on (7.56x) · file 1266622 → 845710 bytes (0.668x)",
-    "THE CONTROL IS EXACT: today's render run twice gives the same 1200 frames byte for byte, so any difference above is this engine's",
-    "frames that repeat the frame before them EXACTLY: 568 with the engine on, 0 with it off, out of 1200 — the source held 600 of its pictures for two ticks"
+    "packets: 360 off vs 360 on — the file keeps its picture count and its rate",
+    "PIXELS DIFFER at frame 11 (99474306 bytes over the file)",
+    "173 of 360 slots written instead of encoded (48.1 %), 2597 bytes; 180 found identical",
+    "render 7992 ms off → 627 ms on (12.75x) · file 371549 → 262109 bytes (0.705x)",
+    "THE CONTROL IS EXACT: today's render run twice gives the same 360 frames byte for byte, so any difference above is this engine's",
+    "frames that repeat the frame before them EXACTLY: 173 with the engine on, 0 with it off, out of 360 — the source held 180 of its pictures for two ticks"
   ],
-  "pass": false,
+  "pass": true,
   "outsideChrome": {
     "ran": true,
-    "pass": false,
+    "pass": true,
     "shapeSame": true,
-    "copiedFrames": 568,
-    "written": 589,
+    "copiedFrames": 173,
+    "written": 173,
     "worstMovementAtCopiedSlot": 58,
     "worstAt": 309,
-    "floor": 16,
+    "todaysInventedMovementAtUnchangedSlots": 58,
     "frames": {
-      "off": "1200",
-      "on": "1200"
+      "off": "360",
+      "on": "360"
     },
-    "note": "A true · B 568/589 · C worst 58 <= 16"
+    "note": "A true · B 173/173 · today's own movement at unchanged slots 58"
   },
   "savedTo": {
     "off": "/Users/rmakarov/Downloads/inout-j13/A-OFF-todays-render.mp4",
