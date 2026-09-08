@@ -1514,13 +1514,26 @@
 }
 .app-proto .tlx__lanes { position: relative; display: flex; flex-direction: column; gap: 4px; }
 .app-proto .tlx__lane {
+  position: relative;
   height: var(--lane-h);
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--surface);
   transition: opacity var(--dz-fast) var(--dz-ease);
 }
-.app-proto .tlx__clip { height: 100%; }
+/* A LANE IS ITS PIECES. A cut is a hole in the take, so it is a hole in the
+   lane — the ground shows through it — and closing that gap slides the pieces
+   on either side together, which is the whole of what the gap's delete does
+   (Robert, of the app: "remove it completle and other part will slide to each
+   other smoothly"). The piece carries the lane's ground and its corner; the
+   clip inside it is the take's FULL length, offset, so the picture runs
+   through the cut instead of restarting at it. */
+.app-proto .tlx__piece {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--surface);
+}
+.app-proto .tlx__clip { position: absolute; top: 0; bottom: 0; }
 /* FRAMES with a cut of the page's own black between them, 2px, because a
    hairline over a dark screenshot is not a line */
 .app-proto .tlx__clip.is-frames {
@@ -1529,12 +1542,12 @@
   background-position: 0 0, 0 0;
 }
 /* an audio lane says what audio says: a shape over time, in that input's colour */
-.app-proto .tlx__lane.is-audio { background: color-mix(in srgb, var(--ch-mic) 12%, transparent); }
-.app-proto .tlx__lane[data-kind='tab audio'] { background: color-mix(in srgb, var(--ch-sysaudio) 12%, transparent); }
+.app-proto .tlx__lane.is-audio .tlx__piece { background: color-mix(in srgb, var(--ch-mic) 12%, transparent); }
+.app-proto .tlx__lane[data-kind='tab audio'] .tlx__piece { background: color-mix(in srgb, var(--ch-sysaudio) 12%, transparent); }
 .app-proto .tlx__wave { display: block; width: 100%; height: 100%; fill: var(--ch-mic); opacity: 0.75; }
 .app-proto .tlx__lane[data-kind='tab audio'] .tlx__wave { fill: var(--ch-sysaudio); }
-.app-proto .tlx__lane[data-kind='screen'] { background: color-mix(in srgb, var(--ch-screen) 16%, transparent); }
-.app-proto .tlx__lane[data-kind='camera'] { background: color-mix(in srgb, var(--ch-camera) 16%, transparent); }
+.app-proto .tlx__lane[data-kind='screen'] .tlx__piece { background: color-mix(in srgb, var(--ch-screen) 16%, transparent); }
+.app-proto .tlx__lane[data-kind='camera'] .tlx__piece { background: color-mix(in srgb, var(--ch-camera) 16%, transparent); }
 .app-proto .tlx__lane.is-off { opacity: 0.28; }
 /* what is trimmed away is still there, just no longer part of the take */
 .app-proto .tlx__dim {
@@ -1545,8 +1558,8 @@
   pointer-events: none;
   border-radius: 7px;
 }
-.app-proto .tlx__dim--l { left: 0; width: calc(100% * var(--a, 0)); }
-.app-proto .tlx__dim--r { right: 0; width: calc(100% * (1 - var(--b, 1))); }
+.app-proto .tlx__dim--l { left: 0; width: calc(100% * var(--ax, 0)); }
+.app-proto .tlx__dim--r { right: 0; width: calc(100% * (1 - var(--bx, 1))); }
 /* THE ENDS ARE BRACKETS, NOT PILLS (Robert: "start end grabbers ugly"). Each one
    holds its own side of the take: a bar down the cut with a grip in the middle
    and the corners rounded on the OUTSIDE only, so the pair reads as the two
@@ -1581,8 +1594,8 @@
   opacity: 0.55;
   box-shadow: 3px 0 0 var(--text);
 }
-.app-proto .tlx__trim--l { left: calc(100% * var(--a, 0)); border-radius: 7px 0 0 7px; }
-.app-proto .tlx__trim--r { left: calc(100% * var(--b, 1)); margin-left: -9px; border-radius: 0 7px 7px 0; }
+.app-proto .tlx__trim--l { left: calc(100% * var(--ax, 0)); border-radius: 7px 0 0 7px; }
+.app-proto .tlx__trim--r { left: calc(100% * var(--bx, 1)); margin-left: -9px; border-radius: 0 7px 7px 0; }
 .app-proto .tlx__trim:hover,
 .app-proto .tlx__trim.is-held { background: var(--text-faint); }
 /* the playhead is the one line with the accent on it */
@@ -1593,7 +1606,7 @@
   width: 2px;
   margin-left: -1px;
   background: var(--accent);
-  left: calc(100% * var(--head, 0));
+  left: calc(100% * var(--hx, 0));
   pointer-events: none;
 }
 .app-proto .tlx__head::before {
@@ -1677,3 +1690,107 @@
 .app-proto .tlx__gape--mid { left: 50%; margin-left: -4px; border-radius: 7px; }
 .app-proto .tlx__gape:hover,
 .app-proto .tlx__gape.is-held { background: var(--text-faint); }
+/* PUT IT BACK, OR CLOSE IT UP — the app's own pair, in this frame's clothes and
+   on the app's own two conditions: they appear at 24px of gap and the undo says
+   how much it is putting back at 64. */
+.app-proto .tlx__gapacts {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: none;
+}
+.app-proto .tlx__gapbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__gapbtn svg { width: 11px; height: 11px; }
+.app-proto .tlx__gapbtn:hover { border-color: var(--text-faint); color: var(--text); }
+/* the bin answers in red here too, the way it does in every other row */
+.app-proto .tlx__gapbtn--del:hover { border-color: var(--record); color: var(--record); }
+/* AND A CLOSED GAP LEAVES A SEAM, which is the way back into it. The strip is
+   no longer spending width on those seconds, so all that is left to say is
+   that they were here. */
+.app-proto .tlx__seam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(245, 245, 247, 0.55) 0 3px,
+    transparent 3px 6px
+  );
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tlx__seam::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -7px;
+  right: -7px;
+}
+.app-proto .tlx__seam:hover { background: var(--record); }
+/* WHAT TIGHTEN IS OFFERING, drawn where it would fall: the same box as a gap,
+   in outline rather than in ink, because nothing has been taken out yet. */
+.app-proto .tlx__pgap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(6, 6, 10, 0.45);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  border-radius: 4px;
+  pointer-events: none;
+}
+/* and its two answers sit in the tools row where the button was */
+/* AND THE BUTTON IT REPLACES GOES. `hidden` alone does not do it: .wbtn sets
+   `display: inline-flex`, and an author declaration beats the user agent's
+   `[hidden] { display: none }` at any specificity — the same trap the cards and
+   the SVG sprite carry a rule for. */
+.app-proto .wbtn[hidden] { display: none; }
+.app-proto .tlx__prop { display: inline-flex; align-items: center; gap: 6px; }
+.app-proto .tlx__propn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* the clip's own speed, said on the clip (SpeedBar.tsx: "2× — this clip only") */
+.app-proto .tlx__spmark {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgba(6, 6, 10, 0.72);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}

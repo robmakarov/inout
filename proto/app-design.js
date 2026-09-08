@@ -28,6 +28,9 @@
     device: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/>',
     cloud: '<path d="M7 18h10.5a3.5 3.5 0 0 0 .3-7 5.5 5.5 0 0 0-10.6-1.3A4.2 4.2 0 0 0 7 18z"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    /* put it back: the app's own gap button carries an undo, and the neon
+       sprite has no arrow that curls */
+    undo: '<path d="M4 9h9.5a5 5 0 0 1 0 10H8"/><path d="M8 5L4 9l4 4"/>',
   }
   const dic = (n) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DRAWN[n]}</svg>`
@@ -561,6 +564,11 @@
     return m ? +m[1] * 60 + +m[2] : 0
   }
   const clock = (s) => Math.floor(s / 60) + ':' + String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')
+/* HOW LONG A PIECE IS, WHEN THE PIECE IS SHORT. m:ss says "0:00" of nine tenths
+   of a second, which is the one number a button offering to put it back must
+   not say (DECISIONS (21)(22): nothing a user reads is rounded away). Under ten
+   seconds it is said in seconds, with the tenth. */
+  const span = (s) => (s < 10 ? (Math.round(s * 10) / 10).toFixed(1) + 's' : clock(s))
   const bytesOf = (t) => {
     const m = String(t || '').match(/([\d.]+)\s*(KB|MB|GB)/i)
     if (!m) return 0
@@ -573,15 +581,37 @@
     return bps >= 1e6 ? (bps / 1e6).toFixed(1) + ' Mbps' : Math.round(bps / 1e3) + ' kbps'
   }
   /* one seed, one shape: the same take draws the same wave in every session */
-  const wave = (seed, n) => {
+  /* AND A TAKE HAS QUIET IN IT. Tighten's whole premise is that a recording
+     stops for a few seconds here and there, and the drawn wave had none — a
+     random walk with a floor under it never goes silent, so Tighten could
+     honestly find nothing to propose. The quiet stretches come from the TAKE's
+     own seed rather than the lane's, so every microphone in it goes quiet at the
+     same moment, which is what makes a silence a silence. */
+  const quietRuns = (seed, n) => {
+    let x = Math.max(1, Math.round(seed * 977)) || 7
+    const next = () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+    const runs = []
+    let at = Math.round(n * 0.12)
+    const count = 2 + Math.floor(next() * 2)
+    for (let i = 0; i < count; i++) {
+      at += Math.round(n * (0.1 + next() * 0.18))
+      const len = Math.max(4, Math.round(n * (0.05 + next() * 0.05)))
+      if (at + len > n - 3) break
+      runs.push([at, at + len])
+      at += len
+    }
+    return runs
+  }
+  const wave = (seed, n, holes) => {
     let x = seed || 1
     const next = () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+    const quiet = (i) => (holes || []).some(([a, b]) => i >= a && i < b)
     const pts = []
     let env = 0.5
     for (let i = 0; i <= n; i++) {
       env = Math.min(1, Math.max(0.12, env + (next() - 0.5) * 0.5))
       const a = env * (0.45 + next() * 0.55)
-      pts.push(a)
+      pts.push(quiet(i) ? 0.02 + next() * 0.03 : a)
     }
     return pts
   }
@@ -648,6 +678,8 @@
       `<div class="tlx__head"></div>` +
       `</div></div></div>`
 
+    /* one set of quiet stretches for the whole take, so its microphones agree */
+    const holes = quietRuns(secs, 96)
     const namesEl = tl.querySelector('.tlx__names')
     const lanesEl = tl.querySelector('.tlx__lanes')
     names.forEach((name, i) => {
@@ -665,13 +697,15 @@
       lane.className = 'tlx__lane' + (audio ? ' is-audio' : '')
       lane.dataset.kind = key
       lane.dataset.i = i
-      lane.innerHTML = `<div class="tlx__clip"></div>`
-      const clip = lane.querySelector('.tlx__clip')
+      /* WHAT THE LANE IS MADE OF IS KEPT, NOT DRAWN ONCE. A cut breaks the lane
+         into pieces and closing one moves them, so the wave and the frames are
+         held here and laid into whatever pieces the take currently has. */
       if (audio) {
-        const pts = wave(key.split('').reduce((n, c) => n + c.charCodeAt(0), secs * 7), 96)
+        const pts = wave(key.split('').reduce((n, c) => n + c.charCodeAt(0), secs * 7), 96, holes)
         const top = pts.map((v, j) => `${((j / (pts.length - 1)) * 100).toFixed(2)},${(50 - v * 46).toFixed(2)}`)
         const bot = pts.map((v, j) => `${((j / (pts.length - 1)) * 100).toFixed(2)},${(50 + v * 46).toFixed(2)}`).reverse()
-        clip.innerHTML =
+        lane.__pts = pts
+        lane.__wave =
           `<svg class="tlx__wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">` +
           `<polygon points="${top.join(' ')} ${bot.join(' ')}"/></svg>`
       } else if (shot) {
@@ -679,8 +713,7 @@
            not separated somehow"). The take's own preview, one frame wide at the
            lane's height, and a 2px cut of the page's own black between them —
            a hairline over a dark screenshot was not a line, it was a rumour. */
-        clip.classList.add('is-frames')
-        clip.style.backgroundImage = `linear-gradient(to right, var(--bg) 0 2px, transparent 2px), url("${shot.currentSrc || shot.src}")`
+        lane.__frames = `linear-gradient(to right, var(--bg) 0 2px, transparent 2px), url("${shot.currentSrc || shot.src}")`
       }
       lanesEl.appendChild(lane)
     })
@@ -690,15 +723,24 @@
     return tl
   }
 
+  /* THE RULER COUNTS THE FILM, NOT THE TAPE. Its ticks are even seconds of what
+     the take will BE — so a closed gap takes its seconds out of the count and
+     the numbers stay a straight run, which is what a ruler is for. Each tick is
+     then put back into strip space, where the strip is drawn. */
   function ruler(tl) {
     const secs = +tl.dataset.secs || 10
+    const total = tl.outSecs ? tl.outSecs() || secs : secs
     const zoom = +tl.style.getPropertyValue('--zoom') || 1
-    const st = stepFor(secs, zoom)
+    const st = stepFor(total, zoom)
     let html = ''
-    for (let t = 0; t <= secs + 0.001; t += st) {
-      html += `<i style="left:${((t / secs) * 100).toFixed(3)}%"><span>${clock(t)}</span></i>`
+    for (let t = 0; t <= total + 0.001; t += st) {
+      const pos = tl.tickAt ? tl.tickAt(t) * 100 : (t / secs) * 100
+      html += `<i style="left:${pos.toFixed(3)}%"><span>${clock(t)}</span></i>`
     }
     tl.querySelector('.tlx__ruler').innerHTML = html
+    /* and the span between the zoom buttons is what you can SEE of it */
+    const len = tl.querySelector('.tlx__len')
+    if (len) len.textContent = clock(total / zoom)
   }
 
   /* EVERY PART OF IT ANSWERS A PRESS. Scrub anywhere on the lanes, drag either
@@ -711,18 +753,32 @@
     const set = (k, v) => tl.style.setProperty(k, String(v))
     const view = tl.querySelector('.tlx__view')
     const inner = tl.querySelector('.tlx__inner')
+    /* the pointer lands on the STRIP and everything it moves lives in the
+       SOURCE, so this is where the two meet */
     const atX = (e) => {
       const r = inner.getBoundingClientRect()
-      return Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width)))
+      return srcAt(Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width))))
     }
+    /* THE TRANSPORT IS THE FILM, NOT THE TAPE. Its clock and its bar are the
+       output — trimmed ends and every cut already out of it — which is what the
+       app's player shows and the only number that means anything once you have
+       taken a piece out of the middle. */
     const paint = () => {
-      const t = num('--head') * secs
+      const os = outSecs()
+      const t = outAt(num('--head'))
       const dock = tl.closest('.watchdock')
       const time = dock && dock.querySelector('.transport__time')
-      if (time) time.innerHTML = `${clock(t)} <span class="transport__time-sep">/</span> ${clock(secs)}`
+      if (time) time.innerHTML = `${clock(t)} <span class="transport__time-sep">/</span> ${clock(os)}`
       const fill = dock && dock.querySelector('.scrubber__fill')
-      if (fill) fill.style.width = (num('--head') * 100).toFixed(2) + '%'
+      if (fill) fill.style.width = ((os > 0 ? t / os : 0) * 100).toFixed(2) + '%'
+      place()
       paintSplit()
+      /* and the speed row lights the speed of the clip you are standing in */
+      const cl = clipAt(num('--head'))
+      const v = cl ? cl[2] : 1
+      for (const b of tl.querySelectorAll('.tlx__sp')) {
+        b.setAttribute('aria-pressed', String(Math.abs((parseFloat(b.textContent) || 1) - v) < 0.001))
+      }
     }
     /* AND THE BUTTON SAYS WHETHER THERE IS A CUT TO MAKE, the way the app's
        does — a press that quietly does nothing is the same defect as a handle
@@ -764,6 +820,135 @@
       h > num('--a') + 0.005 &&
       h < num('--b') - 0.005 &&
       !cuts().some((c) => h >= c.a - 0.004 && h <= c.b + 0.004)
+
+    /* ---------- THREE SPACES, AND THEY ARE NOT THE SAME SPACE --------------
+       SOURCE   the take as recorded, 0..1 — what --a, --b, --head are in
+       STRIP    what the timeline spends width on: source minus the CLOSED cuts
+       OUTPUT   what the file will be: source minus the trims and EVERY cut
+       Prod's timeline works in exactly these three (Timeline.tsx), and the
+       delete button in a gap is the whole reason they have to be separate: it
+       does not remove more material, it stops the strip paying width for
+       material already gone — Robert, of the app: "remove it completle and
+       other part will slide to each other smoothly". */
+    const closedSum = () => cuts().reduce((n, c) => n + (c.closed ? c.b - c.a : 0), 0)
+    const xOf = (s) => {
+      let gone = 0
+      for (const c of cuts()) {
+        if (!c.closed) continue
+        if (s >= c.b) gone += c.b - c.a
+        else if (s > c.a) gone += s - c.a
+      }
+      return (s - gone) / Math.max(1e-6, 1 - closedSum())
+    }
+    const srcAt = (p) => {
+      let s = Math.min(1, Math.max(0, p)) * (1 - closedSum())
+      for (const c of cuts()) if (c.closed && s >= c.a - 1e-9) s += c.b - c.a
+      return Math.min(1, Math.max(0, s))
+    }
+    /* SPEED IS A PROPERTY OF ONE CLIP, NOT OF THE TAKE (SpeedBar.tsx: "2× —
+       this clip only"). The row of speeds acted on nothing here; it now acts on
+       the clip the playhead is standing in, exactly as the app's does, and the
+       clip says so on the strip. Kept by the clip's own start, because that is
+       what a clip IS once the cuts move. */
+    const speedKey = (s0) => s0.toFixed(4)
+    const speedAt = (s0) => (tl.__sp && tl.__sp[speedKey(s0)]) || 1
+    /* the take as the file will have it: the kept spans between the trims, each
+       with its own speed, which is the only place the three spaces disagree */
+    const clips = () => {
+      const A = num('--a')
+      const B = num('--b') || 1
+      const out = []
+      for (const [s0, s1] of kept()) {
+        const lo = Math.max(s0, A)
+        const hi = Math.min(s1, B)
+        if (hi > lo) out.push([lo, hi, speedAt(s0), s0])
+      }
+      return out
+    }
+    const clipAt = (s) => clips().find(([lo, hi]) => s >= lo && s <= hi) || null
+    /* seconds of finished film before a point in the source */
+    const outAt = (s) => {
+      let acc = 0
+      for (const [lo, hi, v] of clips()) {
+        if (s >= hi) acc += ((hi - lo) * secs) / v
+        else if (s > lo) acc += ((s - lo) * secs) / v
+      }
+      return acc
+    }
+    const outSecs = () => outAt(num('--b') || 1)
+    /* and back: where in the take is the film at this fraction of its length */
+    const srcAtOut = (f) => {
+      let want = Math.min(1, Math.max(0, f)) * outSecs()
+      const cl = clips()
+      for (const [lo, hi, v] of cl) {
+        const len = ((hi - lo) * secs) / v
+        if (want <= len) return lo + (want * v) / secs
+        want -= len
+      }
+      return cl.length ? cl[cl.length - 1][1] : num('--b') || 1
+    }
+    /* what is left of the take once the cuts are taken out of it */
+    const kept = () => {
+      const out = []
+      let at = 0
+      for (const c of cuts()) {
+        if (c.a > at) out.push([at, c.a])
+        at = Math.max(at, c.b)
+      }
+      if (at < 1) out.push([at, 1])
+      return out
+    }
+    /* the playhead never stands in material that is not in the film */
+    const skip = (h) => {
+      for (const c of cuts()) if (h > c.a && h < c.b) return c.b
+      return h
+    }
+    tl.skip = skip
+    tl.speedAt = (h) => { const c = clipAt(h); return c ? c[2] : 1 }
+    tl.srcAtOut = srcAtOut
+    tl.outAt = outAt
+    tl.outSecs = outSecs
+    tl.tickAt = (sec) => xOf(srcAtOut(outSecs() > 0 ? sec / outSecs() : 0))
+
+    /* THE LANES ARE THE PIECES THE CUTS LEAVE. One box per kept span, holding
+       the lane's own full-length wave or filmstrip offset so the picture runs
+       through the cut rather than restarting at it: what you see in a piece is
+       the frame that was always at that second. */
+    const paintLanes = () => {
+      const segs = kept()
+      for (const lane of tl.querySelectorAll('.tlx__lane')) {
+        lane.innerHTML = segs
+          .map(([s0, s1]) => {
+            const L = xOf(s0) * 100
+            const W = Math.max(0, xOf(s1) - xOf(s0)) * 100
+            const span = Math.max(1e-6, s1 - s0)
+            const style = `width:${(100 / span).toFixed(3)}%;left:${((-s0 / span) * 100).toFixed(3)}%`
+            const v = speedAt(s0)
+            /* the clip says what it will run at, on the top lane only: it is one
+               fact about the clip, not one per channel */
+            const tag = v !== 1 && lane.dataset.i === '0' ? `<b class="tlx__spmark">${v}×</b>` : ''
+            return (
+              `<div class="tlx__piece" style="left:${L.toFixed(3)}%;width:${W.toFixed(3)}%">` +
+              `<div class="tlx__clip${lane.__frames ? ' is-frames' : ''}" style="${style}">${lane.__wave || ''}</div>` +
+              tag +
+              `</div>`
+            )
+          })
+          .join('')
+        /* THE FILMSTRIP IS SET AS A PROPERTY, NEVER WRITTEN INTO THE ATTRIBUTE.
+           It is a data: URL wrapped in url("…") and the quotes inside a
+           style="…" attribute end the attribute: the screen and camera lanes
+           came out as flat colour the one time it went through a string. */
+        if (lane.__frames) for (const c of lane.querySelectorAll('.tlx__clip')) c.style.backgroundImage = lane.__frames
+      }
+    }
+    /* the ends and the playhead stand in STRIP space, because that is the space
+       the strip is drawn in — the source values stay the truth underneath */
+    const place = () => {
+      set('--ax', xOf(num('--a')))
+      set('--bx', xOf(num('--b') || 1))
+      set('--hx', xOf(num('--head')))
+    }
     /* THE HANDLE UNDER THE POINTER IS NOT REBUILT WHILE IT IS BEING HELD. The
        app lost a drag to exactly this — the node carrying the gesture was
        replaced on the first move and took its listeners with it. Here the
@@ -771,26 +956,59 @@
        survive; it would still throw away the held state 60 times a second. So
        the boxes are MOVED, and only a change of shape (a cut appearing, or its
        two edges parting) writes new ones. */
-    const shapeOf = (list) => list.map((c) => (c.b - c.a < TIGHT ? '1' : '2')).join(',')
+    /* AND WHAT THE GAP OFFERS IS WHAT THE APP'S GAP OFFERS (Robert, 2026-09-08:
+       "no delete/undo buttons appears in splitted section"). Put it back, or
+       close it up — the same pair, on the app's own two conditions: the buttons
+       appear once the gap is 24px wide and the undo says how much it is putting
+       back once there are 64. A closed gap keeps its seam, and the seam is the
+       way back into it. */
+    const shapeOf = (list) =>
+      list.map((c) => (c.closed ? 's' : c.b - c.a < TIGHT ? '1' : '2')).join(',') +
+      '|' + Math.round(inner.getBoundingClientRect().width) +
+      '|p' + (tl.__prop || []).length
     const paintCuts = () => {
       const layer = tl.querySelector('.tlx__cuts')
       if (!layer) return
       const list = cuts()
-      const shape = shapeOf(list)
+      const W = inner.getBoundingClientRect().width || 1
+      const shape = shapeOf(list) + '|' + list.map((c) => (((c.b - c.a) * W) / (1 - closedSum()) >= 24 ? (((c.b - c.a) * W) / (1 - closedSum()) >= 64 ? 'w' : 'n') : '-')).join('')
       if (layer.dataset.shape !== shape) {
         layer.dataset.shape = shape
         layer.innerHTML = list
           .map((c, i) => {
+            if (c.closed) {
+              return (
+                `<button type="button" class="tlx__seam" data-act="open" data-c="${i}" ` +
+                `title="${span((c.b - c.a) * secs)} was cut out here — click to show it again"></button>`
+              )
+            }
             const one = c.b - c.a < TIGHT
+            const px = ((c.b - c.a) * W) / Math.max(1e-6, 1 - closedSum())
+            const acts =
+              px >= 24
+                ? `<span class="tlx__gapacts">` +
+                  `<button type="button" class="tlx__gapbtn" data-act="undo" data-c="${i}" title="Put back ${span((c.b - c.a) * secs)} — undo this cut">` +
+                  `${dic('undo')}${px >= 64 ? `<span>${span((c.b - c.a) * secs)}</span>` : ''}</button>` +
+                  `<button type="button" class="tlx__gapbtn tlx__gapbtn--del" data-act="close" data-c="${i}" ` +
+                  `title="Close this gap — the timeline stops showing it and the rest slides together">${ic('trash')}</button>` +
+                  `</span>`
+                : ''
             return (
               `<div class="tlx__gap${one ? ' is-tightgap' : ''}">` +
               (one
                 ? `<i class="tlx__gape tlx__gape--mid" data-c="${i}" data-e="mid" title="Drag to open the cut — double-click to undo the split"></i>`
                 : `<i class="tlx__gape tlx__gape--l" data-c="${i}" data-e="a" title="Drag to move this side of the cut"></i>` +
                   `<i class="tlx__gape tlx__gape--r" data-c="${i}" data-e="b" title="Drag to move this side of the cut"></i>`) +
+              acts +
               `</div>`
             )
           })
+          .join('')
+        /* AND WHAT TIGHTEN IS OFFERING IS SHOWN ON THE STRIP, not just counted
+           in the bar: the app draws its proposal where it would fall, so the
+           answer to "apply?" is in front of you rather than in a number. */
+        layer.innerHTML += (tl.__prop || [])
+          .map(() => `<div class="tlx__pgap" aria-hidden="true"></div>`)
           .join('')
         /* a drag that opened the cut keeps its grip: the one handle has just
            become two, and the one you are holding is the one you pulled */
@@ -804,12 +1022,75 @@
       list.forEach((c, i) => {
         const el = boxes[i]
         if (!el) return
-        el.style.left = (c.a * 100).toFixed(3) + '%'
-        el.style.width = (Math.max(0, c.b - c.a) * 100).toFixed(3) + '%'
+        el.style.left = (xOf(c.a) * 100).toFixed(3) + '%'
+        if (!c.closed) el.style.width = (Math.max(0, xOf(c.b) - xOf(c.a)) * 100).toFixed(3) + '%'
       })
+      ;(tl.__prop || []).forEach((p, i) => {
+        const el = boxes[list.length + i]
+        if (!el) return
+        el.style.left = (xOf(p.a) * 100).toFixed(3) + '%'
+        el.style.width = (Math.max(0, xOf(p.b) - xOf(p.a)) * 100).toFixed(3) + '%'
+      })
+      paintLanes()
+      place()
       paintSplit()
     }
     tl.paintCuts = paintCuts
+    /* WHAT TIGHTEN HEARS. The lanes carry the take's own drawn wave, so the
+       quiet is findable in the same numbers the picture is drawn from: a run of
+       samples under the floor, long enough to be worth taking out, in whichever
+       audio lane is loudest at that moment. Nothing is removed by it — it hands
+       back a proposal, exactly as the app does. */
+    const propose = () => {
+      const lanes = [...tl.querySelectorAll('.tlx__lane')].filter((l) => l.__pts)
+      if (!lanes.length) return
+      const n = lanes[0].__pts.length
+      const loud = []
+      for (let i = 0; i < n; i++) loud.push(Math.max(...lanes.map((l) => Math.abs(l.__pts[i] || 0))))
+      const FLOOR = 0.2
+      const MIN = Math.max(3, Math.round(n * 0.045)) /* about a fifth of a second */
+      const found = []
+      let run = 0
+      for (let i = 0; i <= n; i++) {
+        if (i < n && loud[i] < FLOOR) run++
+        else {
+          if (run >= MIN) found.push({ a: (i - run) / n, b: i / n })
+          run = 0
+        }
+      }
+      /* what is already cut, or outside the take's ends, is not a proposal */
+      const A = num('--a')
+      const B = num('--b') || 1
+      tl.__prop = found
+        .map((p) => ({ a: Math.max(p.a, A), b: Math.min(p.b, B) }))
+        .filter((p) => p.b - p.a > 0.01 && !cuts().some((c) => p.a < c.b && p.b > c.a))
+      showProposal()
+      paintCuts()
+    }
+    /* the tools row says what was found and offers the app's own two answers */
+    const showProposal = () => {
+      const bar = tl.querySelector('.tlx__bar')
+      const tight = tl.querySelector('.tlx__tight')
+      let box = tl.querySelector('.tlx__prop')
+      const list = tl.__prop || []
+      if (!list.length) {
+        if (box) box.remove()
+        if (tight) tight.hidden = false
+        return
+      }
+      const removed = list.reduce((n2, p) => n2 + (p.b - p.a), 0) * secs
+      if (!box) {
+        box = document.createElement('span')
+        box.className = 'tlx__prop'
+        bar.insertBefore(box, tight ? tight.nextSibling : null)
+      }
+      box.innerHTML =
+        `<span class="tlx__propn">${list.length} silence${list.length === 1 ? '' : 's'} · −${span(removed)}</span>` +
+        `<button type="button" class="wbtn tlx__apply">Apply</button>` +
+        `<button type="button" class="wbtn tlx__dismiss">Dismiss</button>`
+      if (tight) tight.hidden = true
+    }
+
     /* what a cut edge may not cross: the take's own ends and its neighbours */
     const room = (i) => {
       const list = cuts()
@@ -820,6 +1101,12 @@
 
     let drag = null
     inner.addEventListener('pointerdown', (e) => {
+      /* a press on one of the gap's own buttons is a press on the button: it
+         must not also scrub the take out from under it */
+      if (e.target.closest('.tlx__gapbtn, .tlx__seam')) {
+        e.stopPropagation()
+        return
+      }
       const gape = e.target.closest('.tlx__gape')
       const trim = e.target.closest('.tlx__trim')
       if (gape) {
@@ -861,11 +1148,16 @@
         } else if (drag.edge === 'a') c.a = Math.min(q, c.b)
         else c.b = Math.max(q, c.a)
         paintCuts()
+        ruler(tl)
+        paint()
         return
       }
       if (drag === 'a') set('--a', Math.min(p, num('--b') - 0.02))
       else if (drag === 'b') set('--b', Math.max(p, num('--a') + 0.02))
-      else set('--head', Math.min(Math.max(p, num('--a')), num('--b')))
+      /* the playhead does not stop in a hole: a cut is material that is not in
+         the film, so the head lands on the far side of it */
+      else set('--head', skip(Math.min(Math.max(p, num('--a')), num('--b'))))
+      if (drag === 'a' || drag === 'b') ruler(tl)
       paint()
     }
     const drop = () => {
@@ -903,6 +1195,25 @@
     )
 
     tl.addEventListener('click', (e) => {
+      /* the gap's own two answers, and the seam's one */
+      const act = e.target.closest('[data-act]')
+      if (act) {
+        const i = +act.dataset.c
+        const c = cuts()[i]
+        if (c) {
+          if (act.dataset.act === 'undo') cuts().splice(i, 1)
+          else if (act.dataset.act === 'close') c.closed = true
+          else if (act.dataset.act === 'open') c.closed = false
+          /* the playhead cannot be left standing in material that has just
+             stopped being on the strip */
+          if (act.dataset.act === 'close') set('--head', skip(num('--head')))
+          paintCuts()
+          paint()
+          ruler(tl)
+        }
+        e.stopPropagation()
+        return
+      }
       const eye = e.target.closest('.tlx__eye')
       if (eye) {
         const on = eye.getAttribute('aria-pressed') !== 'true'
@@ -916,7 +1227,17 @@
       }
       const sp = e.target.closest('.tlx__sp')
       if (sp) {
+        /* the clip under the playhead is the one it acts on — the app's own
+           rule, and the reason the row lights up differently as you scrub */
+        const cl = clipAt(num('--head'))
+        if (cl) {
+          tl.__sp = tl.__sp || {}
+          tl.__sp[speedKey(cl[3])] = parseFloat(sp.textContent) || 1
+        }
         for (const b of tl.querySelectorAll('.tlx__sp')) b.setAttribute('aria-pressed', String(b === sp))
+        paintLanes()
+        ruler(tl)
+        paint()
         e.stopPropagation()
         return
       }
@@ -932,15 +1253,39 @@
            did nothing but add frames: it always snapped back to the start. */
         void inner.offsetWidth
         const w = inner.getBoundingClientRect().width
-        view.scrollLeft = Math.max(0, num('--head') * w - view.clientWidth / 2)
+        view.scrollLeft = Math.max(0, xOf(num('--head')) * w - view.clientWidth / 2)
         tl.classList.toggle('is-zoomed', next > 1.001)
         e.stopPropagation()
         return
       }
+      /* TIGHTEN PROPOSES, IT DOES NOT ACT (Robert, 2026-09-08: "make sure you
+         took all working shit from prod ui"). The app listens, says what it
+         found — "3 silences · −0:04" — and waits for Apply or Dismiss; it used
+         to squash the drawn wave here, which showed the IDEA of tightening and
+         did nothing you could keep, undo or drag. Now that a cut is a real
+         thing, Apply makes real ones: the quiet stretches arrive as gaps with
+         their own handles and their own undo. */
       if (e.target.closest('.tlx__tight')) {
-        /* what Tighten does to a take is take the quiet out of it; here it is
-           the gaps in the drawn wave that go, so the lanes show the idea */
-        tl.classList.toggle('is-tight')
+        propose()
+        e.stopPropagation()
+        return
+      }
+      if (e.target.closest('.tlx__apply')) {
+        for (const p of tl.__prop || []) cuts().push({ a: p.a, b: p.b })
+        cuts().sort((x, y) => x.a - y.a)
+        tl.__prop = null
+        set('--head', skip(num('--head')))
+        showProposal()
+        paintCuts()
+        ruler(tl)
+        paint()
+        e.stopPropagation()
+        return
+      }
+      if (e.target.closest('.tlx__dismiss')) {
+        tl.__prop = null
+        showProposal()
+        paintCuts()
         e.stopPropagation()
         return
       }
@@ -958,6 +1303,9 @@
         e.stopPropagation()
       }
     })
+    paintLanes()
+    paintCuts()
+    ruler(tl)
     paint()
   }
 
@@ -978,7 +1326,11 @@
     const step = (t) => {
       const dt = last ? (t - last) / 1000 : 0
       last = t
-      let h = num('--head') + dt / secs
+      /* AND PLAY SKIPS WHAT IS NOT IN THE FILM. A cut is material taken out, so
+         the clock jumps it — a playhead that crawls through a hole is playing
+         something the export will not contain. */
+      let h = num('--head') + (dt / secs) * (tl.speedAt ? tl.speedAt(num('--head')) : 1)
+      if (tl.skip) h = tl.skip(h)
       const b = num('--b') || 1
       if (h >= b) {
         h = b
@@ -1005,7 +1357,10 @@
       scrub.addEventListener('pointerdown', (e) => {
         const r = scrub.getBoundingClientRect()
         const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-        tl.style.setProperty('--head', p)
+        /* the bar under the picture is the FILM's length, so a press on it is a
+           fraction of the film — which is a different point in the take once a
+           piece has been taken out of the middle */
+        tl.style.setProperty('--head', tl.srcAtOut ? tl.srcAtOut(p) : p)
         if (tl.paint) tl.paint()
         e.stopPropagation()
       })
@@ -1069,6 +1424,37 @@
       zoomTo(1)
     })
     rails.appendChild(z)
+    /* AND THE STRIP'S OWN SWITCHES ANSWER EACH OTHER, the way FrameBar.tsx has
+       them: the inset steps and Shadow are greyed until there is a frame to
+       apply them to, choosing a background turns them on at the middle step,
+       and choosing "no frame" puts them back to sleep. Lifting the panel out of
+       the app without its logic left five controls that could never be pressed.
+       */
+    const steps = () => [...rails.querySelectorAll('.frame-bar__step')]
+    const shadow = () => rails.querySelector('.frame-bar__step--shadow')
+    const setFrame = (on) => {
+      for (const b of steps()) {
+        b.disabled = !on
+        if (!on) b.classList.remove('frame-bar__step--on')
+      }
+      if (on) {
+        const pads = steps().filter((b) => b !== shadow())
+        const mid = pads[Math.min(2, pads.length - 1)]
+        if (mid && !pads.some((b) => b.classList.contains('frame-bar__step--on'))) mid.classList.add('frame-bar__step--on')
+      }
+    }
+    rails.addEventListener('click', (e) => {
+      const sw = e.target.closest('.frame-bar__swatch')
+      if (sw) {
+        setFrame(!sw.classList.contains('frame-bar__swatch--none'))
+        return
+      }
+      const st = e.target.closest('.frame-bar__step')
+      if (!st || st.disabled) return
+      if (st === shadow()) st.classList.toggle('frame-bar__step--on')
+      else for (const b of steps()) if (b !== shadow()) b.classList.toggle('frame-bar__step--on', b === st)
+    })
+    setFrame(!(rails.querySelector('.frame-bar__swatch--on') || {}).classList?.contains('frame-bar__swatch--none'))
     cap.appendChild(rails)
     return rails
   }
@@ -1260,6 +1646,23 @@
      watching. The picture does not move while the drawer closes — it is
      positioned in the frame, not in the bar — so the second move starts from
      exactly where the first one left everything. */
+  /* ONE STEP BACK, NOT ALL OF THEM (Robert, 2026-09-08: "esc/click away when
+     editing video must close editing first back to play window, not all window
+     entirely"). Escape and a press on the app behind the picture mean "out of
+     what I am in": out of the editor while the editor is open, and only then out
+     of the player. The cross in the head is the other thing — it is the way out
+     of the PLAYER and says so, so it still closes the lot. */
+  function watchBack() {
+    const { root, card } = WATCH
+    if (!root || !card) return
+    const dock = root.querySelector('.watchdock')
+    if (dock && dock.querySelector('.wdock__edit')) {
+      watchEdit(root)
+      return
+    }
+    watchClose()
+  }
+
   function watchClose() {
     const { root, card, box } = WATCH
     if (!card || !box) return
@@ -1330,7 +1733,7 @@
     if (window.__dzWatch) return
     window.__dzWatch = true
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') watchClose()
+      if (e.key === 'Escape') watchBack()
     })
     /* A PRESS ANYWHERE ELSE IS A PRESS ON THE APP BEHIND THE VIDEO — a tab, the
        search, the record button. The video gets out of the way and the press
@@ -1346,7 +1749,7 @@
           return
         }
         if (e.target.closest('.watchbox, .watchbar, .watchdock, .wrails')) return
-        watchClose()
+        watchBack()
       },
       true,
     )
