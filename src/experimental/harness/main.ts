@@ -912,6 +912,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'sameaslast',
+    title: 'J13 — the picture that is not encoded: same pixels, fewer encoder calls',
+    detail:
+      'Renders the SAME take twice through the production render — once as it ships and once with "same as last frame" armed — then walks both files in lockstep and compares EVERY frame\u2019s pixels byte for byte (no sampling, no PSNR). The source is written below the output rate on purpose, which is what capture does to the render: it omits the ticks where nothing changed and the export refills them. Returns both files so ffmpeg can decode them outside Chrome (scripts/j13.mjs).',
+    run: async (args) => {
+      const { runSameAsLast } = await import('../perf/sameAsLastRig')
+      return runSameAsLast({
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        outputFps: typeof args?.outputFps === 'number' ? args.outputFps : undefined,
+        output: typeof args?.output === 'string' ? (args.output as never) : undefined,
+        rebuild: args?.rebuild === true,
+        buildBudgetSec: typeof args?.buildBudgetSec === 'number' ? args.buildBudgetSec : undefined,
+      })
+    },
+  },
+  {
     id: 'skipframe',
     title: 'J13 step 0 — what does VideoToolbox emit, and can a picture be written into it?',
     detail:
@@ -922,6 +942,7 @@ const runners: Runner[] = [
         width: typeof args?.width === 'number' ? args.width : undefined,
         height: typeof args?.height === 'number' ? args.height : undefined,
         frames: typeof args?.frames === 'number' ? args.frames : undefined,
+        at: typeof args?.at === 'number' ? args.at : undefined,
       })
     },
   },

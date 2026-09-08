@@ -35,6 +35,7 @@ import { chunkedRenderEnabled } from './chunkedFlag'
 import { fullColourEnabled } from './fullColour'
 import { audioTrackMode } from './audioTracks'
 import { noiseGateEnabled } from './gateFlag'
+import { sameAsLastEnabled } from './sameAsLastFlag'
 import {
   ChunkedRenderUnavailable,
   getLastChunkedStats,
@@ -253,6 +254,7 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
         gop: keyframeIntervalSec(),
         audioTracks: audioTrackMode(),
         noiseGate: noiseGateEnabled(),
+        sameAsLast: sameAsLastEnabled(),
       },
       paced: !!pace,
       pace: pace?.level(),

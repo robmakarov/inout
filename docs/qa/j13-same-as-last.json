@@ -1,0 +1,100 @@
+{
+  "source": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "seconds": 20
+  },
+  "output": {
+    "width": 1280,
+    "height": 720,
+    "fps": 60,
+    "tier": "720p"
+  },
+  "lanes": [
+    {
+      "name": "off — today’s render",
+      "on": false,
+      "ms": 17228,
+      "bytes": 1266622,
+      "frames": 1200,
+      "refusal": null
+    },
+    {
+      "name": "off again — the same render twice",
+      "on": false,
+      "ms": 4265,
+      "bytes": 1266622,
+      "frames": 1200,
+      "refusal": null
+    },
+    {
+      "name": "on — same as last frame",
+      "on": true,
+      "ms": 2278,
+      "bytes": 845710,
+      "frames": 1200,
+      "slots": 1200,
+      "marked": 600,
+      "duplicates": 600,
+      "written": 589,
+      "writtenBytes": 8246,
+      "refusal": null
+    }
+  ],
+  "pixels": {
+    "comparedFrames": 1200,
+    "identical": false,
+    "firstDifferentFrame": 11,
+    "differingBytes": 433049816,
+    "frameCountsMatch": true,
+    "durationsMatchMs": 0
+  },
+  "determinism": {
+    "comparedFrames": 1200,
+    "identical": true,
+    "firstDifferentFrame": null
+  },
+  "repeats": {
+    "off": 0,
+    "on": 568,
+    "frames": 1200
+  },
+  "provenance": {
+    "slotsOffered": 1200,
+    "slotsMarked": 600,
+    "duplicatesFound": 600,
+    "picturesWritten": 589,
+    "encoderCallsSaved": 589,
+    "shown": true,
+    "why": "every written picture is a slot whose every contributing channel handed back the same source sample as the slot before it, and whose pose, viewport and background did not move"
+  },
+  "verdict": [
+    "packets: 1200 off vs 1200 on — the file keeps its picture count and its rate",
+    "PIXELS DIFFER at frame 11 (433049816 bytes over the file)",
+    "589 of 1200 slots written instead of encoded (49.1 %), 8246 bytes; 600 found identical",
+    "render 17228 ms off → 2278 ms on (7.56x) · file 1266622 → 845710 bytes (0.668x)",
+    "THE CONTROL IS EXACT: today's render run twice gives the same 1200 frames byte for byte, so any difference above is this engine's",
+    "frames that repeat the frame before them EXACTLY: 568 with the engine on, 0 with it off, out of 1200 — the source held 600 of its pictures for two ticks"
+  ],
+  "pass": false,
+  "outsideChrome": {
+    "ran": true,
+    "pass": false,
+    "shapeSame": true,
+    "copiedFrames": 568,
+    "written": 589,
+    "worstMovementAtCopiedSlot": 58,
+    "worstAt": 309,
+    "floor": 16,
+    "frames": {
+      "off": "1200",
+      "on": "1200"
+    },
+    "note": "A true · B 568/589 · C worst 58 <= 16"
+  },
+  "savedTo": {
+    "off": "/Users/rmakarov/Downloads/inout-j13/A-OFF-todays-render.mp4",
+    "on": "/Users/rmakarov/Downloads/inout-j13/B-ON-same-as-last.mp4"
+  }
+}

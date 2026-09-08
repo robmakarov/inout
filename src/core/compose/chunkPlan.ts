@@ -71,6 +71,7 @@ import { sourceFrameEnabled } from '@core/frame'
 import { fullColourActive } from './fullColour'
 import { audioTrackModeActive } from './audioTracks'
 import { noiseGateActive } from './gateFlag'
+import { sameAsLastActive } from './sameAsLastFlag'
 
 /**
  * Bump on ANY change that can move a pixel or a byte: the draw (layout.ts,
@@ -105,6 +106,13 @@ export interface RenderFlagPrint {
    * pre-render; this row is that lesson applied before it could happen twice.
    */
   noiseGate: boolean
+  /**
+   * J13's `?sameaslast=` — it changes the packets themselves (a slot's picture
+   * becomes fourteen bytes saying "the one before it"), so a chunk made with it
+   * off must never be concatenated into an export made with it on. Same lesson
+   * as the four rows above, applied before it could cost anything.
+   */
+  sameAsLast: boolean
 }
 
 /**
@@ -129,6 +137,7 @@ export function currentRenderFlags(): RenderFlagPrint {
     fullColour: fullColourActive(),
     audioTracks: audioTrackModeActive(),
     noiseGate: noiseGateActive(),
+    sameAsLast: sameAsLastActive(),
   }
 }
 
@@ -382,6 +391,7 @@ function settingsPrint(s: ExportSettings, flags: RenderFlagPrint): (string | num
     flags.cq,
     flags.sourceFrame,
     flags.fullColour,
+    flags.sameAsLast,
   ]
 }
 

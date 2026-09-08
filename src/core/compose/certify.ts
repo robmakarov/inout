@@ -41,6 +41,17 @@ export interface CertifiedCodec {
    * without knowing which of the two produced the file.
    */
   qp?: number
+  /**
+   * J13 — this file was made with "same as last frame" ARMED: a slot whose
+   * picture is identical to the one before it was written as fourteen bytes
+   * saying so rather than encoded again. Absent means it was not, which is
+   * every file before this one. A size or speed report from the field cannot
+   * be read without it — the same take at the same rung is a different number
+   * of encoder calls depending on it. HOW MANY were written is a per-render
+   * number and lives on the render's own stats and console line, because the
+   * tags are written before the first frame.
+   */
+  sameAsLast?: true
 }
 
 export interface CertifiedExport {

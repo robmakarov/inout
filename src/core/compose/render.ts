@@ -115,6 +115,8 @@ import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { createPaceGate } from './paceGate'
 import { openVideoChannel, type VideoChannelReader } from './video'
+import { SameAsLastPlan, markSameAsLast, samePictureKey } from './sameAsLast'
+import { sameAsLastActive } from './sameAsLastFlag'
 export { openVideoChannel, type VideoChannelReader }
 import { exportFileName } from './fileName'
 import {
@@ -260,6 +262,19 @@ export interface RenderStats {
   integratedLufs?: number | null
   /** What R128 targeting ASKED for, before the peak/floor bounds cut it. */
   r128AskedGain?: number
+  /**
+   * J13 — the slots whose picture was WRITTEN instead of drawn and encoded, and
+   * what they cost. Absent unless `?sameaslast=on`; `refusal` is present when
+   * the engine was asked for and this stream could not have it.
+   */
+  sameAsLast?: {
+    slots: number
+    marked: number
+    duplicates: number
+    written: number
+    bytes: number
+    refusal: string | null
+  }
 }
 
 let lastStats: RenderStats | null = null
@@ -647,6 +662,27 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       ? `${target.rung}→av1-444-sw${qp === null ? '' : `-q${qp}`}`
       : target.rung
 
+    /**
+     * J13 — SAME AS LAST FRAME. It rides the constant-quality encoder because
+     * that is the only encoder this product owns: an export on the bitrate
+     * target has mediabunny's own, which hands out no seam to write a picture
+     * into. So the engine is available exactly when quantizer mode is, and
+     * declines to today's render otherwise — with no penalty, because
+     * declining IS today's render.
+     *
+     * The waveform pass is excluded on purpose: its picture is redrawn every
+     * frame from the audio and its slots have no source sample to be identical
+     * to, so the provenance rule this engine rests on does not apply there.
+     */
+    const sameAsLast =
+      wantVideo && qp !== null && !waveformMode && sameAsLastActive() ? new SameAsLastPlan(fps) : null
+    if (sameAsLast) {
+      console.info(
+        `[compose] J13 same as last frame: ARMED — a slot whose picture is identical to the one ` +
+          `before it is written, not encoded (?sameaslast=off is yesterday's render)`,
+      )
+    }
+
     // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
     // the fallback for platforms where the scratch can't be opened.
     // J1: the caller's sink wins — a chunk file, or the audio artifact. Nobody
@@ -686,6 +722,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
             // `flags.cq` for the same file and the two must not disagree. Which
             // quantizer actually ran is in the rung above.
             qp: qp === null ? undefined : (wantQp ?? undefined),
+            ...(sameAsLast ? { sameAsLast: true as const } : null),
           },
         }),
       ),
@@ -702,7 +739,13 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // is how the first version of this reported itself unsupported on
       // hardware that supports it.
       ...(qp !== null && cqCodec
-        ? { fullCodecString: cqCodec, onEncoderConfig: markConstantQuality(qp) }
+        ? {
+            fullCodecString: cqCodec,
+            onEncoderConfig: (config: VideoEncoderConfig) => {
+              markConstantQuality(qp)(config)
+              if (sameAsLast) markSameAsLast(sameAsLast)(config)
+            },
+          }
         : {}),
       // AFTER the spread of `target.encoderOptions`, which asks for hardware:
       // there is no hardware AV1 4:4:4 encoder anywhere, so the preference has
@@ -1009,6 +1052,8 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       stats.audioMs += performance.now() - tAudio
     }
 
+    /** J13: what drew the slot before this one. Null = nothing has drawn yet. */
+    let lastPictureKey: string | null = null
     const renderFrame = async (frameIndex: number, drawWaveform: ((t: number) => void) | null): Promise<void> => {
       const tSec = frameIndex / fps
       if (drawWaveform) {
@@ -1019,16 +1064,16 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         const tDecode = performance.now()
         let screen: VideoSample | null = null
         let camera: VideoSample | null = null
+        const seen: { channelId: string; timestamp: number | null }[] = []
         for (const reader of videoReaders) {
           const localMs = channelSourceTimeAt(recording, edit, reader.channelId, tSec * 1000)
-          if (localMs === null) continue
-          const sample = await reader.sampleAt(localMs / 1000)
+          const sample = localMs === null ? null : await reader.sampleAt(localMs / 1000)
+          seen.push({ channelId: reader.channelId, timestamp: sample ? sample.timestamp : null })
           if (!sample) continue
           if (reader.kind === 'screen') screen = sample
           else camera = sample
         }
         stats.decodeMs += performance.now() - tDecode
-        const tDraw = performance.now()
         // F4: the camera track is keyed to RECORDING time, so a cut made later
         // never drags the motion away from the moment it belongs to.
         let pose
@@ -1046,14 +1091,42 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
           const recMs = outputToRecordingMs(edit, tSec * 1000)
           if (recMs !== null) view = viewportAt(edit.viewport, recMs)
         }
-        drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
-        stats.drawMs += performance.now() - tDraw
+
+        /**
+         * J13 — IS THIS SLOT THE PICTURE THAT IS ALREADY ON THE CANVAS?
+         *
+         * The answer comes from PROVENANCE and never from pixels (the task's
+         * own gate, DECISIONS robert (8)): every channel handed back the same
+         * source sample it handed back for the slot before — the reader holds
+         * one decoded sample until output time passes the next one, so this is
+         * the sample's own timestamp and costs nothing — and nothing else that
+         * draws has moved. A cursor that moved IS a new source picture, so it
+         * cannot be lost here.
+         *
+         * The draw is what is saved on this side; the encoder call is saved on
+         * the other, inside the constant-quality encoder, which writes the
+         * format's own "identical to the previous picture" for this slot.
+         */
+        const key = samePictureKey({ samples: seen, pose, view, background: edit.background })
+        const duplicate = sameAsLast !== null && lastPictureKey !== null && key === lastPictureKey
+        lastPictureKey = key
+        if (duplicate) {
+          sameAsLast!.markDuplicate(tSec - windowStartSec)
+        } else {
+          const tDraw = performance.now()
+          drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
+          stats.drawMs += performance.now() - tDraw
+        }
       }
       // Awaited, and that is not the stall O5 assumed it was: mediabunny's
       // encoder wrapper keeps four frames in the VideoEncoder queue and only
       // blocks when that queue is full or the writer pushes back. Measured at
       // 23-45 ms out of a ~1900 ms render — 1.5 %. An extra lookahead window
       // on top of it was built, measured, and removed for buying nothing.
+      //
+      // It is called for EVERY slot, including a duplicate: the file is
+      // constant-rate and has a picture in every one of them. What changes for
+      // a duplicate is what the encoder does with it.
       const tEncode = performance.now()
       await videoSource!.add(tSec - windowStartSec, 1 / fps)
       stats.encodeMs += performance.now() - tEncode
@@ -1184,8 +1257,28 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     stats.publishMs = since(tPublish)
     report('finalizing', 1)
     stats.totalMs = performance.now() - t0
+    if (sameAsLast) stats.sameAsLast = { ...sameAsLast.stats }
     setLastRenderStats(stats)
     if (!quiet) console.info(formatStats(stats))
+    /**
+     * J13 SAYS WHAT IT DID, ON EVERY RENDER IT RAN ON. A run that cannot show
+     * a written picture's provenance is a run that proved nothing (the task's
+     * own gate), so the count of duplicates FOUND is printed beside the count
+     * WRITTEN — the two differ only by the frames before the engine could read
+     * the stream, and by any key frame that landed on a duplicate slot.
+     */
+    if (sameAsLast && !quiet) {
+      const st = sameAsLast.stats
+      console.info(
+        st.refusal
+          ? `[export] J13 same as last frame: DECLINED — ${st.refusal}. ${st.duplicates} of ${st.slots} ` +
+              `slots were identical to the slot before them and every one of them was encoded, as before.`
+          : `[export] J13 same as last frame: ${st.written} of ${st.slots} slots WRITTEN instead of ` +
+              `encoded (${((100 * st.written) / Math.max(1, st.slots)).toFixed(1)} %), ` +
+              `${st.marked} found identical by the render, ${st.duplicates} reached the encoder, ` +
+              `${st.bytes} bytes total`,
+      )
+    }
 
     return {
       blob,

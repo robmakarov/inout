@@ -83,6 +83,7 @@ const { setFullColourOverride } = await import('./fullColour')
 const { setLoudnessMode } = await import('./loudnessMode')
 const { setNoiseGateOverride } = await import('./gateFlag')
 const { setAudioTrackModeOverride } = await import('./audioTracks')
+const { setSameAsLastOverride } = await import('./sameAsLastFlag')
 const { currentRenderFlags } = await import('./chunkPlan')
 
 /** Every render flag back to what ships, so one case cannot leak into the next. */
@@ -93,6 +94,7 @@ function resetFlags(): void {
   setLoudnessMode(null)
   setNoiseGateOverride(null)
   setAudioTrackModeOverride(null)
+  setSameAsLastOverride(null)
 }
 
 /**
@@ -116,6 +118,7 @@ const FLAG_CASES: [string, () => void][] = [
   ['loudness', () => setLoudnessMode('r128')],
   ['audioTracks', () => setAudioTrackModeOverride('separate')],
   ['noiseGate', () => setNoiseGateOverride(true)],
+  ['sameAsLast', () => setSameAsLastOverride(true)],
 ]
 
 const recording = { id: 'rec1', createdAt: 0, durationMs: 1000, channels: [] } as unknown as Recording

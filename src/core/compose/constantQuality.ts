@@ -36,6 +36,7 @@
  * every path that has not opted in is untouched, byte for byte.
  */
 import { CustomVideoEncoder, EncodedPacket, registerEncoder, type VideoCodec } from 'mediabunny'
+import { planOf, type SameAsLastPlan } from './sameAsLast'
 
 /**
  * Where the QP rides on the encoder config. A symbol and not a string key so it
@@ -311,6 +312,13 @@ class ConstantQualityEncoder extends CustomVideoEncoder {
   private encoder: VideoEncoder | null = null
   /** Set once from the config and never moved again — see the ruling above. */
   private qp = DEFAULT_QP
+  /**
+   * J13 — "same as last frame". Present only when the render asked for it, and
+   * only for AVC: the skip picture this writes is an H.264 slice, and there is
+   * no AV1 equivalent in this product. Absent = this encoder is exactly what it
+   * was before J13, packet for packet.
+   */
+  private plan: SameAsLastPlan | null = null
 
   static supports(codec: VideoCodec, config: VideoEncoderConfig): boolean {
     return QUANTIZER_CODECS.has(codec) && qpOf(config) !== null
@@ -329,9 +337,17 @@ class ConstantQualityEncoder extends CustomVideoEncoder {
         : this.codec === 'av1'
           ? clampAv1Quantizer(asked)
           : clampQp(asked)
+    const askedPlan = planOf(this.config)
+    if (askedPlan && this.codec !== 'avc') {
+      askedPlan.stats.refusal = `the export is encoding ${this.codec}; the skip picture is an H.264 slice`
+    } else this.plan = askedPlan
+    const plan = this.plan
     const encoder = new VideoEncoder({
       output: (chunk, meta) => {
-        this.onPacket(EncodedPacket.fromEncodedChunk(chunk), meta)
+        const packet = EncodedPacket.fromEncodedChunk(chunk)
+        if (plan) {
+          plan.onPacket(packet, meta, (p, m) => this.onPacket(p, m as EncodedVideoChunkMetadata))
+        } else this.onPacket(packet, meta)
       },
       error: (err) => {
         this.onError(err)
@@ -383,11 +399,17 @@ class ConstantQualityEncoder extends CustomVideoEncoder {
    * Awaiting the dequeue costs nothing when the encoder is keeping up.
    */
   async encode(
-    videoSample: { toVideoFrame(): VideoFrame },
+    videoSample: { toVideoFrame(): VideoFrame; timestamp: number; duration: number },
     options: VideoEncoderEncodeOptions,
   ): Promise<void> {
     const encoder = this.encoder
     if (!encoder) throw new Error('constant-quality encoder used before init')
+    // J13 — THE ENCODER CALL THAT DOES NOT HAPPEN. The frame is never turned
+    // into a VideoFrame here: the picture this slot needs is already in the
+    // file, and the 14 bytes that say so are written when the queue drains.
+    if (this.plan && this.plan.offer(videoSample.timestamp, videoSample.duration, options.keyFrame === true) === 'skip') {
+      return
+    }
     const frame = videoSample.toVideoFrame()
     try {
       // THE PER-FRAME QP IS THE WHOLE POINT. Quantizer mode without it encodes
@@ -422,6 +444,9 @@ class ConstantQualityEncoder extends CustomVideoEncoder {
 
   async flush(): Promise<void> {
     await this.encoder?.flush()
+    // After the encoder, because the tail of a render is often a run of
+    // duplicates and every one of them is waiting behind a real packet.
+    this.plan?.flush((p, m) => this.onPacket(p, m as EncodedVideoChunkMetadata))
   }
 
   close(): void {

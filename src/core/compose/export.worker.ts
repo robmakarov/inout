@@ -40,6 +40,7 @@ import { setKeyframeIntervalOverride } from './keyframeInterval'
 import { setFullColourOverride } from './fullColour'
 import { separateAudioTracks, setAudioTrackModeOverride, type AudioTrackMode } from './audioTracks'
 import { setNoiseGateOverride } from './gateFlag'
+import { setSameAsLastOverride } from './sameAsLastFlag'
 import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
@@ -74,6 +75,8 @@ export type ExportWorkerIn =
         audioTracks?: AudioTrackMode
         /** O10c's `?noisegate=` — deterministic spectral gating. Default off. */
         noiseGate?: boolean
+        /** J13's `?sameaslast=` — the picture that is not encoded. Default off. */
+        sameAsLast?: boolean
         /** `?gop=` — the keyframe interval, which is also J1's chunk grid. */
         gop?: number
       }
@@ -155,6 +158,7 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
     if (typeof msg.flags.gop === 'number') setKeyframeIntervalOverride(msg.flags.gop)
     if (msg.flags.audioTracks) setAudioTrackModeOverride(msg.flags.audioTracks)
     if (typeof msg.flags.noiseGate === 'boolean') setNoiseGateOverride(msg.flags.noiseGate)
+    if (typeof msg.flags.sameAsLast === 'boolean') setSameAsLastOverride(msg.flags.sameAsLast)
   }
   if (msg.pace) paceLevel = msg.pace
   try {
