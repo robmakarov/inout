@@ -667,12 +667,14 @@
          close you are standing to it — so it sits off the right edge in its own
          rail, exactly as the Frame strip sits off the picture, and the tools row
          is left saying only what the take is made of. */
+      `<span class="tlx__zoomwrap">` +
       `<span class="tlx__zoom">` +
       `<span class="tlx__zoomlabel">Zoom</span>` +
+      `<span class="tlx__zoomin">` +
       `<button type="button" class="wbtn tlx__z" data-z="+" title="Zoom in">+</button>` +
       `<b class="tlx__len">${clock(secs)}</b>` +
       `<button type="button" class="wbtn tlx__z" data-z="-" title="Zoom out">−</button>` +
-      `</span>` +
+      `</span></span></span>` +
       `<div class="tlx__body">` +
       /* THE NAMES DO NOT SCROLL. They were inside the box that widens with the
          zoom, so the first thing zooming in did was carry the lane names off

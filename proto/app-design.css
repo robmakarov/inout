@@ -1436,16 +1436,31 @@
 }
 /* THE ZOOM RAIL, OFF THE STRIP'S RIGHT EDGE (Robert, 2026-09-08: "move timeline
    zoom control vertical floating to the right outside of timeline like bg
-   settings to screen"). Same rail as the Frame strip beside the picture — same
-   box, same corner, same Barlow caps label on top — because it is the same kind
-   of thing: not an edit, a way of looking. */
+   settings to screen", then "too high, must be as timeline itself and by it,
+   it must come with animation from under timeline"). Same rail as the Frame
+   strip beside the picture, and the same height as the thing it belongs to: it
+   stands the full height of the strip, against its right edge.
+
+   AND IT COMES OUT FROM UNDER IT. The wrap is a window that begins exactly at
+   the strip's edge and clips what is left of it, so the rail travels out from
+   behind the timeline rather than appearing beside it — the same arrival the
+   editor itself makes from under the picture. */
 .app-proto .tlx { position: relative; }
+.app-proto .tlx__zoomwrap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 74px;
+  overflow: hidden;
+  pointer-events: none;
+}
 .app-proto .tlx__zoom {
   position: absolute;
   top: 0;
-  left: 100%;
-  margin-left: 10px;
-  z-index: 3;
+  bottom: 0;
+  left: 10px;
+  width: 58px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1454,7 +1469,15 @@
   border-radius: 7px;
   border: 1px solid var(--surface-3);
   background: var(--surface);
+  pointer-events: auto;
+  transform: translateX(calc(-100% - 10px));
+  opacity: 0;
+  transition: transform var(--dz-slide) var(--dz-ease), opacity var(--dz-slide) var(--dz-ease);
 }
+/* the drawer says when it has finished travelling; the rail leaves after it */
+.app-proto .wdock__edit.is-done .tlx__zoom { transform: none; opacity: 1; }
+/* on the editor screen there is no drawer to wait for — it is simply there */
+.app-proto .editor .tlx__zoom { transform: none; opacity: 1; }
 .app-proto .tlx__zoomlabel {
   font-family: var(--dz);
   font-weight: 600;
@@ -1463,6 +1486,14 @@
   text-transform: uppercase;
   text-align: center;
   color: var(--text-dim);
+}
+/* the three controls sit in the middle of whatever height the strip has */
+.app-proto .tlx__zoomin {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
 }
 .app-proto .tlx__z { padding: 0; width: 100%; height: 22px; justify-content: center; font-size: 15px; }
 .app-proto .tlx__len {
@@ -1864,10 +1895,16 @@
   transition: left 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .app-proto .wrate__labels { position: absolute; inset: 0; display: flex; }
+/* ONE LINE, NOT TWO (Robert, 2026-09-08: "play speed slider x is fucked"). The
+   label was a GRID, so its number and its × became two rows and every stop read
+   as a fraction. A row that centres what is in it, and the × keeps the number's
+   baseline. */
 .app-proto .wrate__label {
   flex: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   padding: 0;
   border: 0;
   background: none;
@@ -1897,25 +1934,11 @@
   color: var(--text);
 }
 
-/* ---------- 15. the accent, and the two round buttons in the play row -------
-   Robert, 2026-09-08: "accent color sucks, fix it". The app's own accent is the
-   system blue, and this frame is his black/grey/NEON one (proto/neon.html, his
-   rules of 2026-09-04: "black, grey and neon — no hue in any surface"). So the
-   proposal stops borrowing that blue: the accent is the neon proto's own green,
-   the one it already uses for a primary and for a chip that is on, and every
-   place that reads --accent — the playhead, an on chip, a picked take, the room
-   bar, the account mark, Download — turns with it in one move. Type on a filled
-   neon is near-black, as it is there, because white on that green is unreadable.
-   THIS IS THE ONE HUE THE PROPOSAL INTRODUCES, and it replaces one rather than
-   adding to it. */
-.app-proto {
-  --accent: #00ff88;
-  --accent-soft: rgba(0, 255, 136, 0.16);
-  --accent-ink: #04180e;
-}
-.app-proto .wbtn.wdl { color: var(--accent-ink); }
-.app-proto .wbtn.wdl:hover:not(:disabled) { color: var(--accent-ink); }
-.app-proto .wbtn.wdl svg { color: var(--accent-ink); }
+/* ---------- 15. the two round buttons in the play row ----------------------
+   The accent was taken to the neon proto's green here for one round and put
+   back: Robert, 2026-09-08, "undo accent color". The app's own --accent is the
+   proposal's again — this layer sets type, geometry and structure, and borrows
+   every colour from the app's token block. */
 
 /* AND THE TWO ROUND ONES ARE THE ONLY ROUND THINGS LEFT (Robert: "resume record
    button looks like shit, make better and consistent"). The resume-record
@@ -1976,3 +1999,67 @@
   .app-proto .wrate__label i { display: none; }
 }
 .app-proto .wrate__label i { font-style: normal; }
+
+/* ---------- 16. and the editor screen wears the same two rails -------------
+   Robert, 2026-09-08: "same panels in play screen too". The play window and the
+   app's own editor screen show the same take with the same parts, so a control
+   cannot be a floating rail in one and a row of buttons in the other. The Frame
+   strip already stands beside the picture in both; this puts the zoom beside the
+   strip in both — the app's own zoombar, in the same box, at the timeline's own
+   height, with + on top and − under it. */
+.app-proto .editor .tl { overflow: visible; }
+.app-proto .tl__zoombar {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  bottom: 0;
+  margin-left: 10px;
+  width: 58px;
+  display: flex;
+  /* the app's row is −, span, +; read bottom-up it is the rail's own order */
+  flex-direction: column-reverse;
+  justify-content: center;
+  align-items: stretch;
+  gap: 5px;
+  padding: 26px 7px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+}
+.app-proto .tl__zoombar::after {
+  content: 'Zoom';
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--dz);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.app-proto .tl__zoombtn {
+  width: 100%;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px solid var(--surface-3);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  transition: color var(--dz-fast) var(--dz-ease), border-color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .tl__zoombtn:hover:not(:disabled) { background: transparent; border-color: var(--text-faint); color: var(--text); }
+.app-proto .tl__zoombtn:disabled { color: var(--dz-tertiary); border-color: var(--surface-2); opacity: 1; }
+.app-proto .tl__zoomspan {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  text-align: center;
+}
