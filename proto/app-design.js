@@ -440,6 +440,9 @@
     const raw = b.dataset.dlBase || b.getAttribute('aria-label') || b.getAttribute('title') || ''
     return raw.split(' — ')[0].trim() || 'Open'
   }
+  /* the take's own Download, wherever the app happens to name it — its label is
+     what the head reads it out by, which is the one name that has not drifted */
+  const isDownload = (b) => !!b && /^download\b/i.test(BTN_LABEL(b))
   function watchBar(root, takes, card) {
     const headEl = takes.querySelector('.takes__head')
     if (!headEl) return
@@ -484,7 +487,11 @@
        DISABLED when there is no cloud copy to send — which is the app's own
        rule for them, already stamped on the card's buttons by app-sim.js, so
        cloning carries the true state rather than a guess made here. */
-    for (const b of card.querySelectorAll('.cardtools .takecard__btn')) group.appendChild(mk(b))
+    /* except Download, which has left this row for the one under the picture
+       (Robert, 2026-09-08: "put download button next to edit button, make it
+       accent") — it is what you came for, so it stands with the take rather than
+       in a line of five things you might do to it */
+    for (const b of card.querySelectorAll('.cardtools .takecard__btn')) if (!isDownload(b)) group.appendChild(mk(b))
     for (const b of card.querySelectorAll('.takecard__actions .takecard__btn')) group.appendChild(mk(b))
     const del = card.querySelector('.cardtools .takecard__del')
     if (del) group.appendChild(mk(del))
@@ -766,7 +773,7 @@
     const paint = () => {
       const os = outSecs()
       const t = outAt(num('--head'))
-      const dock = tl.closest('.watchdock')
+      const dock = tl.__dock || tl.closest('.watchdock')
       const time = dock && dock.querySelector('.transport__time')
       if (time) time.innerHTML = `${clock(t)} <span class="transport__time-sep">/</span> ${clock(os)}`
       const fill = dock && dock.querySelector('.scrubber__fill')
@@ -1329,7 +1336,10 @@
       /* AND PLAY SKIPS WHAT IS NOT IN THE FILM. A cut is material taken out, so
          the clock jumps it — a playhead that crawls through a hole is playing
          something the export will not contain. */
-      let h = num('--head') + (dt / secs) * (tl.speedAt ? tl.speedAt(num('--head')) : 1)
+      /* two multipliers and they are different facts: what the CLIP runs at in
+         the finished film, and how fast you are watching it right now */
+      const rate = dock.__rate || 1
+      let h = num('--head') + (dt / secs) * (tl.speedAt ? tl.speedAt(num('--head')) : 1) * rate
       if (tl.skip) h = tl.skip(h)
       const b = num('--b') || 1
       if (h >= b) {
@@ -1366,6 +1376,54 @@
       })
     }
     tl.stopPlay = stop
+  }
+
+  /* THE PLAY RAIL'S OWN STOPS. Four, because this is a control you pass on your
+     way to watching something: half speed for catching a detail, normal, and two
+     ways to get through it faster. The editor's five are a different question —
+     what the FILE runs at, per clip — and they stay where they are. */
+  const RATES = [0.5, 1, 1.5, 2]
+  const RATE_AT = 1
+  function wireRate(el, dock) {
+    const set = (i) => {
+      const n = Math.max(0, Math.min(RATES.length - 1, i))
+      el.style.setProperty('--at', ((n * 100) / RATES.length).toFixed(3) + '%')
+      for (const b of el.querySelectorAll('.wrate__label')) b.classList.toggle('is-on', +b.dataset.i === n)
+      dock.__rate = RATES[n]
+    }
+    const at = (e) => {
+      const r = el.getBoundingClientRect()
+      return Math.floor(((e.clientX - r.left) / Math.max(1, r.width)) * RATES.length)
+    }
+    let held = false
+    el.addEventListener('pointerdown', (e) => {
+      held = true
+      try {
+        el.setPointerCapture(e.pointerId)
+      } catch (err) {
+        /* a pointer id the browser does not own */
+      }
+      set(at(e))
+      e.preventDefault()
+      e.stopPropagation()
+    })
+    el.addEventListener('pointermove', (e) => {
+      if (held) set(at(e))
+    })
+    const drop = () => {
+      held = false
+    }
+    el.addEventListener('pointerup', drop)
+    el.addEventListener('pointercancel', drop)
+    /* a press on the rail is not a press on the app behind the player — and a
+       plain click on a stop (a keyboard, or anything that does not send pointer
+       events) picks it, rather than only the drag */
+    el.addEventListener('click', (e) => {
+      const lab = e.target.closest('.wrate__label')
+      if (lab) set(+lab.dataset.i)
+      e.stopPropagation()
+    })
+    dock.__rate = RATES[RATE_AT]
   }
 
   /* the picture's own position, plus the gap: one place decides where the bar
@@ -1498,6 +1556,27 @@
          the arrow would be a second one that means something else */
       const back = c.querySelector('.transport__back')
       if (back) back.remove()
+      /* HOW FAST YOU WATCH IT, BESIDE THE BAR THAT SAYS WHERE YOU ARE (Robert,
+         2026-09-08: "make play speed slider and put it next to play progress
+         bar, not only in editor"). It is the app's own rail — the same box, the
+         same segment thumb, the same names sitting on it — at the row's height,
+         and it is a PLAY speed: it changes how the take runs in front of you and
+         nothing about the file. The editor's speeds are the other thing, per
+         clip, and they still are. */
+      const scrub = c.querySelector('.scrubber')
+      const rate = document.createElement('span')
+      rate.className = 'wrate'
+      rate.title = 'Play speed — how fast you watch it; the take itself is unchanged'
+      rate.innerHTML =
+        `<span class="wrate__rail"></span><i class="wrate__thumb"></i>` +
+        `<span class="wrate__labels">${RATES.map(
+          (v, i) => `<button type="button" class="wrate__label${i === RATE_AT ? ' is-on' : ''}" data-i="${i}">${v}×</button>`,
+        ).join('')}</span>`
+      rate.style.setProperty('--seg', (100 / RATES.length).toFixed(3) + '%')
+      rate.style.setProperty('--at', ((RATE_AT * 100) / RATES.length).toFixed(3) + '%')
+      if (scrub && scrub.parentNode) scrub.parentNode.insertBefore(rate, scrub.nextSibling)
+      else c.appendChild(rate)
+      wireRate(rate, dock)
       play.appendChild(c)
     }
     const edit = document.createElement('button')
@@ -1512,6 +1591,17 @@
       watchEdit(root)
     })
     play.appendChild(edit)
+    /* AND THE ONE THING YOU CAME FOR STANDS WITH IT, in the accent, because it
+       is the answer to "this one" — the head keeps the other four */
+    const dlSrc = WATCH.card && [...WATCH.card.querySelectorAll('.cardtools .takecard__btn')].find(isDownload)
+    if (dlSrc) {
+      const dl = document.createElement('button')
+      dl.type = 'button'
+      dl.className = 'wbtn wdl'
+      dl.title = dlSrc.getAttribute('title') || 'Download'
+      dl.innerHTML = (dlSrc.querySelector('svg') ? dlSrc.querySelector('svg').outerHTML : ic('download')) + '<span>Download</span>'
+      play.appendChild(dl)
+    }
     dock.appendChild(play)
     /* IN THE FRAME, NOT IN THE CONTROL BAR. It hangs off the picture and the
        picture is positioned in .capture, so this is the one parent in which
@@ -1520,6 +1610,20 @@
        tenant any more. */
     cap.appendChild(dock)
     if (bar) bar.classList.add('is-watch')
+    /* THE CLOCK IS BUILT WITH THE PLAYER, NOT WITH THE EDITOR (Robert,
+       2026-09-08: "not only in editor"). The transport's play button, its time
+       and its bar are the TIMELINE's — that is the whole design — so the
+       timeline is made when the picture opens and simply MOVES into the drawer
+       when Edit is pressed. Built with the editor, as it was, the play row was
+       a picture of a player until you opened the editor: pressing play did
+       nothing and the clock still read whatever the capture had frozen. */
+    if (WATCH.card) {
+      const tlEl = buildTimeline(WATCH.card)
+      tlEl.__dock = dock
+      dock.__tl = tlEl
+      wirePlay(dock, tlEl)
+      tlEl.paint()
+    }
     return dock
   }
 
@@ -1575,11 +1679,14 @@
     block.className = 'wdock__edit'
     const skin = document.createElement('div')
     skin.className = 'wdock__editin'
-    const tlEl = buildTimeline(WATCH.card)
+    /* the same timeline the play row is already driving — moved in, not made
+       again, so the clock does not restart when the drawer opens */
+    const tlEl = dock.__tl || buildTimeline(WATCH.card)
+    tlEl.__dock = dock
+    dock.__tl = tlEl
     skin.appendChild(tlEl)
     block.appendChild(skin)
     dock.appendChild(block)
-    wirePlay(dock, tlEl)
     /* folding it away stops the clock with it */
     block.__stop = () => tlEl.stopPlay && tlEl.stopPlay()
 
@@ -1627,6 +1734,10 @@
 
     block.style.height = blockH + 'px'
     block.classList.add('is-open')
+    /* it was built detached, where every width is zero: now that it stands in
+       the drawer it is asked again where its own parts go */
+    if (tlEl.paintCuts) tlEl.paintCuts()
+    ruler(tlEl)
     const btn = dock.querySelector('.wedit')
     if (btn) btn.setAttribute('aria-pressed', 'true')
     if (WATCH.box && target) {

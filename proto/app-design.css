@@ -1794,3 +1794,69 @@
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+
+/* ---------- 14. the play rail, beside the progress bar ---------------------
+   Robert, 2026-09-08: "make play speed slider and put it next to play progress
+   bar, not only in editor". It is the quality rail's own object at the play
+   row's height — a box, a segment that slides, the names sitting on it — so the
+   frame has one slider and not two ideas of one. What it changes is how fast
+   the take runs in front of you; the file is untouched, and the editor's
+   per-clip speeds are still the ones that write it. */
+.app-proto .wrate {
+  position: relative;
+  flex: none;
+  width: 132px;
+  height: var(--dz-h);
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+.app-proto .wrate__rail { position: absolute; inset: 0; }
+/* the same segment thumb as the quality rail, on the same curve */
+.app-proto .wrate__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: var(--at, 25%);
+  width: calc(var(--seg, 25%) - 4px);
+  margin-left: 2px;
+  border-radius: 7px;
+  background: var(--surface-3);
+  transition: left 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-proto .wrate__labels { position: absolute; inset: 0; display: flex; }
+.app-proto .wrate__label {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  cursor: ew-resize;
+  transition: color var(--dz-fast) var(--dz-ease);
+}
+.app-proto .wrate__label.is-on { color: var(--text); }
+.app-proto .wrate:hover .wrate__label { color: var(--text-dim); }
+.app-proto .wrate:hover .wrate__label.is-on { color: var(--text); }
+
+/* THE ONE YOU CAME FOR IS THE ACCENT ONE (Robert: "put download button next to
+   edit button, make it accent"). Same button as Edit beside it — same height,
+   same corner, same Barlow caps — filled rather than outlined, because there is
+   one thing on this bar that ends the job and four in the head that do not. */
+.app-proto .wbtn.wdl {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.app-proto .wbtn.wdl:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 82%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 82%, #fff);
+  color: var(--text);
+}
