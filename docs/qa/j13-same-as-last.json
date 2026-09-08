@@ -3,7 +3,7 @@
     "width": 1280,
     "height": 720,
     "fps": 30,
-    "seconds": 20
+    "seconds": 10
   },
   "output": {
     "width": 1280,
@@ -15,85 +15,110 @@
     {
       "name": "off — today’s render",
       "on": false,
-      "ms": 10403,
-      "bytes": 1266622,
-      "frames": 1200,
+      "ms": 11207,
+      "bytes": 636970,
+      "frames": 600,
       "refusal": null
     },
     {
       "name": "off again — the same render twice",
       "on": false,
-      "ms": 3660,
-      "bytes": 1266622,
-      "frames": 1200,
+      "ms": 2305,
+      "bytes": 636970,
+      "frames": 600,
       "refusal": null
     },
     {
       "name": "on — same as last frame",
       "on": true,
-      "ms": 1854,
-      "bytes": 846117,
-      "frames": 1200,
-      "slots": 1200,
-      "marked": 600,
-      "duplicates": 600,
-      "written": 589,
-      "writtenBytes": 8842,
+      "ms": 1289,
+      "bytes": 436424,
+      "frames": 600,
+      "slots": 600,
+      "marked": 300,
+      "duplicates": 300,
+      "written": 292,
+      "writtenBytes": 4383,
       "refusal": null
     }
   ],
   "pixels": {
-    "comparedFrames": 1200,
+    "comparedFrames": 600,
     "identical": false,
     "firstDifferentFrame": 11,
-    "differingBytes": 413001612,
+    "differingBytes": 202133837,
     "frameCountsMatch": true,
     "durationsMatchMs": 0
   },
   "determinism": {
-    "comparedFrames": 1200,
+    "comparedFrames": 600,
     "identical": true,
     "firstDifferentFrame": null
   },
   "repeats": {
     "off": 0,
-    "on": 589,
-    "frames": 1200
+    "on": 292,
+    "frames": 600
+  },
+  "chunked": {
+    "ran": true,
+    "frames": 600,
+    "written": 280,
+    "repeats": 280,
+    "bytes": 446862,
+    "bytesOff": 636978,
+    "ms": 1163,
+    "msOff": 2450,
+    "shapeMatches": true,
+    "note": "every picture the chunks wrote survived the concatenation and decodes as an exact copy"
+  },
+  "sizeEstimate": {
+    "ran": true,
+    "duplicateFraction": 0.047,
+    "predictedOn": 1447500,
+    "actualOn": 1720978,
+    "ratioOn": 0.841,
+    "predictedOff": 2500000,
+    "actualOff": 1986848,
+    "ratioOff": 1.258,
+    "note": "the probe counted the duplicate share on this take and priced those slots as written pictures"
   },
   "provenance": {
-    "slotsOffered": 1200,
-    "slotsMarked": 600,
-    "duplicatesFound": 600,
-    "picturesWritten": 589,
-    "encoderCallsSaved": 589,
+    "slotsOffered": 600,
+    "slotsMarked": 300,
+    "duplicatesFound": 300,
+    "picturesWritten": 292,
+    "encoderCallsSaved": 292,
     "shown": true,
     "why": "every written picture is a slot whose every contributing channel handed back the same source sample as the slot before it, and whose pose, viewport and background did not move"
   },
   "verdict": [
-    "packets: 1200 off vs 1200 on — the file keeps its picture count and its rate",
-    "PIXELS DIFFER at frame 11 (413001612 bytes over the file)",
-    "589 of 1200 slots written instead of encoded (49.1 %), 8842 bytes; 600 found identical",
-    "render 10403 ms off → 1854 ms on (5.61x) · file 1266622 → 846117 bytes (0.668x)",
-    "THE CONTROL IS EXACT: today's render run twice gives the same 1200 frames byte for byte, so any difference above is this engine's",
-    "frames that repeat the frame before them EXACTLY: 589 with the engine on, 0 with it off, out of 1200 — the source held 600 of its pictures for two ticks"
+    "packets: 600 off vs 600 on — the file keeps its picture count and its rate",
+    "PIXELS DIFFER at frame 11 (202133837 bytes over the file)",
+    "292 of 600 slots written instead of encoded (48.7 %), 4383 bytes; 300 found identical",
+    "render 11207 ms off → 1289 ms on (8.69x) · file 636970 → 436424 bytes (0.685x)",
+    "THE CONTROL IS EXACT: today's render run twice gives the same 600 frames byte for byte, so any difference above is this engine's",
+    "frames that repeat the frame before them EXACTLY: 292 with the engine on, 0 with it off, out of 600 — the source held 300 of its pictures for two ticks",
+    "CHUNKED (the path an edited export takes): 280 written across the chunks, 280 of 600 frames of the CONCATENATED file repeat their predecessor exactly · 636978 -> 446862 bytes · 2450 -> 1163 ms — every picture the chunks wrote survived the concatenation and decodes as an exact copy",
+    "SIZE PROMISE: the probe found 4.7 % of slots repeat and predicts 1447500 bytes against 1720978 actually written (0.841x) · with the engine off it predicts 2500000 against 1986848 (1.258x)"
   ],
   "pass": true,
   "outsideChrome": {
     "ran": true,
     "pass": true,
     "shapeSame": true,
-    "copiedFrames": 589,
-    "written": 589,
+    "copiedFrames": 292,
+    "written": 292,
     "worstMovementAtCopiedSlot": 58,
     "worstAt": 309,
     "floor": 96,
-    "uncopiedSlotsClearingFloor": 599,
+    "uncopiedSlotsClearingFloor": 299,
     "quietestUncopiedSlot": 5,
     "frames": {
-      "off": "1200",
-      "on": "1200"
+      "off": "600",
+      "on": "600"
     },
-    "note": "A true · B 589/589 · C worst 58 < 96, 599 uncopied slots above it"
+    "note": "A true · B 292/292 · C worst 58 < 96, 299 uncopied slots above it"
   },
   "savedTo": {
     "off": "/Users/rmakarov/Downloads/inout-j13/A-OFF-todays-render.mp4",

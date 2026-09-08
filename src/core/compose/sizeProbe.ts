@@ -205,6 +205,8 @@ import {
   registerConstantQualityEncoder,
 } from '@core/compose/constantQuality'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
+import { SKIP_PICTURE_MAX_BYTES, samePictureKey } from './sameAsLast'
+import { sameAsLastActive } from './sameAsLastFlag'
 import {
   cappedTierBitrate,
   isDefaultTier,
@@ -262,6 +264,28 @@ export interface Calibration {
   activity: number
   /** 'activity' when the profile chose the window, 'middle' when it could not. */
   chosenBy: 'activity' | 'middle'
+  /**
+   * J13 — THE SHARE OF OUTPUT SLOTS THE RENDER WILL NOT ENCODE, counted while
+   * composing the window above with the render's own provenance rule.
+   *
+   * The estimate needs it because the engine changed what a delta frame costs
+   * for a large share of them: capture omits the ticks where nothing changed
+   * and the export refills them, so on a still screen every other slot is a
+   * 20-byte picture rather than a delta. Priced without this, a J13 export
+   * comes in ~30 % under its own promise (measured on the rig's fixture) — the
+   * estimate would be wrong in the direction that makes a size promise a lie.
+   *
+   * It is 0 when the probe could not compose (no window, an aborted run), which
+   * prices every frame as a delta — the pre-J13 answer, and the safe one.
+   *
+   * IT IS COUNTED AT THE TAKE'S OWN RATE, which is the rate this probe composes
+   * at, and the export can run FASTER than that — a 30 fps take exported at 60
+   * repeats every other slot before the take's own omitted ticks are counted at
+   * all. So this is the take's own share and `estimateFromCalibration` combines
+   * it with the rate the output will actually run at. Storing the combined
+   * number here would bake in one output rate and be wrong for every other.
+   */
+  duplicateFraction: number
   /** What reading the index cost, ms — it is part of the budget too. */
   activityMs: number
 }
@@ -640,6 +664,9 @@ export async function calibrateSteps(
     let composed = 0
     let composeMs = 0
     let encodeMs = 0
+    /** J13: slots in this window whose picture is the slot before it. */
+    let repeatedSlots = 0
+    let lastKey: string | null = null
     for (let f = 0; f < totalFrames; f++) {
       if (aborted()) return null
       const t = atSec + f / rate
@@ -649,9 +676,12 @@ export async function calibrateSteps(
       // the defect the spike shipped with.
       if (t > durationSec - 0.01) break
       const c0 = performance.now()
-      const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
+      const composedFrame = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
       composeMs += performance.now() - c0
-      if (!bitmap) break
+      if (!composedFrame) break
+      const bitmap = composedFrame.bitmap
+      if (lastKey !== null && composedFrame.key === lastKey) repeatedSlots++
+      lastKey = composedFrame.key
       const e0 = performance.now()
       try {
         // ONE LANE AT A TIME, AND THAT IS THE FAST WAY — measured, against the
@@ -674,6 +704,9 @@ export async function calibrateSteps(
       if (composed === windowFrames) boundarySec = windowFrames / rate - 1e-6
     }
     if (composed < 2) return null
+    // The share of this window's slots the render would write rather than
+    // encode. `composed - 1` because the first slot has nothing before it.
+    const duplicateFraction = composed > 1 ? repeatedSlots / (composed - 1) : 0
 
     const steps: Record<string, StepMeasurement> = {}
     for (const lane of lanes) {
@@ -707,6 +740,7 @@ export async function calibrateSteps(
       activity: choice.activity,
       chosenBy: choice.chosenBy,
       activityMs: choice.ms,
+      duplicateFraction,
     }
   } catch (err) {
     console.warn('[quality] size calibration failed, falling back to the estimate', err)
@@ -877,7 +911,13 @@ async function closeLane(lane: TierLane): Promise<StepMeasurement | null> {
   }
 }
 
-/** One output frame, composed exactly as pipeline.renderFrame composes it. */
+/**
+ * One output frame, composed exactly as pipeline.renderFrame composes it — and
+ * it reports WHAT COMPOSED IT (J13). The key is built with the render's own
+ * rule from the render's own inputs, so the fraction of slots the render will
+ * write instead of encoding is counted here on the take's own material, in the
+ * very window this probe already chose as representative.
+ */
 async function composeAt(
   frame: FrameCanvas,
   readers: VideoChannelReader[],
@@ -886,13 +926,14 @@ async function composeAt(
   atSec: number,
   cameraFull: boolean,
   cameraMoves: boolean,
-): Promise<ImageBitmap | null> {
+): Promise<{ bitmap: ImageBitmap; key: string } | null> {
   let screen: VideoSample | null = null
   let camera: VideoSample | null = null
+  const seen: { channelId: string; timestamp: number | null }[] = []
   for (const reader of readers) {
     const localMs = channelSourceTimeAt(recording, edit, reader.channelId, atSec * 1000)
-    if (localMs === null) continue
-    const sample = await reader.sampleAt(localMs / 1000)
+    const sample = localMs === null ? null : await reader.sampleAt(localMs / 1000)
+    seen.push({ channelId: reader.channelId, timestamp: sample ? sample.timestamp : null })
     if (!sample) continue
     if (reader.kind === 'screen') screen = sample
     else camera = sample
@@ -911,7 +952,10 @@ async function composeAt(
   drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background)
   // A bitmap, because the readers are about to be asked for the next instant
   // and their samples do not outlive that.
-  return createImageBitmap(frame.ctx.canvas)
+  return {
+    bitmap: await createImageBitmap(frame.ctx.canvas),
+    key: samePictureKey({ samples: seen, pose, background: edit.background }),
+  }
 }
 
 /**
@@ -938,11 +982,44 @@ export function estimateFromCalibration(
   const gopSec = gopSeconds()
   const firstSec = Math.min(seconds, gopSec)
   const laterSec = Math.max(0, seconds - gopSec)
+  /**
+   * J13 — TWO POPULATIONS OF DELTA FRAME, NOT ONE. A slot whose picture repeats
+   * the slot before it is not encoded at all: it is written as the format's own
+   * "identical to the previous picture", twenty bytes at the outside. The
+   * calibration counted that share on the take's own material with the render's
+   * own rule; without it a J13 export lands ~30 % under its own promise, which
+   * is the direction that makes a size estimate a lie.
+   *
+   * The fraction is applied ONLY when the engine is actually armed for this
+   * export. With `?sameaslast=off` those slots really do cost a delta each, and
+   * the estimate is exactly what it was before this task.
+   */
+  /**
+   * A SLOT REPEATS FOR TWO REASONS AND THE ESTIMATE HAS TO CARRY BOTH.
+   *
+   *   the take's own omitted ticks   counted by the probe, at the take's rate
+   *   the output running faster      arithmetic: a 30 fps take at 60 repeats
+   *                                  every other slot before anything is counted
+   *
+   * Over a span the source offers `takeRate x (1 - counted)` distinct pictures a
+   * second and the file holds `fps` slots, so the share that repeats is
+   * `1 - (1 - counted) x takeRate / fps`. At equal rates that is exactly the
+   * counted share, which is the case a real take hits: Robert's own 90-minute
+   * take is declared 60 and its capture omitted the ticks where nothing moved.
+   */
+  const counted = Math.max(0, Math.min(1, calibration.duplicateFraction))
+  const sourceRate = Math.max(1, takeRate(recording))
+  const distinctPerSec = sourceRate * (1 - counted)
+  const dup = sameAsLastActive()
+    ? Math.max(0, Math.min(1, 1 - distinctPerSec / Math.max(1, tier.fps)))
+    : 0
   const perGop = (keyBytes: number, deltaBytes: number, spanSec: number): number => {
     if (spanSec <= 0) return 0
     const frames = spanSec * tier.fps
     const keys = Math.max(1, Math.ceil(spanSec / gopSec))
-    return keys * keyBytes + Math.max(0, frames - keys) * deltaBytes
+    const deltas = Math.max(0, frames - keys)
+    const written = deltas * dup
+    return keys * keyBytes + (deltas - written) * deltaBytes + written * SKIP_PICTURE_MAX_BYTES
   }
   const videoBytes =
     perGop(step.firstKeyframeBytes, step.firstDeltaBytes, firstSec) +

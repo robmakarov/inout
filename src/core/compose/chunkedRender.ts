@@ -436,10 +436,30 @@ export async function renderChunked(opts: ChunkedRenderOptions): Promise<ExportR
     prep: { open: 0, probe: 0, target: 0, cq: 0, colour: 0, scratch: 0, start: 0 },
     totalMs: 0, probeDecodes: 0,
   }
+  /**
+   * J13 — WHAT THE CHUNKS WROTE, SUMMED. A chunked export renders one chunk at
+   * a time, so `getLastRenderStats()` answers for the LAST chunk only and the
+   * engine would be invisible on the path most edited exports actually take.
+   * Summing it here is what lets the console line and the gate say how many
+   * pictures a WHOLE chunked export wrote instead of encoding.
+   */
+  const sameAsLastRollup = { slots: 0, marked: 0, duplicates: 0, written: 0, bytes: 0, refusal: null as string | null }
   const addUp = (): void => {
     const s = getLastRenderStats()
     if (!s) return
     rollup.frames += s.frames
+    if (s.sameAsLast) {
+      sameAsLastRollup.slots += s.sameAsLast.slots
+      sameAsLastRollup.marked += s.sameAsLast.marked
+      sameAsLastRollup.duplicates += s.sameAsLast.duplicates
+      sameAsLastRollup.written += s.sameAsLast.written
+      sameAsLastRollup.bytes += s.sameAsLast.bytes
+      // The first refusal is the one worth keeping: every chunk after it
+      // refuses for the same reason, and a list of 1,400 of them is not a
+      // sentence anybody reads.
+      sameAsLastRollup.refusal ??= s.sameAsLast.refusal
+      rollup.sameAsLast = sameAsLastRollup
+    }
     rollup.decodeMs += s.decodeMs
     rollup.drawMs += s.drawMs
     rollup.encodeMs += s.encodeMs

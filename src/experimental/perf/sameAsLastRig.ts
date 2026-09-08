@@ -30,9 +30,12 @@ import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { defaultEditState } from '@core/timeline'
 import { renderExport, getLastRenderStats } from '@core/compose/render'
+import { renderChunked, getLastChunkedStats } from '@core/compose/chunkedRender'
+import { sweepChunks } from '@core/compose/chunkStore'
 import { setSameAsLastOverride } from '@core/compose/sameAsLastFlag'
 import { setConstantQualityOverride } from '@core/compose/constantQuality'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
+import { calibrateSteps, estimateFromCalibration } from '@core/compose/sizeProbe'
 import type { EditState, Recording } from '@core/types'
 import { buildChannelFile, channel, existingFixture, fixtureKey } from './nativeRender'
 
@@ -73,6 +76,47 @@ export interface SameAsLastReport {
   determinism: { comparedFrames: number; identical: boolean; firstDifferentFrame: number | null }
   /** What each file does with a picture the source held for two ticks. */
   repeats: { off: number; on: number; frames: number }
+  /**
+   * THE PATH AN EDITED EXPORT ACTUALLY TAKES (J1). A chunked export renders
+   * one 2.5 s window at a time and concatenates the packets, so the engine runs
+   * once per chunk and the injected pictures have to survive a re-mux. Nothing
+   * about that was proven by the unbroken lanes above, and "it should work" is
+   * not a measurement.
+   */
+  chunked: {
+    ran: boolean
+    frames: number
+    written: number
+    /** Frames of the CONCATENATED file that repeat their predecessor exactly. */
+    repeats: number
+    bytes: number
+    bytesOff: number
+    ms: number
+    msOff: number
+    /** The picture count, rate and length, both ways. */
+    shapeMatches: boolean
+    note: string
+  }
+  /**
+   * DOES THE SIZE PROMISE KNOW ABOUT THE ENGINE? The estimate prices a file as
+   * keyframes plus deltas; J13 made a large share of those deltas cost twenty
+   * bytes. This runs the PRODUCTION probe against the same take and scores its
+   * answer against the file that was actually made — the only way to tell a
+   * model that learned from a model that was told.
+   */
+  sizeEstimate: {
+    ran: boolean
+    duplicateFraction: number
+    /** Predicted vs actual, engine ON. 1.00 is a promise kept. */
+    predictedOn: number
+    actualOn: number
+    ratioOn: number
+    /** The same probe with the engine off, against the file it makes. */
+    predictedOff: number
+    actualOff: number
+    ratioOff: number
+    note: string
+  }
   /** Gate 3 — every written picture named, with the sources that made it. */
   provenance: {
     slotsOffered: number
@@ -312,6 +356,115 @@ export async function runSameAsLast(
   setSameAsLastOverride(null)
   setConstantQualityOverride(undefined)
 
+  /**
+   * THE CHUNKED LANE. Same take, same settings, through `renderChunked` — the
+   * path J1 made the default for an edited export. The chunk cache is swept
+   * between the two so neither lane is handed the other's files.
+   */
+  const chunkedLane = async (on: boolean): Promise<{ blob: Blob; ms: number; written: number }> => {
+    // Keep nothing: neither lane may be handed the other's chunk files.
+    await sweepChunks().catch(() => undefined)
+    setSameAsLastOverride(on)
+    const t0 = performance.now()
+    const result = await renderChunked({
+      recording: { ...recording, id: `${recording.id}-ch${on ? 'on' : 'off'}` },
+      edit,
+      settings,
+    })
+    const ms = performance.now() - t0
+    const blob = new Blob([await result.blob.arrayBuffer()], { type: result.blob.type })
+    // The chunked path rolls its per-chunk RenderStats up and publishes them
+    // through the same seam the unbroken render uses.
+    void getLastChunkedStats()
+    return { blob, ms, written: getLastRenderStats()?.sameAsLast?.written ?? 0 }
+  }
+
+  let chunked: SameAsLastReport['chunked'] = {
+    ran: false, frames: 0, written: 0, repeats: 0, bytes: 0, bytesOff: 0, ms: 0, msOff: 0,
+    shapeMatches: false, note: 'not run',
+  }
+  try {
+    const chOff = await chunkedLane(false)
+    const chOn = await chunkedLane(true)
+    const onRepeatsChunked = await repeatStats(chOn.blob)
+    const offRepeatsChunked = await repeatStats(chOff.blob)
+    chunked = {
+      ran: true,
+      frames: onRepeatsChunked.frames,
+      written: chOn.written,
+      repeats: onRepeatsChunked.identicalToPrevious,
+      bytes: chOn.blob.size,
+      bytesOff: chOff.blob.size,
+      ms: Math.round(chOn.ms),
+      msOff: Math.round(chOff.ms),
+      shapeMatches: onRepeatsChunked.frames === offRepeatsChunked.frames,
+      note:
+        onRepeatsChunked.frames === offRepeatsChunked.frames && chOn.written > 0 &&
+        onRepeatsChunked.identicalToPrevious === chOn.written
+          ? 'every picture the chunks wrote survived the concatenation and decodes as an exact copy'
+          : `chunks wrote ${chOn.written}, the concatenated file repeats ${onRepeatsChunked.identicalToPrevious} ` +
+            `of ${onRepeatsChunked.frames} frames (control ${offRepeatsChunked.identicalToPrevious} of ${offRepeatsChunked.frames})`,
+    }
+  } catch (err) {
+    chunked = { ...chunked, note: `the chunked lane did not run: ${String(err)}` }
+  }
+  setSameAsLastOverride(null)
+
+  /**
+   * THE SIZE PROBE, THROUGH ITS OWN PRODUCTION ENTRY POINT, both ways. It is
+   * run AFTER the renders so the files it is scored against already exist.
+   */
+  let sizeEstimate: SameAsLastReport['sizeEstimate'] = {
+    ran: false, duplicateFraction: 0, predictedOn: 0, actualOn: 0, ratioOn: 0,
+    predictedOff: 0, actualOff: 0, ratioOff: 0, note: 'not run',
+  }
+  try {
+    /**
+     * A TIER THE PROBE WILL ACTUALLY PRICE. It skips any step whose export is a
+     * packet copy of the source — "their size is the file, not an estimate" —
+     * and a 720p step on a 720p take is exactly that, so scoring the model
+     * there measures nothing. This one re-renders, which is the case the
+     * estimate exists for, and the two files it is scored against are rendered
+     * at the SAME step so the comparison is like for like.
+     */
+    // THE STEP AND THE RENDER MUST AGREE ON THE RATE, or the estimate is asked
+    // about a different file from the one it is scored against. The rig runs
+    // the output faster than the take (that is how it manufactures duplicates),
+    // so the step it asks about carries that rate too — which is what the
+    // product's own settings would carry for a take recorded at it.
+    const sizeTier = { ...tierById('540p'), fps: outputFps }
+    const sizeSettings = { ...settingsForTier(tierById('540p'), recording), fps: outputFps }
+    setSameAsLastOverride(true)
+    const madeOn = await renderExport({ recording: { ...recording, id: `${recording.id}-szon` }, edit, settings: sizeSettings })
+    const onBytes = madeOn.blob.size
+    setSameAsLastOverride(false)
+    const madeOff = await renderExport({ recording: { ...recording, id: `${recording.id}-szoff` }, edit, settings: sizeSettings })
+    const offBytes = madeOff.blob.size
+    setSameAsLastOverride(true)
+    const cal = await calibrateSteps(recording, edit, [sizeTier])
+    if (cal) {
+      const on = estimateFromCalibration(recording, sizeTier, durationMs, cal)
+      setSameAsLastOverride(false)
+      const off = estimateFromCalibration(recording, sizeTier, durationMs, cal)
+      const actualOn = onBytes
+      const actualOff = offBytes
+      sizeEstimate = {
+        ran: true,
+        duplicateFraction: Math.round((cal.duplicateFraction ?? 0) * 1000) / 1000,
+        predictedOn: on?.bytes ?? 0,
+        actualOn,
+        ratioOn: on ? Math.round((on.bytes / Math.max(1, actualOn)) * 1000) / 1000 : 0,
+        predictedOff: off?.bytes ?? 0,
+        actualOff,
+        ratioOff: off ? Math.round((off.bytes / Math.max(1, actualOff)) * 1000) / 1000 : 0,
+        note: 'the probe counted the duplicate share on this take and priced those slots as written pictures',
+      }
+    } else sizeEstimate = { ...sizeEstimate, note: 'the calibration returned nothing' }
+  } catch (err) {
+    sizeEstimate = { ...sizeEstimate, note: `the size probe threw: ${String(err)}` }
+  }
+  setSameAsLastOverride(null)
+
   const pixels = await comparePixels(off.blob, on.blob)
   const identical = pixels.firstDifferentFrame === null && pixels.countsMatch
   const control = await comparePixels(off.blob, offAgain.blob)
@@ -347,6 +500,8 @@ export async function runSameAsLast(
       on: onRepeats.identicalToPrevious,
       frames: onRepeats.frames,
     },
+    chunked,
+    sizeEstimate,
     provenance: {
       slotsOffered: on.lane.slots ?? 0,
       slotsMarked: on.lane.marked ?? 0,
@@ -389,6 +544,21 @@ export async function runSameAsLast(
     `frames that repeat the frame before them EXACTLY: ${onRepeats.identicalToPrevious} with the engine on, ` +
       `${offRepeats.identicalToPrevious} with it off, out of ${onRepeats.frames} — the source held ` +
       `${on.lane.marked ?? 0} of its pictures for two ticks`,
+  )
+  verdict.push(
+    chunked.ran
+      ? `CHUNKED (the path an edited export takes): ${chunked.written} written across the chunks, ` +
+          `${chunked.repeats} of ${chunked.frames} frames of the CONCATENATED file repeat their predecessor ` +
+          `exactly · ${chunked.bytesOff} -> ${chunked.bytes} bytes · ${chunked.msOff} -> ${chunked.ms} ms — ${chunked.note}`
+      : `CHUNKED LANE DID NOT RUN — ${chunked.note}`,
+  )
+  verdict.push(
+    sizeEstimate.ran
+      ? `SIZE PROMISE: the probe found ${(100 * sizeEstimate.duplicateFraction).toFixed(1)} % of slots repeat and ` +
+          `predicts ${sizeEstimate.predictedOn} bytes against ${sizeEstimate.actualOn} actually written ` +
+          `(${sizeEstimate.ratioOn}x) · with the engine off it predicts ${sizeEstimate.predictedOff} against ` +
+          `${sizeEstimate.actualOff} (${sizeEstimate.ratioOff}x)`
+      : `SIZE PROMISE NOT MEASURED — ${sizeEstimate.note}`,
   )
   if (on.lane.refusal) verdict.push(`REFUSED: ${on.lane.refusal}`)
   report.pass = identical && pixels.countsMatch && provenanceShown && !on.lane.refusal

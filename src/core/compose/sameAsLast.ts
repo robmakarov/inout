@@ -78,6 +78,17 @@ export function samePictureKey(parts: {
   return key
 }
 
+/**
+ * AN UPPER BOUND ON WHAT ONE WRITTEN PICTURE COSTS, for anything that has to
+ * price a file before it exists (the size estimate). It is a BOUND and not a
+ * measurement because the exact size depends on the picture's macroblock count
+ * — `mb_skip_run` is a `ue(v)` — and the estimate runs before a codec string is
+ * chosen. Measured: 13 bytes at 640x384 (960 macroblocks), 15 at 1280x720, and
+ * 16 at 1440p's 14400. Over-estimating is the safe direction for a promise
+ * about size.
+ */
+export const SKIP_PICTURE_MAX_BYTES = 20
+
 export interface SameAsLastStats {
   /** Output slots this render offered. */
   slots: number
